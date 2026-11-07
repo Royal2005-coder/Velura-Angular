@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAuditLogService, parseAuditLogFilters } from "../../apps/api/src/audit-logs/audit-log-service.js";
+import { SEARCH_SCAN_LIMIT } from "../../apps/api/src/search-text.js";
 
 test("parseAuditLogFilters maps admin scope onto the canonical module list", () => {
   const filters = parseAuditLogFilters(new URLSearchParams("scope=admin&limit=10&offset=20"));
@@ -92,4 +93,69 @@ test("audit log service denies an active admin whose role cannot read audit logs
     (error: { status?: number; code?: string }) => error.status === 403 && error.code === "RBAC_DENIED"
   );
   assert.equal(called, false);
+});
+
+test("a specialist role cannot read the accounts audit module (TC_ACC_02/16)", async () => {
+  let called = false;
+  const service = createAuditLogService({
+    repository: {
+      list: async () => {
+        called = true;
+        return { rows: [], count: 0 };
+      }
+    }
+  });
+  const context = {
+    authUser: { id: "u3" },
+    profile: { is_active: true },
+    isAdmin: true,
+    roleCode: "admin_operator_sanpham",
+    allowedModules: ["products", "categories", "inventory", "audit_logs"],
+    capabilities: { audit_logs: ["read" as const] },
+    accessToken: "t"
+  };
+  await assert.rejects(
+    () => service.list(context, new URLSearchParams("module=accounts")),
+    (error: { status?: number }) => error.status === 403
+  );
+  assert.equal(called, false);
+});
+
+test("an unscoped audit list is narrowed to the role's own modules", async () => {
+  let received: { modules?: string[]; q?: string; limit?: number } = {};
+  const service = createAuditLogService({
+    repository: {
+      list: async (filters) => {
+        received = { modules: filters.modules, q: filters.q, limit: filters.limit };
+        return { rows: [], count: 0 };
+      }
+    }
+  });
+  const context = {
+    authUser: { id: "u4" },
+    profile: { is_active: true },
+    isAdmin: true,
+    roleCode: "admin_operator_sanpham",
+    allowedModules: ["products", "categories", "inventory", "audit_logs"],
+    capabilities: { audit_logs: ["read" as const] },
+    accessToken: "t"
+  };
+
+  await service.list(context, new URLSearchParams("scope=admin"));
+  assert.deepEqual(received.modules, ["products"]);
+
+  await service.list(context, new URLSearchParams("q=lock"));
+  assert.equal(received.q, undefined, "the query is folded in memory, never sent as ilike");
+  assert.equal(received.limit, SEARCH_SCAN_LIMIT);
+});
+
+test("parseAuditLogFilters validates the time range and keeps the actor filter", () => {
+  const filters = parseAuditLogFilters(new URLSearchParams("from=2026-11-01&to=2026-11-30&actor=uat.sanpham"));
+  assert.equal(filters.from, new Date("2026-11-01").toISOString());
+  assert.equal(filters.to, new Date("2026-11-30").toISOString());
+  assert.equal(filters.actor, "uat.sanpham");
+  assert.throws(
+    () => parseAuditLogFilters(new URLSearchParams("from=not-a-date")),
+    (error: { status?: number }) => error.status === 422
+  );
 });

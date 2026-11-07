@@ -11,10 +11,12 @@ export function startEmailOutboxWorker(): ReturnType<typeof setInterval> | null 
   if (!config.supabaseServiceRoleKey || config.emailWorkerIntervalMs <= 0) return null;
   if (!hasEmailProvider()) return null;
 
-  // Reset any emails stuck in 'sending' state from a previous session back to 'pending'
-  void updateRows("email_outbox", { status: "eq.sending" }, { status: "pending" })
+  // Reset emails stuck in 'sending' from a previous session, but only ones that still have
+  // retries left. Resetting attempts=3 rows made them permanently unclaimable (UAT TC_ACC_19).
+  void updateRows("email_outbox", { status: "eq.sending", attempts: "lt.3" }, { status: "pending" })
     .then(() => console.log("[email-outbox] reset stuck 'sending' emails to 'pending'"))
     .catch((err: unknown) => console.error("[email-outbox] failed to reset stuck emails:", errorMessage(err)));
+  void sweepExhausted();
 
   let running = false;
 
@@ -22,6 +24,7 @@ export function startEmailOutboxWorker(): ReturnType<typeof setInterval> | null 
     if (running) return;
     running = true;
     try {
+      await sweepExhausted();
       const messages = await callRpc("velura_claim_email_outbox", { p_limit: 20 });
       for (const message of Array.isArray(messages) ? messages : []) {
         await deliver(asJsonObject(message));
@@ -41,6 +44,16 @@ export function startEmailOutboxWorker(): ReturnType<typeof setInterval> | null 
   const timer = setInterval(run, config.emailWorkerIntervalMs);
   timer.unref?.();
   return timer;
+}
+
+/**
+ * A row that used all three attempts (1h → 6h → 24h) stays 'pending' only when an older
+ * worker reset a 'sending' row after the last attempt. The claim RPC never picks it up
+ * again, so it must become 'failed' for manual handling instead of waiting forever.
+ */
+async function sweepExhausted(): Promise<void> {
+  await updateRows("email_outbox", { status: "eq.pending", attempts: "gte.3" }, { status: "failed" })
+    .catch((err: unknown) => console.error("[email-outbox] failed to close exhausted emails:", errorMessage(err)));
 }
 
 async function deliver(message: JsonObject): Promise<void> {

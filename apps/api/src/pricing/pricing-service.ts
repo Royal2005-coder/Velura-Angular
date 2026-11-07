@@ -14,6 +14,7 @@ import {
   toOverlapCandidate
 } from "./promotion-lifecycle.js";
 import { normalizePromotionPresentation } from "./promotion-presentation.js";
+import { searchFold } from "../search-text.js";
 
 /** Dạng UUID chung, đủ để chặn chuỗi lạ lọt vào bộ lọc PostgREST. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -128,6 +129,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
       if (body.type && !PROMOTION_TYPES.includes(body.type as string)) throw new HttpError(422, "VALIDATION_ERROR", `Invalid promo type. Valid: ${PROMOTION_TYPES.join(", ")}`);
       validatePromotionSchedule(body);
       validateRecoveryConfiguration(body);
+      await assertPromotionNameAvailable(repository, body, null, context.accessToken);
       const created = await repository.createPromotion({
         ...body,
         ...normalizePromotionPresentation(body, "create"),
@@ -155,6 +157,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
       const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
       validateRecoveryConfiguration(body);
+      await assertPromotionNameAvailable(repository, body, promotionId, context.accessToken);
       return repository.updatePromotion(promotionId, {
         ...body,
         ...normalizePromotionPresentation(body, "update")
@@ -387,6 +390,29 @@ export function validatePromotionSchedule(body: JsonObject): void {
         budgetLimit: ["Ngân sách phải là số không âm"]
       });
     }
+  }
+}
+
+/**
+ * Tên chiến dịch là định danh người vận hành dùng để phân biệt chương trình, nên trùng tên
+ * (kể cả khác dấu/hoa thường) bị chặn — ngày và ngân sách trùng thì vẫn hợp lệ
+ * (UAT TC_PROMO_13).
+ */
+async function assertPromotionNameAvailable(
+  repository: { listPromotions(filters: JsonObject, accessToken: string | null): Promise<{ rows?: JsonObject[] }> },
+  body: JsonObject,
+  excludeId: string | null,
+  accessToken: string | null
+): Promise<void> {
+  const name = asString(body.name).trim();
+  if (!name) return;
+  const folded = searchFold(name);
+  const { rows } = await repository.listPromotions({ limit: 500, offset: 0 }, accessToken);
+  const duplicate = (rows || []).some((row) =>
+    asString(row.promo_id) !== (excludeId || "") && searchFold(row.promo_name) === folded
+  );
+  if (duplicate) {
+    throw new HttpError(409, "DUPLICATE_PROMOTION_NAME", "Tên chiến dịch đã tồn tại. Vui lòng chọn tên khác.");
   }
 }
 

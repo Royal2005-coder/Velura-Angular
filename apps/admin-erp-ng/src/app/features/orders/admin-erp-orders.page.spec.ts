@@ -221,7 +221,7 @@ describe('AdminErpOrdersPage', () => {
     expect(page.notice()).toContain('bàn giao');
   });
 
-  it('fills the shipment from a scanned carrier label and derives its tracking URL', async () => {
+  it('fills the shipment from a scanned carrier label and freezes the fields', async () => {
     const fixture = await boot(() => of({ rows: [shippedOrder], count: 1 }));
     const page = fixture.componentInstance;
     page.selected.set(shippedOrder);
@@ -229,6 +229,17 @@ describe('AdminErpOrdersPage', () => {
     page.applyShipmentScan('GHN123456789');
     expect(page.shipment().trackingCode).toBe('GHN123456789');
     expect(page.scanError()).toBeNull();
+    expect(page.scanLocked()?.trackingCode).toBe('GHN123456789');
+
+    page.onShipmentField('carrier', { target: { value: 'GHN' } } as unknown as Event);
+    page.onShipmentField('trackingCode', { target: { value: 'GHN42' } } as unknown as Event);
+    expect(page.shipment().trackingCode).toBe('GHN123456789');
+  });
+
+  it('derives the tracking URL while the operator types without a scan', async () => {
+    const fixture = await boot(() => of({ rows: [shippedOrder], count: 1 }));
+    const page = fixture.componentInstance;
+    page.selected.set(shippedOrder);
 
     page.onShipmentField('carrier', { target: { value: 'GHN' } } as unknown as Event);
     page.onShipmentField('trackingCode', { target: { value: 'GHN42' } } as unknown as Event);
@@ -254,7 +265,7 @@ describe('AdminErpOrdersPage', () => {
     expect(page.shipment().carrier).toBe('GHN');
     expect(page.shipment().trackingCode).toBe('GHNVL1001');
     expect(page.shipment().trackingUrl).toContain('donhang.ghn.vn');
-    expect(page.scanNotice()).toContain('Đã điền');
+    expect(page.scanNotice()).toContain('Đã khóa');
 
     page.shipment.set({ carrier: '', trackingCode: '', trackingUrl: '' });
     page.applyShipmentScan('http://localhost/orders?focus=o1&code=VL-1001');

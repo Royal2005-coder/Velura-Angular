@@ -43,11 +43,17 @@ export function adminAuthLockout(error: unknown): {
 export function adminErrorMessage(error: unknown, fallback = 'Không thể gọi API quản trị.'): string {
   if (error instanceof HttpErrorResponse) {
     const payload = error.error as {
-      error?: { message?: string; details?: unknown } | string;
+      error?: { code?: string; message?: string; details?: unknown } | string;
       error_description?: string;
       msg?: string;
       message?: string;
     } | null;
+    const code = typeof payload?.error === 'object' ? payload.error?.code : undefined;
+    // Known business codes win over raw details so the operator never sees an English
+    // PostgREST envelope such as "code: PT409 · details: null · hint: null".
+    if (code && ADMIN_ERROR_MESSAGES[code]) {
+      return ADMIN_ERROR_MESSAGES[code];
+    }
     const details = typeof payload?.error === 'object' ? payload.error?.details : undefined;
     const detailText = formatErrorDetails(details);
     if (detailText) {
@@ -72,6 +78,23 @@ export function adminErrorMessage(error: unknown, fallback = 'Không thể gọi
   }
   return fallback;
 }
+
+/**
+ * Stable Vietnamese copy for business error codes the operator must act on.
+ */
+const ADMIN_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  AUTH_REQUIRED: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+  VERSION_CONFLICT: 'Dữ liệu vừa được cập nhật ở phiên khác. Vui lòng tải lại trang và thử lại.',
+  ACCOUNT_ALREADY_LOCKED: 'Tài khoản đã bị khóa trước đó.',
+  ACCOUNT_ALREADY_ACTIVE: 'Tài khoản đang hoạt động, không cần mở khóa.',
+  ACCOUNT_NOT_LOCKED: 'Tài khoản chưa từng bị khóa (có thể chưa xác thực đăng ký) nên không thể mở khóa.',
+  LAST_SUPER_ADMIN: 'Không thể khóa hoặc hạ quyền Super Admin đang hoạt động cuối cùng.',
+  APPROVAL_ALREADY_RESOLVED: 'Yêu cầu nâng quyền đã được xử lý trước đó.',
+  APPROVAL_SEPARATION_REQUIRED: 'Người yêu cầu, tài khoản đích và người duyệt phải là ba tài khoản khác nhau.',
+  PENDING_APPROVAL_EXISTS: 'Đã có yêu cầu nâng quyền đang chờ duyệt cho tài khoản này.',
+  BUDGET_BELOW_ISSUED: 'Ngân sách không được nhỏ hơn số tiền đã sử dụng thực tế.',
+  DUPLICATE_ACCOUNT: 'Email hoặc số điện thoại đã được sử dụng trên hệ thống.',
+};
 
 /**
  * Reads the validation details map (`{ field: [message] }`) out of the API error envelope.

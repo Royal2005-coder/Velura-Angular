@@ -329,33 +329,56 @@
         <label class="erp-field"><span>Số lượng thiếu</span><input class="erp-input" name="shortage" type="number" min="1" /></label>
       }
       @if (hasField(action, 'shipment') || hasField(action, 'tracking')) {
-        <div class="order-actions">
-          <button class="erp-btn erp-btn--sm" type="button" (click)="scanOpen.set(true)">
-            <app-erp-icon name="box" [size]="'15'" />
-            Quét QR vận đơn
-          </button>
-          <span class="erp-hint">Quét label ĐVVC để điền mã vận đơn, ĐVVC và tracking URL. Mã mẫu trong hộp quét đã mang sẵn vận đơn demo của đơn này.</span>
-        </div>
-        @if (scanError()) {
-          <p class="erp-error" role="alert">{{ scanError() }}</p>
+        @if (scanLocked(); as facts) {
+          <div class="shipment-locked">
+            <span class="shipment-locked__title">Thông tin cố định từ mã QR của ĐVVC</span>
+            <dl class="shipment-locked__grid">
+              @if (facts.orderCode) {
+                <div><dt>Đơn hàng</dt><dd>{{ facts.orderCode }}</dd></div>
+              }
+              <div><dt>Đơn vị vận chuyển</dt><dd>{{ facts.carrier || '—' }}</dd></div>
+              <div><dt>Mã vận đơn</dt><dd>{{ facts.trackingCode || '—' }}</dd></div>
+              @if (facts.trackingUrl) {
+                <div><dt>Tracking URL</dt><dd><a [href]="facts.trackingUrl" target="_blank" rel="noopener">{{ facts.trackingUrl }}</a></dd></div>
+              }
+              @if (facts.shipperName) {
+                <div><dt>Người giao</dt><dd>{{ facts.shipperName }}</dd></div>
+              }
+              @if (facts.shipperPhone) {
+                <div><dt>SĐT người giao</dt><dd>{{ facts.shipperPhone }}</dd></div>
+              }
+            </dl>
+            <button class="erp-btn erp-btn--sm" type="button" (click)="rescanShipment()">Quét lại mã khác</button>
+          </div>
+        } @else {
+          <div class="order-actions">
+            <button class="erp-btn erp-btn--sm" type="button" (click)="scanOpen.set(true)">
+              <app-erp-icon name="box" [size]="'15'" />
+              Quét QR vận đơn
+            </button>
+            <span class="erp-hint">Quét label ĐVVC để khóa cứng mã đơn, ĐVVC, mã vận đơn, tracking URL và người giao. Sau khi quét chỉ còn ghi chú là sửa được.</span>
+          </div>
+          @if (scanError()) {
+            <p class="erp-error" role="alert">{{ scanError() }}</p>
+          }
+          @if (scanNotice()) {
+            <p class="erp-hint" role="status">{{ scanNotice() }}</p>
+          }
+          <label class="erp-field">
+            <span>Đơn vị vận chuyển</span>
+            <input class="erp-input" name="carrier" list="order-carriers" [value]="shipment().carrier" (input)="onShipmentField('carrier', $event)" placeholder="Chọn hoặc nhập, ví dụ GHN" />
+            <datalist id="order-carriers">
+              @for (carrier of carriers; track carrier.code) {
+                <option [value]="carrier.label"></option>
+              }
+            </datalist>
+          </label>
+          <label class="erp-field"><span>Mã vận đơn</span><input class="erp-input" name="trackingCode" [value]="shipment().trackingCode" (input)="onShipmentField('trackingCode', $event)" /></label>
+          <details class="order-shipment-url">
+            <summary>Tracking URL (tự điền theo ĐVVC, sửa được)</summary>
+            <label class="erp-field"><input class="erp-input" name="trackingUrl" type="url" [value]="shipment().trackingUrl" (input)="onShipmentField('trackingUrl', $event)" placeholder="https://..." /></label>
+          </details>
         }
-        @if (scanNotice()) {
-          <p class="erp-hint" role="status">{{ scanNotice() }}</p>
-        }
-        <label class="erp-field">
-          <span>Đơn vị vận chuyển</span>
-          <input class="erp-input" name="carrier" list="order-carriers" [value]="shipment().carrier" (input)="onShipmentField('carrier', $event)" placeholder="Chọn hoặc nhập, ví dụ GHN" />
-          <datalist id="order-carriers">
-            @for (carrier of carriers; track carrier.code) {
-              <option [value]="carrier.label"></option>
-            }
-          </datalist>
-        </label>
-        <label class="erp-field"><span>Mã vận đơn</span><input class="erp-input" name="trackingCode" [value]="shipment().trackingCode" (input)="onShipmentField('trackingCode', $event)" /></label>
-        <details class="order-shipment-url">
-          <summary>Tracking URL (tự điền theo ĐVVC, sửa được)</summary>
-          <label class="erp-field"><input class="erp-input" name="trackingUrl" type="url" [value]="shipment().trackingUrl" (input)="onShipmentField('trackingUrl', $event)" placeholder="https://..." /></label>
-        </details>
         <p class="erp-hint">Lưu vận đơn là bàn giao hàng cho ĐVVC luôn trong cùng một bước; hệ thống dùng lại mã vận đơn vừa nhập.</p>
       }
       @if (hasField(action, 'cancel_reason')) {

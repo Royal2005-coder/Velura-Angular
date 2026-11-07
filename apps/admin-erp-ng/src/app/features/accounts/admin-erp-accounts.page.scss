@@ -205,6 +205,18 @@
   gap: 16px;
 }
 
+.accounts-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-success-soft, #e8f7ee);
+  color: var(--erp-success, #1f7a45);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
 @media (max-width: 1280px) {
   .accounts-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));

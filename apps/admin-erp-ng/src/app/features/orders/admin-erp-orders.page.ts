@@ -167,6 +167,19 @@ export class AdminErpOrdersPage {
   readonly scanOpen = signal(false);
   readonly scanError = signal<string | null>(null);
   readonly scanNotice = signal<string | null>(null);
+  /**
+   * Facts fixed by the carrier label QR. After a successful scan the operator only writes a
+   * note; carrier/tracking/URL/shipper stay read-only so the handover matches the label
+   * (UAT TC_3_1_11_10).
+   */
+  readonly scanLocked = signal<{
+    orderCode: string;
+    carrier: string;
+    trackingCode: string;
+    trackingUrl: string;
+    shipperName: string;
+    shipperPhone: string;
+  } | null>(null);
   readonly carriers = CARRIER_PROFILES;
   readonly copiedPhone = signal(false);
   private copiedPhoneTimer: ReturnType<typeof setTimeout> | null = null;
@@ -640,6 +653,7 @@ export class AdminErpOrdersPage {
     this.scanOpen.set(false);
     this.scanError.set(null);
     this.scanNotice.set(null);
+    this.scanLocked.set(null);
     // `prefill` đọc từ modal vừa mở, nên phải khởi tạo sau khi modal được set.
     this.shipment.set({
       carrier: this.prefill().carrier,
@@ -893,6 +907,8 @@ export class AdminErpOrdersPage {
    * unless the operator already typed one by hand.
    */
   onShipmentField(field: 'carrier' | 'trackingCode' | 'trackingUrl', event: Event): void {
+    // Scanned facts are the carrier's own data; editing them would break the handover match.
+    if (this.scanLocked()) return;
     const value = (event.target as HTMLInputElement).value;
     this.shipment.update((current) => ({ ...current, [field]: value }));
     if (field === 'trackingUrl') {
@@ -923,6 +939,14 @@ export class AdminErpOrdersPage {
       const demo = demoShipmentFacts(order);
       this.shipment.set(demo);
       this.shipmentUrlEdited.set(true);
+      this.scanLocked.set({
+        orderCode: String(order.order_code || ''),
+        carrier: demo.carrier,
+        trackingCode: demo.trackingCode,
+        trackingUrl: demo.trackingUrl,
+        shipperName: demo.shipperName,
+        shipperPhone: demo.shipperPhone,
+      });
       this.scanError.set(null);
       this.scanNotice.set(`Mã QR khớp đơn ${order.order_code || ''}: đã điền vận đơn demo ${demo.carrier} · ${demo.trackingCode}.`);
       return;
@@ -944,7 +968,24 @@ export class AdminErpOrdersPage {
     }
     this.scanError.set(null);
     const filled = this.shipment();
-    this.scanNotice.set(`Đã điền từ mã QR: ${filled.carrier || 'ĐVVC'} · ${filled.trackingCode}.`);
+    this.scanLocked.set({
+      orderCode: String(result.orderCode || order?.order_code || ''),
+      carrier: filled.carrier,
+      trackingCode: filled.trackingCode,
+      trackingUrl: filled.trackingUrl,
+      shipperName: result.shipperName || '',
+      shipperPhone: result.shipperPhone || '',
+    });
+    this.scanNotice.set(`Đã khóa thông tin từ mã QR: ${filled.carrier || 'ĐVVC'} · ${filled.trackingCode}. Chỉ còn ghi chú là sửa được.`);
+  }
+
+  /**
+   * Discards the scanned facts so the operator can scan a different label.
+   */
+  rescanShipment(): void {
+    this.scanLocked.set(null);
+    this.scanError.set(null);
+    this.scanOpen.set(true);
   }
 
   /** Link in trên label của đơn; quét bằng điện thoại sẽ mở thẳng đơn này. */
@@ -1247,10 +1288,18 @@ export class AdminErpOrdersPage {
     if (action.fields.includes('call_result')) body['callResult'] = value('callResult');
     if (action.fields.includes('shortage')) body['shortage'] = value('shortage');
     if (action.fields.includes('shipment') || action.fields.includes('tracking')) {
-      const shipment = this.shipment();
-      body['trackingCode'] = shipment.trackingCode.trim();
-      body['trackingUrl'] = shipment.trackingUrl.trim();
-      body['carrier'] = shipment.carrier.trim();
+      const locked = this.scanLocked();
+      if (locked) {
+        // After a scan the body is the label's own facts, not whatever is still in the form.
+        body['trackingCode'] = locked.trackingCode.trim();
+        body['trackingUrl'] = locked.trackingUrl.trim();
+        body['carrier'] = locked.carrier.trim();
+      } else {
+        const shipment = this.shipment();
+        body['trackingCode'] = shipment.trackingCode.trim();
+        body['trackingUrl'] = shipment.trackingUrl.trim();
+        body['carrier'] = shipment.carrier.trim();
+      }
     }
     if (action.fields.includes('cancel_reason')) body['cancelReason'] = value('cancelReason');
     return body;

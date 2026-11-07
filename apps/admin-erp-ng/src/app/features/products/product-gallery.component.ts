@@ -49,6 +49,11 @@ export class ProductGalleryComponent {
   readonly error = signal<string | null>(null);
   readonly analysis = signal<AdminImageQualityAnalysis | null>(null);
   readonly enhanced = signal<{ url: string; model: string; after: AdminImageQualityAnalysis } | null>(null);
+  /**
+   * Slot captured when the AI run started. Apply replaces only when that same image is still
+   * there; otherwise it appends, so a stale slot can never overwrite an unrelated photo.
+   */
+  private applyTarget: { index: number; url: string } | null = null;
   readonly background = signal<StudioBackground>('studio_white');
   readonly lighting = signal(true);
   readonly sharpness = signal(true);
@@ -118,6 +123,9 @@ export class ProductGalleryComponent {
     }
     this.error.set(null);
     this.enhanced.set(null);
+    // A new upload is an append: leaving the slot on the primary made Apply overwrite the
+    // real product photo with the AI result (UAT AD-PRODUCT-TH4).
+    this.slot.set(this.images().length);
     this.pendingMime = file.type;
     this.note.set('Đang phân tích chất lượng ảnh vừa tải lên...');
     this.busy.set(true);
@@ -210,6 +218,7 @@ export class ProductGalleryComponent {
       this.error.set('Hãy chọn hoặc tải ảnh lên trước khi cải thiện bằng AI.');
       return;
     }
+    this.applyTarget = { index: this.slot(), url: existingUrl };
     this.busy.set(true);
     this.error.set(null);
     this.api
@@ -253,7 +262,11 @@ export class ProductGalleryComponent {
       return;
     }
     const report = enhanced ? enhanced.after : this.analysis();
-    const replaced = this.images()[this.slot()] as string | undefined;
+    const target = this.applyTarget;
+    const images = this.images();
+    // Replace only the exact image the AI ran on; otherwise append so no other photo is lost.
+    const replaceIndex = target && target.url && images[target.index] === target.url ? target.index : null;
+    const replaced = replaceIndex !== null ? images[replaceIndex] : undefined;
     this.busy.set(true);
     this.error.set(null);
     this.api
@@ -272,7 +285,7 @@ export class ProductGalleryComponent {
             return;
           }
           const next = [...this.images()];
-          const index = Math.min(this.slot(), next.length);
+          const index = replaceIndex ?? next.length;
           if (next.includes(approval.url) && next[index] !== approval.url) {
             this.error.set('Ảnh này đã có trong sản phẩm.');
             return;
@@ -294,6 +307,7 @@ export class ProductGalleryComponent {
           this.pendingDataUrl.set('');
           this.originalUrl.set('');
           this.enhanced.set(null);
+          this.applyTarget = null;
           this.analysis.set(this.scores()[approval.url] || null);
           this.note.set('Đã áp dụng ảnh được máy chủ phê duyệt. Bấm Lưu để xuất bản.');
         },
@@ -342,6 +356,11 @@ export class ProductGalleryComponent {
     current.splice(index, 1);
     this.images.set(current);
     this.approvals.set(this.approvals().filter((approval) => current.includes(approval.url)));
+    // Keep the selection on the same photo when an earlier tile was removed; otherwise a
+    // later Apply would land on a different, real image.
+    if (index < this.slot()) {
+      this.slot.set(this.slot() - 1);
+    }
     const slot = Math.min(this.slot(), current.length - 1);
     this.slot.set(slot);
     this.selectSlot(slot);
@@ -407,7 +426,9 @@ export class ProductGalleryComponent {
   }
 
   private imageUrlAtSlot(): string {
-    const url = this.images()[this.slot()] || this.images()[0] || '';
+    // No primary fallback: analysing/applying for an empty slot must say so instead of
+    // silently operating on the real primary image.
+    const url = this.images()[this.slot()] || '';
     return url.startsWith('http') || url.includes('localhost') ? url : this.resolve(url);
   }
 }

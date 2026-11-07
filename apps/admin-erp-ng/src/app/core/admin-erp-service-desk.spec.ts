@@ -1,5 +1,5 @@
 import { AdminReturnLine, AdminReturnRow, AdminTicketRow } from './admin-erp-api.service';
-import { canTicketAction, contactAllowed, gatewayNote, isChatGovernedTicket, isReturnOpen, itemRefundAllowed, refundChannelActions, refundInfoAllowed, refundReceiverBlocked, REFUND_FLOW_LABELS, RETURN_DECISION_STATUSES, RETURN_HEADER_STATUSES, returnContactOverdue, returnDecisionLabel, returnItemActions, returnStatusLabel, returnStatusTone } from './admin-erp-service-desk';
+import { canTicketAction, contactAllowed, gatewayNote, isChatGovernedTicket, isReturnOpen, itemRefundAllowed, parseTicketBrief, refundChannelActions, refundInfoAllowed, refundReceiverBlocked, REFUND_FLOW_LABELS, RETURN_DECISION_STATUSES, RETURN_HEADER_STATUSES, returnContactOverdue, returnDecisionLabel, returnItemActions, returnStatusLabel, returnStatusTone } from './admin-erp-service-desk';
 
 const base: AdminReturnRow = { return_id: 'r1', order_id: 'o1', return_type: 'exchange', status: 'IN_PROGRESS', version: 1 };
 const part: AdminReturnLine = { return_item_id: 'part1', quantity: 2, version: 1, decision_status: 'approved', resolution_type: 'exchange', item_status: 'RECEIVED' };
@@ -105,5 +105,30 @@ describe('service desk per-part rules', () => {
     expect(canTicketAction(ticket('resolved'), 'reply')).toBe(false);
     expect(canTicketAction(ticket('closed'), 'close')).toBe(false);
     expect(isChatGovernedTicket(ticket('open', 'c1'))).toBe(true);
+  });
+
+  it('parses a chat handoff description into labeled facts', () => {
+    const brief = parseTicketBrief(JSON.stringify({
+      wanted: 'Tìm váy dự tiệc',
+      problem: 'Khách muốn tìm váy dự tiệc',
+      summary: 'Tìm váy dự tiệc',
+      verified_status: 'member_account',
+      confirmed_facts: ['Đã xác minh quyền truy cập'],
+      recommendations: ['Kiểm tra đơn trước khi cam kết'],
+      failed_approaches: [],
+      unconfirmed_claims: ['Chưa xác minh size'],
+    }));
+
+    expect(brief?.wanted).toBe('Tìm váy dự tiệc');
+    expect(brief?.verifiedStatus).toBe('member_account');
+    expect(brief?.confirmedFacts).toEqual(['Đã xác minh quyền truy cập']);
+    expect(brief?.unconfirmedClaims).toEqual(['Chưa xác minh size']);
+  });
+
+  it('falls back to plain text when the description is not a handoff payload', () => {
+    expect(parseTicketBrief('Khách gọi đến hỏi đơn VLR-001')).toBeNull();
+    expect(parseTicketBrief('{not json')).toBeNull();
+    expect(parseTicketBrief(JSON.stringify({ foo: 'bar' }))).toBeNull();
+    expect(parseTicketBrief(null)).toBeNull();
   });
 });

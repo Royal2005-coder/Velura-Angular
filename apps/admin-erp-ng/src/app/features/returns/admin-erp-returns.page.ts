@@ -27,6 +27,7 @@ import {
   isChatGovernedTicket,
   isReturnOpen,
   paymentKindLabel,
+  parseTicketBrief,
   refundChannelActions,
   refundInfoAllowed,
   returnStatusLabel,
@@ -35,6 +36,7 @@ import {
   returnItemActions,
   itemRefundAllowed,
   returnContactOverdue,
+  type TicketBrief,
 } from '../../core/admin-erp-service-desk';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
 import {
@@ -45,7 +47,7 @@ import {
   adminRangeLabel,
 } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
-import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
+import { useAutoRefresh, useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
 import { AdminErpLoadingOverlay } from '../../shared/ui/admin-loading-overlay';
@@ -138,6 +140,9 @@ export class AdminErpReturnsPage {
   private readonly route = inject(ActivatedRoute);
   private listRequest = new Subscription();
   private detailRequestId = 0;
+  /** Safety valve: a detail request that never settles must not hold the blocking layer. */
+  private detailWatchdog: ReturnType<typeof setTimeout> | null = null;
+  private countsBusy = false;
 
   readonly tab = signal<DeskTab>('returns');
   readonly returns = signal<AdminReturnRow[]>([]);
@@ -376,9 +381,16 @@ export class AdminErpReturnsPage {
   ]);
 
   constructor() {
-    this.destroyRef.onDestroy(() => this.listRequest.unsubscribe());
+    this.destroyRef.onDestroy(() => {
+      this.listRequest.unsubscribe();
+      if (this.detailWatchdog) clearTimeout(this.detailWatchdog);
+    });
     watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
     useWorkspaceRefresh(() => this.reload());
+    // Counters for every queue are part of the page, not of the tab: the operator must see
+    // how much work is waiting before deciding which queue to open (UAT TC_TICK_08).
+    this.loadCounts();
+    useAutoRefresh(() => this.autoReload());
   }
 
   /**
@@ -430,6 +442,58 @@ export class AdminErpReturnsPage {
       return;
     }
     this.loadReturns();
+  }
+
+  /**
+   * Background tick: refreshes the chips and the active queue without the blocking overlay.
+   * It never interrupts an open drawer or a running load, so reading a ticket is not disturbed.
+   */
+  private autoReload(): void {
+    if (this.loading() || this.tab() === 'chat' || this.selected() || this.selectedTicket() || this.selectedLog() || this.flow()) {
+      return;
+    }
+    this.loadCounts();
+    if (this.tab() === 'tickets') {
+      this.loadTickets(true);
+      return;
+    }
+    if (this.tab() === 'logs') {
+      this.loadLogs(true);
+      return;
+    }
+    this.loadReturns(true);
+  }
+
+  /**
+   * Reads the size of every queue in one pass. Without it the tab chips show 0 until the
+   * operator opens the tab, which reads as "no tickets" on a busy desk (UAT TC_TICK_08).
+   */
+  loadCounts(): void {
+    if (this.countsBusy) {
+      return;
+    }
+    this.countsBusy = true;
+    forkJoin({
+      returns: this.api.listReturns({ limit: '1' }).pipe(catchError(() => of(EMPTY_RETURNS))),
+      tickets: this.api.listTickets({ limit: '1' }).pipe(catchError(() => of(EMPTY_TICKETS))),
+      logs: this.api.listServiceLogs({ limit: '1' }).pipe(catchError(() => of(EMPTY_LOGS))),
+    }).subscribe((payload) => {
+      this.countsBusy = false;
+      if (!this.hasReturnFilters()) {
+        this.total.set(adminListCount(payload.returns));
+      }
+      if (!this.ticketStatus() && !this.ticketSearch()) {
+        this.ticketsTotal.set(adminListCount(payload.tickets));
+      }
+      if (!this.logTarget()) {
+        this.logsTotal.set(adminListCount(payload.logs));
+      }
+    });
+  }
+
+  /** True while the return queue is narrowed, so its chip keeps matching the visible rows. */
+  private hasReturnFilters(): boolean {
+    return Boolean(this.statusFilter() || this.decisionFilter() || this.paymentFilter() || this.search() || this.orderFilter());
   }
 
   /**
@@ -532,12 +596,14 @@ export class AdminErpReturnsPage {
     const id = (row as AdminReturnRow).return_id;
     const requestId = ++this.detailRequestId;
     this.detailLoading.set(true);
+    this.startDetailWatchdog();
     this.detailError.set(null);
     this.gatewayNote.set(null);
     this.recordTrail.set([]);
     this.api.getReturn(id).subscribe({
       next: (record) => {
         if (requestId !== this.detailRequestId) return;
+        this.stopDetailWatchdog();
         this.detailLoading.set(false);
         if (expectedCode && record.return_code && record.return_code !== expectedCode) {
           this.selected.set(null);
@@ -556,6 +622,7 @@ export class AdminErpReturnsPage {
       },
       error: (error: unknown) => {
         if (requestId !== this.detailRequestId) return;
+        this.stopDetailWatchdog();
         this.detailLoading.set(false);
         this.selected.set(row as AdminReturnRow);
         this.detailError.set(adminErrorMessage(error, 'Không tải được chi tiết phiếu.'));
@@ -563,6 +630,24 @@ export class AdminErpReturnsPage {
         this.loadRecordTrail(id);
       },
     });
+  }
+
+  /** Keeps a hung detail request from blocking scroll and clicks for the rest of the session. */
+  private startDetailWatchdog(): void {
+    this.stopDetailWatchdog();
+    this.detailWatchdog = setTimeout(() => {
+      this.detailWatchdog = null;
+      this.detailRequestId += 1;
+      this.detailLoading.set(false);
+      this.detailError.set('Máy chủ phản hồi chậm. Vui lòng thử mở lại phiếu.');
+    }, 15_000);
+  }
+
+  private stopDetailWatchdog(): void {
+    if (this.detailWatchdog) {
+      clearTimeout(this.detailWatchdog);
+      this.detailWatchdog = null;
+    }
   }
 
   /**
@@ -884,10 +969,14 @@ export class AdminErpReturnsPage {
   }
 
   /**
-   * Closes every overlay.
+   * Closes every overlay. The blocking detail layer must die with the drawer: before this,
+   * closing a drawer mid-request left a transparent full-screen layer that swallowed all
+   * clicks and scroll until a page reload (UAT TC_TICK_08 freeze).
    */
   closeOverlays(): void {
     this.detailRequestId += 1;
+    this.stopDetailWatchdog();
+    this.detailLoading.set(false);
     this.selected.set(null);
     this.selectedTicket.set(null);
     this.selectedLog.set(null);
@@ -949,6 +1038,13 @@ export class AdminErpReturnsPage {
 
   statusLabel(status: string | null | undefined): string {
     return returnStatusLabel(status);
+  }
+
+  /**
+   * Structured handoff summary of a chat-governed ticket; null for plain-text descriptions.
+   */
+  ticketBrief(ticket: AdminTicketRow): TicketBrief | null {
+    return parseTicketBrief(ticket.description);
   }
 
   /**
@@ -1194,11 +1290,14 @@ export class AdminErpReturnsPage {
   /** Request-level outreach and payout-detail collection do not advance logistics or money. */
   readonly gates = { contact: contactAllowed, info: refundInfoAllowed };
 
-  /** Reload entry used by the retry button of this queue. */
-  loadReturns(): void {
+  /** Reload entry used by the retry button and the background tick of this queue. */
+  loadReturns(silent = false): void {
     this.listRequest.unsubscribe();
-    this.loading.set(true);
-    this.loadError.set(null);
+    if (!silent) {
+      this.loading.set(true);
+      this.loadError.set(null);
+    }
+    let failed = false;
     const params = {
       status: this.statusFilter(),
       decision_status: this.decisionFilter(),
@@ -1210,7 +1309,10 @@ export class AdminErpReturnsPage {
     this.listRequest = forkJoin({
       list: this.api.listReturns(params, this.paymentFilter()).pipe(
         catchError((error: unknown) => {
-          this.loadError.set(adminErrorMessage(error, 'Không tải được hàng đợi đổi trả.'));
+          failed = true;
+          if (!silent) {
+            this.loadError.set(adminErrorMessage(error, 'Không tải được hàng đợi đổi trả.'));
+          }
           return of(EMPTY_RETURNS);
         }),
       ),
@@ -1219,6 +1321,10 @@ export class AdminErpReturnsPage {
       tickets: this.api.listTickets({ status: 'open', limit: '1' }).pipe(catchError(() => of(EMPTY_TICKETS))),
       processing: this.api.listTickets({ status: 'processing', limit: '1' }).pipe(catchError(() => of(EMPTY_TICKETS))),
     }).subscribe((payload) => {
+      // A failed background tick must leave the operator's screen exactly as it was.
+      if (failed && silent) {
+        return;
+      }
       const rows = adminListRows(payload.list);
       this.returns.set(rows);
       this.total.set(adminListCount(payload.list));
@@ -1231,42 +1337,54 @@ export class AdminErpReturnsPage {
     });
   }
 
-  /** Reload entry used by the retry button of this queue. */
-  loadTickets(): void {
+  /** Reload entry used by the retry button and the background tick of this queue. */
+  loadTickets(silent = false): void {
     this.listRequest.unsubscribe();
-    this.loading.set(true);
-    this.loadError.set(null);
+    if (!silent) {
+      this.loading.set(true);
+      this.loadError.set(null);
+    }
     this.listRequest = this.api
       .listTickets({ status: this.ticketStatus(), q: this.ticketSearch(), limit: String(this.pageSize), offset: adminOffset(this.ticketsPage(), this.pageSize) })
       .pipe(
         catchError((error: unknown) => {
-          this.loadError.set(adminErrorMessage(error, 'Không tải được phiếu hỗ trợ.'));
-          return of(EMPTY_TICKETS);
+          if (!silent) {
+            this.loadError.set(adminErrorMessage(error, 'Không tải được phiếu hỗ trợ.'));
+          }
+          return of(null);
         }),
       )
       .subscribe((payload) => {
-        this.tickets.set(adminListRows(payload));
-        this.ticketsTotal.set(adminListCount(payload));
+        if (payload) {
+          this.tickets.set(adminListRows(payload));
+          this.ticketsTotal.set(adminListCount(payload));
+        }
         this.loading.set(false);
       });
   }
 
-  /** Reload entry used by the retry button of this queue. */
-  loadLogs(): void {
+  /** Reload entry used by the retry button and the background tick of this queue. */
+  loadLogs(silent = false): void {
     this.listRequest.unsubscribe();
-    this.loading.set(true);
-    this.loadError.set(null);
+    if (!silent) {
+      this.loading.set(true);
+      this.loadError.set(null);
+    }
     this.listRequest = this.api
       .listServiceLogs({ limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize), targetId: this.logTarget() })
       .pipe(
         catchError((error: unknown) => {
-          this.loadError.set(adminErrorMessage(error, 'Không tải được nhật ký đổi trả.'));
-          return of(EMPTY_LOGS);
+          if (!silent) {
+            this.loadError.set(adminErrorMessage(error, 'Không tải được nhật ký đổi trả.'));
+          }
+          return of(null);
         }),
       )
       .subscribe((payload) => {
-        this.logs.set(adminListRows(payload));
-        this.logsTotal.set(adminListCount(payload));
+        if (payload) {
+          this.logs.set(adminListRows(payload));
+          this.logsTotal.set(adminListCount(payload));
+        }
         this.loading.set(false);
       });
   }

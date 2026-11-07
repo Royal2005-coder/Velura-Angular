@@ -1,4 +1,5 @@
-import { callRpc, quotePostgrestValue, selectOne, selectRows, updateRows } from "../supabase.js";
+import { callRpc, selectOne, selectRows, updateRows } from "../supabase.js";
+import { SEARCH_SCAN_LIMIT, searchMatches } from "../search-text.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
 import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
@@ -30,7 +31,7 @@ export interface ReturnListFilters {
  */
 export interface TicketListFilters {
   status?: string;
-  /** Ilike trên tiêu đề, mô tả, SĐT và email khách: đủ để CSKH tìm lại một ca từ số điện thoại đơn. */
+  /** Folded substring match over tiêu đề, mô tả, SĐT và email khách: đủ để CSKH tìm lại một ca từ số điện thoại đơn. */
   search?: string;
   userId?: string;
   limit: number;
@@ -245,19 +246,21 @@ export function createReturnRepository() {
       };
     },
     async listReturns(filters: ReturnListFilters, accessToken: string) {
+      const search = asString(filters.search).trim();
+      const pageLimit = Math.max(1, filters.limit || 20);
+      const pageOffset = Math.max(0, filters.offset || 0);
       const query: Record<string, unknown> = {
         select: filters.paymentKind ? `${RETURN_SELECT},pay_order:orders!return_exchange_order_id_fkey!inner(payment_method)` : RETURN_SELECT,
         order: "created_at.desc",
-        limit: filters.limit,
-        offset: filters.offset
+        // Search spans order code and customer name, which only exist after the join, so a
+        // query widens the read window and folds accents in Node (see search-text.ts).
+        limit: search ? String(SEARCH_SCAN_LIMIT) : filters.limit,
+        offset: search ? "0" : filters.offset
       };
       if (filters.status) query.status = `eq.${filters.status}`;
       if (filters.decisionStatus) query.decision_status = `eq.${filters.decisionStatus}`;
       if (filters.orderId) query.order_id = `eq.${filters.orderId}`;
       if (filters.paymentKind) query["pay_order.payment_method"] = filters.paymentKind === "cod" ? "eq.COD" : "eq.ONLINE_PAYMENT";
-      if (filters.search) {
-        query.or = `(description.ilike.*${filters.search}*,tracking_return_code.ilike.*${filters.search}*)`;
-      }
       let found = await selectRows("return_exchange", query, authOptions(accessToken)).catch(() => null);
       if (!found) {
         found = await selectRows("return_exchange", query);
@@ -319,7 +322,7 @@ export function createReturnRepository() {
           : { rows: [] as JsonObject[] };
         const receiverMap = new Map<string, JsonObject>(receiverRows.rows.map((row) => [asString(row.return_id), row]));
 
-        const enriched = res.rows.map((row: JsonObject) => {
+        const enriched: JsonObject[] = res.rows.map((row: JsonObject) => {
           const ord = orderMap.get(asString(row.order_id));
           const excOrd = row.exchange_order_id ? orderMap.get(asString(row.exchange_order_id)) : undefined;
           const pay = paymentMap.get(asString(row.order_id));
@@ -341,7 +344,19 @@ export function createReturnRepository() {
             refund_receiver_status: refundReceiverStatus(flow === "cod_manual", receiverMap.get(asString(row.return_id)))
           };
         });
+        if (search) {
+          const matched = enriched.filter((row) =>
+            searchMatches(search, row.description, row.tracking_return_code, row.order_code, row.customer_name, row.customer_phone)
+          );
+          return { rows: matched.slice(pageOffset, pageOffset + pageLimit), count: matched.length };
+        }
         return { rows: enriched, count: res.count };
+      }
+      if (search) {
+        const matched = res.rows.filter((row) =>
+          searchMatches(search, row.description, row.tracking_return_code)
+        );
+        return { rows: matched.slice(pageOffset, pageOffset + pageLimit), count: matched.length };
       }
       return res;
     },
@@ -490,21 +505,24 @@ export function createReturnRepository() {
 
 
     async listTickets(filters: TicketListFilters, accessToken: string) {
+      const search = asString(filters.search).trim();
+      const pageLimit = Math.max(1, filters.limit || 20);
+      const pageOffset = Math.max(0, filters.offset || 0);
       const query: Record<string, unknown> = {
         select: TICKET_SELECT,
         order: "created_at.desc",
-        limit: filters.limit,
-        offset: filters.offset
+        // Same folding rule as every queue: searching ignores case, diacritics and `đ`.
+        limit: search ? String(SEARCH_SCAN_LIMIT) : filters.limit,
+        offset: search ? "0" : filters.offset
       };
       if (filters.status) query.status = `eq.${filters.status}`;
       if (filters.userId) query.user_id = `eq.${filters.userId}`;
-      // Chuỗi tìm được bọc nháy kép qua `quotePostgrestValue`, nên một dấu `,` hay `)` do người
-      // dùng gõ không thể mở điều kiện lọc mới.
-      if (filters.search) {
-        const pattern = `ilike.*${quotePostgrestValue(filters.search)}*`;
-        query.or = `(title.${pattern},description.${pattern},guest_phone.${pattern},guest_email.${pattern})`;
-      }
-      return selectRows("support_ticket", query, authOptions(accessToken));
+      const result = await selectRows("support_ticket", query, authOptions(accessToken));
+      if (!search) return result;
+      const matched = result.rows.filter((row) =>
+        searchMatches(search, row.title, row.description, row.guest_phone, row.guest_email)
+      );
+      return { rows: matched.slice(pageOffset, pageOffset + pageLimit), count: matched.length };
     },
 
     async getTicket(ticketId: string, accessToken: string) {

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -43,7 +43,7 @@ const tickets: AdminTicketRow[] = [
 ];
 
 describe('AdminErpReturnsPage', () => {
-  function boot(capabilities: Record<string, string[]> = { returns: ['read', 'update'] }, role = 'admin_operator_cskh_dt') {
+  function boot(capabilities: Record<string, string[]> = { returns: ['read', 'update'] }, role = 'admin_operator_cskh_dt', overrides: Record<string, unknown> = {}) {
     TestBed.resetTestingModule();
     const calls = {
       returns: [] as Record<string, string>[],
@@ -115,6 +115,7 @@ describe('AdminErpReturnsPage', () => {
           items: [{ product_name: 'Áo lụa tay lỡ', quantity: 2, unit_price: 445000 }],
         }),
       triggerStripeRefund: () => of({ success: true, refund: { status: 'requested' } }),
+      ...overrides,
     };
     TestBed.configureTestingModule({
       imports: [AdminErpReturnsPage],
@@ -154,6 +155,60 @@ describe('AdminErpReturnsPage', () => {
     expect(page.openTickets()).toBe(7);
     expect(page.canWrite()).toBe(true);
     expect(page.statusLabel('REQUESTED')).toBeTruthy();
+  });
+
+  it('shows every tab counter on first paint instead of zero until a tab is opened', () => {
+    const { page } = boot();
+
+    expect(page.tabs()).toEqual([
+      { key: 'returns', label: 'Đổi trả', count: 26 },
+      { key: 'tickets', label: 'Phiếu hỗ trợ', count: 3 },
+      { key: 'chat', label: 'Hội thoại' },
+      { key: 'logs', label: 'Nhật ký đổi trả', count: 1 },
+    ]);
+  });
+
+  it('releases the blocking overlay when the drawer closes before the detail responds', () => {
+    const hung = new Observable<AdminReturnRow>(() => undefined);
+    const { page } = boot(undefined, undefined, { getReturn: () => hung });
+
+    page.openReturn(rows[0]);
+    expect(page.detailLoading()).toBe(true);
+    page.closeOverlays();
+    expect(page.detailLoading()).toBe(false);
+    expect(page.selected()).toBeNull();
+  });
+
+  it('refreshes a queue in the background without painting the loading state', () => {
+    const { page } = boot();
+    page.setTab('tickets');
+    expect(page.loading()).toBe(false);
+
+    page.loadTickets(true);
+    expect(page.loading()).toBe(false);
+    expect(page.tickets().length).toBe(3);
+  });
+
+  it('renders the chat handoff summary as labeled facts instead of raw JSON', () => {
+    const { page, fixture } = boot();
+    page.selectedTicket.set({
+      ...tickets[2],
+      description: JSON.stringify({
+        wanted: 'Tìm váy dự tiệc',
+        problem: 'Khách cần tư vấn size',
+        summary: 'Khách hỏi váy dự tiệc',
+        verified_status: 'member_account',
+        confirmed_facts: ['Đã xác minh quyền truy cập'],
+        recommendations: ['Kiểm tra đơn trước khi cam kết'],
+      }),
+    });
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent || '';
+
+    expect(text).toContain('Tìm váy dự tiệc');
+    expect(text).toContain('Thông tin đã xác nhận');
+    expect(text).toContain('Gợi ý xử lý');
+    expect(text).not.toContain('"wanted"');
   });
 
   it('sends the status and payment channel filters to the server', () => {
@@ -314,6 +369,7 @@ describe('AdminErpReturnsPage', () => {
       listReturns: (params?: Record<string, string>) =>
         params?.['status'] ? of({ rows: [], count: 0 }) : throwError(() => new Error('returns down')),
       listTickets: () => of({ rows: [], count: 0 }),
+      listServiceLogs: () => of({ rows: [], count: 0 }),
       getReturn: () => of(detail),
     };
     TestBed.configureTestingModule({

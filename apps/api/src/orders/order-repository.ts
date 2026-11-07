@@ -1,6 +1,7 @@
 import { HttpError } from "../http.js";
 import { callRpc, quotePostgrestValue, selectOne, selectRows } from "../supabase.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
+import { SEARCH_SCAN_LIMIT, searchMatches } from "../search-text.js";
 import { ORDER_DETAIL_SELECT, ORDER_LIST_SELECT } from "./order-constants.js";
 
 /**
@@ -17,9 +18,18 @@ const ATTENTION_CAP = 1000;
 export function createOrderRepository() {
   return {
     async list(filters: JsonObject, accessToken: string | null) {
-      const query: Record<string, unknown> = { select: ORDER_LIST_SELECT, order: filters.order, limit: filters.limit, offset: filters.offset };
+      const search = asString(filters.q).trim();
+      const pageLimit = Math.max(1, Number(filters.limit) || 20);
+      const pageOffset = Math.max(0, Number(filters.offset) || 0);
+      // `ilike` compares raw codepoints, so an accented name is not found by "giao duc".
+      // A query widens the read window and folds accents in Node instead (see search-text).
+      const query: Record<string, unknown> = {
+        select: ORDER_LIST_SELECT,
+        order: filters.order,
+        limit: search ? String(SEARCH_SCAN_LIMIT) : filters.limit,
+        offset: search ? "0" : filters.offset
+      };
       const and: string[] = [];
-      if (filters.q) and.push(`or(order_code.ilike.*${filters.q}*,shipping_name.ilike.*${filters.q}*,shipping_phone.ilike.*${filters.q}*,tracking_code.ilike.*${filters.q}*)`);
       if (filters.status) query.status = `eq.${filters.status}`;
       if (filters.paymentMethod) query.payment_method = `eq.${filters.paymentMethod}`;
       if (filters.from) and.push(`order_date.gte.${filters.from}`);
@@ -40,7 +50,12 @@ export function createOrderRepository() {
         }
       }
       if (and.length) query.and = `(${and.join(",")})`;
-      return withOrderError(() => selectRows("orders", query, authOptions(accessToken)));
+      const result = await withOrderError(() => selectRows("orders", query, authOptions(accessToken)));
+      if (!search) return result;
+      const matched = result.rows.filter((row) =>
+        searchMatches(search, row.order_code, row.shipping_name, row.shipping_phone, row.tracking_code)
+      );
+      return { rows: matched.slice(pageOffset, pageOffset + pageLimit), count: matched.length };
     },
 
     async orderIdsWithTags(tag: string | null, accessToken: string | null): Promise<string[]> {

@@ -4,6 +4,7 @@ import { getRequestIp, HttpError } from "./http.js";
 import { writeAuditLog, type AuditLogRow } from "./audit.js";
 import { asString, errorMessage, type AuthContext, type HttpRequest, type JsonObject } from "./types.js";
 import {
+  assertAccountNotLocked,
   assertNotLocked,
   clearLoginFailures,
   findUserByEmail,
@@ -61,6 +62,9 @@ export async function completeAdminPasswordSignIn(body: JsonObject, ipAddress?: 
   const user = found ? await resetStaleLoginFailures(found) : null;
   if (user) {
     try {
+      // An admin lock (lock_type set) must surface its own message before the brute-force
+      // window, otherwise a temporary lock reads as "wrong password 15 minutes" (TC_ACC_06).
+      assertAccountNotLocked(user);
       assertNotLocked(user);
     } catch (error) {
       await writeAuthAudit({

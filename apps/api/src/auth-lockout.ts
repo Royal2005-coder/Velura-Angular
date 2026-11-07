@@ -16,6 +16,8 @@ export interface LoginLockUser {
   admin_role?: unknown;
   login_fail_count?: unknown;
   locked_until?: unknown;
+  /** Admin lock marker; its presence outranks the brute-force window (UAT TC_ACC_06). */
+  lock_type?: unknown;
   updated_at?: unknown;
   created_at?: unknown;
 }
@@ -34,7 +36,7 @@ export interface LoginLockDetails {
  */
 export async function findUserByEmail(email: string): Promise<LoginLockUser | null> {
   const row = await selectOne("users", {
-    select: "user_id,email,role,admin_role,login_fail_count,locked_until,updated_at,created_at",
+    select: "user_id,email,role,admin_role,login_fail_count,locked_until,lock_type,updated_at,created_at",
     email: `eq.${email}`
   });
   if (!row || typeof row.user_id !== "string") {
@@ -95,9 +97,12 @@ export function assertNotLocked(user: LoginLockUser, now = new Date()): void {
  * itself through OTP verification or password reset; only an admin unlock clears the lock.
  */
 export function assertAccountNotLocked(user: { lock_type?: unknown }): void {
-  if (user.lock_type !== null && user.lock_type !== undefined && String(user.lock_type).trim() !== "") {
-    throw new HttpError(423, "ACCOUNT_LOCKED", "Tài khoản đã bị quản trị viên khóa. Vui lòng liên hệ CSKH để được hỗ trợ.");
-  }
+  const lockType = user.lock_type === null || user.lock_type === undefined ? "" : String(user.lock_type).trim();
+  if (!lockType) return;
+  const message = lockType === "permanent"
+    ? "Tài khoản đã bị quản trị viên khóa vĩnh viễn. Vui lòng liên hệ CSKH để được hỗ trợ."
+    : "Tài khoản đã bị quản trị viên tạm khóa. Vui lòng liên hệ CSKH để được hỗ trợ.";
+  throw new HttpError(423, "ACCOUNT_LOCKED", message);
 }
 
 /**

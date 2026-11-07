@@ -561,8 +561,10 @@ export async function handleAuthRoute(
       created_at: user.created_at
     };
     const currentLock = await resetStaleLoginFailures(lockUser);
-    assertNotLocked(currentLock);
+    // Admin lock outranks the brute-force window: a temporary admin lock also carries a
+    // future locked_until, so checking it first keeps the message truthful (TC_ACC_06).
     assertAccountNotLocked(user);
+    assertNotLocked(currentLock);
 
     const isValidPassword = verifyPassword(asString(password), asString(user.password_hash));
     if (!isValidPassword) {

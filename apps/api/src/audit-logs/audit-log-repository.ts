@@ -8,6 +8,11 @@ export interface AuditLogListFilters {
   module?: string;
   modules?: string[];
   q?: string;
+  /** Folded match over the actor id/label only (UAT TC_ACC_16 "lọc theo người thực hiện"). */
+  actor?: string;
+  /** Inclusive ISO bounds on `timestamp`. */
+  from?: string;
+  to?: string;
   targetId?: string;
   limit: number;
   offset: number;
@@ -38,10 +43,12 @@ export function createAuditLogRepository(): AuditLogRepository {
       if (filters.module) query.module = `eq.${filters.module}`;
       else if (filters.modules?.length) query.module = `in.(${filters.modules.join(",")})`;
       if (filters.targetId) query.target_id = `eq.${filters.targetId}`;
-      if (filters.q) {
-        const value = String(filters.q).replace(/[,*()]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
-        if (value) query.or = `(action.ilike.*${value}*,target_id.ilike.*${value}*,actor_id.ilike.*${value}*)`;
-      }
+      const range: string[] = [];
+      if (filters.from) range.push(`timestamp.gte.${filters.from}`);
+      if (filters.to) range.push(`timestamp.lte.${filters.to}`);
+      if (range.length) query.and = `(${range.join(",")})`;
+      // Free-text search is folded in the service over enriched rows; `ilike` on the enum
+      // `action` or the uuid id columns fails in PostgREST (UAT TC_ACC_16).
       return selectRows("audit_log", query, { useAnonKey: true, accessToken });
     }
   };

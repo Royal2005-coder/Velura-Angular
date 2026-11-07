@@ -43,10 +43,22 @@
     <label class="erp-field logs-module">
       <span>Phân hệ</span>
       <select class="erp-select" [value]="module()" (change)="onModuleChange($event)">
-        @for (option of moduleOptions; track option.value) {
+        @for (option of moduleOptions(); track option.value) {
           <option [value]="option.value">{{ option.label }}</option>
         }
       </select>
+    </label>
+    <label class="erp-field">
+      <span>Người thực hiện</span>
+      <input class="erp-input" type="search" [value]="actorFilter()" (input)="onActorInput($event)" placeholder="Tên hoặc email quản trị viên..." />
+    </label>
+    <label class="erp-field">
+      <span>Từ ngày</span>
+      <input class="erp-input" type="date" [value]="fromDate()" (change)="onFromDate($event)" />
+    </label>
+    <label class="erp-field">
+      <span>Đến ngày</span>
+      <input class="erp-input" type="date" [value]="toDate()" (change)="onToDate($event)" />
     </label>
   </app-erp-filter-bar>
 

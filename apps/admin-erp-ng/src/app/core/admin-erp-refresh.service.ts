@@ -28,3 +28,19 @@ export function useWorkspaceRefresh(reload: () => void): void {
   const destroyRef = inject(DestroyRef);
   refresh.requests$.pipe(takeUntilDestroyed(destroyRef)).subscribe(reload);
 }
+
+/**
+ * Re-reads a workspace in the background so new orders, returns and tickets show up without
+ * an F5. Ticks are skipped while the browser tab is hidden, and the callback must be silent
+ * (no blocking overlay) so the operator keeps their scroll position and open filters.
+ */
+export function useAutoRefresh(reload: () => void, intervalMs = 25_000): void {
+  const destroyRef = inject(DestroyRef);
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const timer = window.setInterval(() => {
+    if (document.visibilityState === 'visible') reload();
+  }, intervalMs);
+  destroyRef.onDestroy(() => window.clearInterval(timer));
+}

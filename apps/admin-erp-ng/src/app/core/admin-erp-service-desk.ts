@@ -376,3 +376,59 @@ export function returnContactOverdue(row: AdminReturnRow, now = Date.now()): boo
   const deadline = Date.parse(row.contact_due_at || '');
   return contactAllowed(row) && Number.isFinite(deadline) && deadline < now;
 }
+
+/** Handoff summary a chat-governed ticket stores as its description, ready for labels. */
+export interface TicketBrief {
+  readonly wanted?: string;
+  readonly problem?: string;
+  readonly summary?: string;
+  readonly verifiedStatus?: string;
+  readonly sentiment?: string;
+  readonly issueKey?: string;
+  readonly unresolvedNeed?: string;
+  readonly confirmedFacts: readonly string[];
+  readonly unconfirmedClaims: readonly string[];
+  readonly recommendations: readonly string[];
+  readonly failedApproaches: readonly string[];
+}
+
+/**
+ * Chat-governed tickets keep the AI handoff summary serialized in `description`. Raw JSON in
+ * the operator drawer is noise, so parse it into labeled facts. Plain text and unfamiliar
+ * shapes return null and the drawer shows the original message instead (UAT TC_TICK_08).
+ */
+export function parseTicketBrief(description: string | null | undefined): TicketBrief | null {
+  const text = String(description ?? '').trim();
+  if (!text.startsWith('{')) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const source = parsed as Record<string, unknown>;
+  const textOf = (value: unknown): string | undefined => {
+    const valueText = typeof value === 'string' ? value.trim() : '';
+    return valueText || undefined;
+  };
+  const listOf = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.map((entry) => (typeof entry === 'string' ? entry.trim() : '')).filter(Boolean)
+      : [];
+  const brief: TicketBrief = {
+    wanted: textOf(source['wanted']),
+    problem: textOf(source['problem']),
+    summary: textOf(source['summary']),
+    verifiedStatus: textOf(source['verified_status']),
+    sentiment: textOf(source['sentiment']),
+    issueKey: textOf(source['issue_key']),
+    unresolvedNeed: textOf(source['unresolved_need']),
+    confirmedFacts: listOf(source['confirmed_facts']),
+    unconfirmedClaims: listOf(source['unconfirmed_claims']),
+    recommendations: listOf(source['recommendations']),
+    failedApproaches: listOf(source['failed_approaches']),
+  };
+  const hasContent = Object.values(brief).some((value) => (Array.isArray(value) ? value.length > 0 : Boolean(value)));
+  return hasContent ? brief : null;
+}

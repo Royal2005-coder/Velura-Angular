@@ -22,7 +22,9 @@ export async function readStudioImageEvidence(value: string): Promise<StudioImag
   }
   const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15000) });
   if (!response.ok) { await response.body?.cancel(); throw new HttpError(422, "IMAGE_FETCH_FAILED", "Không đọc được ảnh Studio để phê duyệt."); }
-  const max = 5 * 1024 * 1024;
+  // Align with the editor's 8 MB upload limit: the studio produces >=1080px PNGs, and a
+  // 5 MB cap rejected legitimate enhanced images that the client had already accepted.
+  const max = 8 * 1024 * 1024;
   const reader = response.body?.getReader();
   if (!reader) throw new HttpError(422, "INVALID_IMAGE", "Ảnh Studio trống.");
   const chunks: Uint8Array[] = [];
@@ -32,7 +34,7 @@ export async function readStudioImageEvidence(value: string): Promise<StudioImag
       const { done, value: chunk } = await reader.read();
       if (done) break;
       size += chunk.byteLength;
-      if (size > max) throw new HttpError(422, "IMAGE_TOO_LARGE", "Ảnh phê duyệt phải nhỏ hơn 5 MB.");
+      if (size > max) throw new HttpError(422, "IMAGE_TOO_LARGE", "Ảnh phê duyệt phải nhỏ hơn 8 MB.");
       chunks.push(chunk);
     }
   } finally { await reader.cancel().catch(() => undefined); }

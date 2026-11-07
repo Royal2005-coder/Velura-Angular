@@ -302,11 +302,14 @@ function shuffle<T>(items: T[]): T[] {
 }
 
 /**
- * Count whitespace-separated words in a free-text reason.
+ * Count whitespace-separated words that contain at least one letter or digit. Punctuation
+ * runs like "! ! ! ! !" are not words, so they cannot satisfy the >10-word reason rule
+ * (UAT TC_ACC_07).
  */
 export function countWords(value: unknown): number {
   const text = String(value ? value : "").trim();
-  return text ? text.split(/\s+/u).filter(Boolean).length : 0;
+  if (!text) return 0;
+  return text.split(/\s+/u).filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
 }
 
 function requireAccountAdmin(

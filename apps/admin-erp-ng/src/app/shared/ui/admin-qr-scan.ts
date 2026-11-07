@@ -21,6 +21,11 @@ const SCAN_INTERVAL_MS = 280;
   template: `
     <app-erp-modal [open]="open()" [title]="title()" size="md" (closed)="dismiss()">
       <div class="scan">
+        <ol class="scan__steps">
+          <li>Đưa camera vào mã QR trên label của ĐVVC, giữ mã nằm trọn trong khung và đủ sáng.</li>
+          <li>Camera không dùng được thì tải ảnh label hoặc dán nội dung mã bên dưới.</li>
+          <li>Sau khi quét, mã đơn, ĐVVC, mã vận đơn, tracking URL và người giao được khóa lại để bàn giao đúng label.</li>
+        </ol>
         <div class="scan__stage" [class.scan__stage--ready]="cameraReady()">
           <video #video playsinline muted></video>
           <canvas #frame hidden></canvas>
@@ -70,11 +75,19 @@ const SCAN_INTERVAL_MS = 280;
         display: grid;
         gap: 10px;
       }
+      .scan__steps {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 2px;
+        color: var(--erp-text-muted);
+        font-size: 0.8rem;
+      }
       .scan__stage {
         position: relative;
         display: grid;
         place-items: center;
-        min-height: 220px;
+        min-height: 320px;
         overflow: hidden;
         border: 1px dashed var(--erp-line);
         border-radius: var(--erp-radius-sm);
@@ -82,7 +95,7 @@ const SCAN_INTERVAL_MS = 280;
       }
       .scan__stage video {
         width: 100%;
-        max-height: 340px;
+        max-height: 480px;
         object-fit: cover;
       }
       .scan__stage:not(.scan__stage--ready) video {

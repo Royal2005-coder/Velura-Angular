@@ -1,6 +1,8 @@
 import { hashPassword } from "../auth-helper.js";
+import { config } from "../config.js";
 import { HttpError } from "../http.js";
-import { callRpc, insertRow, selectOne, selectRows } from "../supabase.js";
+import { callRpc, insertRow, quotePostgrestValue, selectOne, selectRows } from "../supabase.js";
+import { SEARCH_SCAN_LIMIT, searchMatches } from "../search-text.js";
 import { asJsonObject, asString, isJsonObject, type JsonObject } from "../types.js";
 import { ACCOUNT_SELECT } from "./account-constants.js";
 import { writeAuditLog } from "../audit.js";
@@ -148,16 +150,19 @@ export interface AccountRepository {
 export function createAccountRepository(): AccountRepository {
   return {
     async list(filters, accessToken) {
+      const search = String(filters.q || "").trim();
+      const pageLimit = Math.max(1, filters.limit || 20);
+      const pageOffset = Math.max(0, filters.offset || 0);
       const query: Record<string, unknown> = {
         select: ACCOUNT_SELECT,
-        order: filters.order,
-        limit: filters.limit,
-        offset: filters.offset
+        // Tie-break on the primary key so equal timestamps never reorder the page between
+        // calls or duplicate/lose rows across pages (UAT TC_ACC_03).
+        order: `${filters.order},user_id.asc`,
+        // `ilike` cannot fold Vietnamese accents, so a query widens the window and matches
+        // in Node (search-text.ts) across name, email and phone (UAT TC_ACC_04).
+        limit: search ? String(SEARCH_SCAN_LIMIT) : filters.limit,
+        offset: search ? "0" : filters.offset
       };
-      if (filters.q) {
-        const value = sanitizeSearch(filters.q);
-        if (value) query.or = `(full_name.ilike.*${value}*,email.ilike.*${value}*,phone.ilike.*${value}*)`;
-      }
       if (filters.role) query.role = `eq.${filters.role}`;
       if (filters.adminRole) query.admin_role = `eq.${filters.adminRole}`;
       if (filters.isActive !== undefined) query.is_active = `eq.${filters.isActive}`;
@@ -167,7 +172,10 @@ export function createAccountRepository(): AccountRepository {
         query.is_active = "eq.false";
         query.lock_type = "is.null";
       }
-      return withAccountError(() => selectRows("users", query, authOptions(accessToken)));
+      const result = await withAccountError(() => selectRows("users", query, authOptions(accessToken)));
+      if (!search) return result;
+      const matched = result.rows.filter((row) => searchMatches(search, row.full_name, row.email, row.phone));
+      return { rows: matched.slice(pageOffset, pageOffset + pageLimit), count: matched.length };
     },
 
     async findById(userId, accessToken) {
@@ -191,41 +199,84 @@ export function createAccountRepository(): AccountRepository {
             throw new HttpError(409, "DUPLICATE_ACCOUNT", "Số điện thoại đã được sử dụng trên hệ thống");
           }
         }
-        const created = asJsonObject(await insertRow("users", {
-          email: input.email,
-          phone: input.phone,
-          full_name: input.fullName,
-          password_hash: hashPassword(input.password),
-          role: input.role,
-          admin_role: input.adminRole,
-          is_active: true,
-          is_verified: true
-        }));
-        await writeAuditLog({
-          actor_id: actorId,
-          actor_role: actorRole,
-          action: "create",
-          module: "accounts",
-          target_id: asString(created.user_id) || null,
-          old_value: null,
-          new_value: { email: created.email, phone: created.phone, role: created.role, admin_role: created.admin_role },
-          ip_address: asString(input.ipAddress) || "127.0.0.1",
-          timestamp: new Date().toISOString()
-        });
-        const { password_hash: _passwordHash, otp_code: _otpCode, otp_expires_at: _otpExpiresAt, ...safeAccount } = created;
-        return safeAccount;
+        // The profile row alone cannot sign in: /auth/v1/token is issued by Supabase Auth.
+        // Create the GoTrue user first and link it, rolling it back if the profile fails.
+        const authUserId = input.email
+          ? await createAuthIdentity(input.email, input.password, input.fullName)
+          : null;
+        try {
+          const created = asJsonObject(await insertRow("users", {
+            email: input.email,
+            phone: input.phone,
+            full_name: input.fullName,
+            auth_user_id: authUserId,
+            password_hash: hashPassword(input.password),
+            role: input.role,
+            admin_role: input.adminRole,
+            is_active: true,
+            is_verified: true
+          }));
+          await writeAuditLog({
+            actor_id: actorId,
+            actor_role: actorRole,
+            action: "create",
+            module: "accounts",
+            target_id: asString(created.user_id) || null,
+            old_value: null,
+            new_value: { email: created.email, phone: created.phone, role: created.role, admin_role: created.admin_role },
+            ip_address: asString(input.ipAddress) || "127.0.0.1",
+            timestamp: new Date().toISOString()
+          });
+          const { password_hash: _passwordHash, otp_code: _otpCode, otp_expires_at: _otpExpiresAt, ...safeAccount } = created;
+          return safeAccount;
+        } catch (error) {
+          if (authUserId) {
+            await deleteAuthIdentity(authUserId).catch(() => undefined);
+          }
+          throw error;
+        }
       });
     },
 
     async listRoleRequests(filters, accessToken) {
       const query: Record<string, unknown> = {
-        select: "request_id,requester_id,target_user_id,requested_role,status,approver_id,admin_note,created_at,expires_at,resolved_at,target_version,version",
-        order: "created_at.desc",
+        select: "request_id,requester_id,target_user_id,requested_role,status,approver_id,action_note,created_at,expires_at,resolved_at,target_version,version",
+        order: "created_at.desc,request_id.asc",
         limit: filters.limit,
         offset: filters.offset
       };
       if (filters.status) query.status = `eq.${filters.status}`;
-      return withAccountError(() => selectRows("approval_admin_request", query, authOptions(accessToken)));
+      const result = await withAccountError(() => selectRows("approval_admin_request", query, authOptions(accessToken)));
+      // Operators decide on people, not UUIDs: join the target/requester display fields and
+      // expose the reject note, which the table previously dropped (UAT TC_ACC_12/14).
+      const ids = Array.from(new Set(
+        result.rows.flatMap((row) => [row.target_user_id, row.requester_id]).map((value) => asString(value)).filter(Boolean)
+      ));
+      if (!ids.length) return result;
+      const { rows: users } = await selectRows("users", {
+        select: "user_id,email,full_name",
+        user_id: `in.(${ids.map(quotePostgrestValue).join(",")})`,
+        limit: ids.length
+      }, { count: "none" }).catch(() => ({ rows: [] as JsonObject[] }));
+      const byId = new Map(users.map((user) => [asString(user.user_id), user]));
+      const label = (id: unknown) => {
+        const user = byId.get(asString(id));
+        return {
+          email: user ? asString(user.email) : undefined,
+          name: user ? asString(user.full_name) : undefined
+        };
+      };
+      return {
+        count: result.count,
+        rows: result.rows.map((row) => ({
+          ...row,
+          target_email: label(row.target_user_id).email,
+          target_name: label(row.target_user_id).name,
+          requester_email: label(row.requester_id).email,
+          requester_name: label(row.requester_id).name,
+          rejection_reason: row.status === "rejected" ? (asString(row.action_note) || null) : null
+        }))
+      };
     },
 
     async listAuditLogs(filters, accessToken) {
@@ -290,8 +341,47 @@ function authOptions(accessToken: string): { useAnonKey: true; accessToken: stri
   return { useAnonKey: true, accessToken };
 }
 
-function sanitizeSearch(value: unknown): string {
-  return String(value ? value : "").replace(/[,*()]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+/**
+ * Creates the Supabase Auth identity a password sign-in needs. The public.users row alone
+ * cannot obtain a token, so a freshly created admin must exist in GoTrue too (TC_ACC_05).
+ */
+async function createAuthIdentity(email: string, password: string, fullName: string): Promise<string> {
+  if (!config.supabaseUrl || !config.supabaseServiceRoleKey) {
+    throw new HttpError(503, "AUTH_NOT_CONFIGURED", "Chưa cấu hình Supabase Auth để tạo đăng nhập cho tài khoản.");
+  }
+  const response = await fetch(`${config.supabaseUrl}/auth/v1/admin/users`, {
+    method: "POST",
+    headers: {
+      apikey: config.supabaseServiceRoleKey,
+      authorization: `Bearer ${config.supabaseServiceRoleKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { full_name: fullName } }),
+    signal: AbortSignal.timeout(15_000)
+  });
+  const payload = (await response.json().catch(() => ({}))) as JsonObject;
+  if (!response.ok) {
+    const detail = `${asString(payload.msg)} ${asString(payload.message)} ${asString(payload.error_description)}`.toLowerCase();
+    if (response.status === 409 || response.status === 422 || detail.includes("already") || detail.includes("registered") || detail.includes("exists")) {
+      throw new HttpError(409, "DUPLICATE_ACCOUNT", "Email đã được sử dụng trên hệ thống");
+    }
+    throw new HttpError(502, "AUTH_CREATE_FAILED", "Không tạo được đăng nhập Supabase cho tài khoản mới.");
+  }
+  const id = asString(payload.id);
+  if (!id) throw new HttpError(502, "AUTH_CREATE_FAILED", "Supabase Auth không trả về mã người dùng.");
+  return id;
+}
+
+/** Best-effort rollback when the profile insert fails after the Auth user was created. */
+async function deleteAuthIdentity(userId: string): Promise<void> {
+  await fetch(`${config.supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+    headers: {
+      apikey: config.supabaseServiceRoleKey,
+      authorization: `Bearer ${config.supabaseServiceRoleKey}`
+    },
+    signal: AbortSignal.timeout(10_000)
+  });
 }
 
 async function withAccountError<T>(operation: () => Promise<T>): Promise<T> {
@@ -302,7 +392,9 @@ async function withAccountError<T>(operation: () => Promise<T>): Promise<T> {
       const details = isJsonObject(error.details) ? error.details : {};
       const databaseCode = asString(details.message) || asString(details.code) || "ACCOUNT_DATABASE_ERROR";
       const status = error.status >= 400 && error.status < 500 ? error.status : 502;
-      throw new HttpError(status, databaseCode, accountErrorMessage(databaseCode), error.details);
+      // The raw PostgREST envelope (code/details/hint) must not reach the operator UI:
+      // UAT saw "code: PT409 · details: null · hint: null" instead of a Vietnamese message.
+      throw new HttpError(status, databaseCode, accountErrorMessage(databaseCode));
     }
     throw error;
   }
@@ -310,19 +402,22 @@ async function withAccountError<T>(operation: () => Promise<T>): Promise<T> {
 
 function accountErrorMessage(code: string): string {
   const messages: Record<string, string> = {
-    RBAC_DENIED: "You do not have permission to manage accounts",
-    ACCOUNT_NOT_FOUND: "Account was not found",
-    VERSION_CONFLICT: "Account data changed; reload before trying again",
-    TARGET_VERSION_CONFLICT: "Target account changed after the approval was created",
-    LAST_SUPER_ADMIN: "The last active super admin cannot be locked or demoted",
-    ACCOUNT_ALREADY_LOCKED: "Account is already locked",
-    ACCOUNT_ALREADY_ACTIVE: "Account is already active",
-    PENDING_APPROVAL_EXISTS: "A pending super admin request already exists",
-    APPROVAL_NOT_FOUND: "Approval request was not found",
-    APPROVAL_ALREADY_RESOLVED: "Approval request was already resolved",
-    APPROVAL_SEPARATION_REQUIRED: "Requester, target and approver must be different accounts",
-    REASON_MIN_11_WORDS: "Reason must contain more than 10 words",
-    REJECTION_REASON_MIN_11_WORDS: "Rejection reason must contain more than 10 words"
+    RBAC_DENIED: "Bạn không có quyền quản lý tài khoản",
+    ACCOUNT_NOT_FOUND: "Không tìm thấy tài khoản",
+    VERSION_CONFLICT: "Tài khoản vừa được cập nhật ở phiên khác. Vui lòng tải lại trang và thử lại.",
+    TARGET_VERSION_CONFLICT: "Tài khoản đích đã thay đổi sau khi yêu cầu được tạo. Vui lòng tải lại.",
+    LAST_SUPER_ADMIN: "Không thể khóa hoặc hạ quyền Super Admin đang hoạt động cuối cùng.",
+    ACCOUNT_ALREADY_LOCKED: "Tài khoản đã bị khóa trước đó.",
+    ACCOUNT_ALREADY_ACTIVE: "Tài khoản đang hoạt động, không cần mở khóa.",
+    ACCOUNT_NOT_LOCKED: "Tài khoản chưa từng bị khóa (có thể chưa xác thực đăng ký). Không thể mở khóa.",
+    PENDING_APPROVAL_EXISTS: "Đã có yêu cầu nâng quyền super admin đang chờ duyệt cho tài khoản này.",
+    APPROVAL_NOT_FOUND: "Không tìm thấy yêu cầu nâng quyền",
+    APPROVAL_ALREADY_RESOLVED: "Yêu cầu nâng quyền đã được xử lý trước đó.",
+    APPROVAL_SEPARATION_REQUIRED: "Người yêu cầu, tài khoản đích và người duyệt phải là ba tài khoản khác nhau.",
+    REASON_MIN_11_WORDS: "Lý do phải có hơn 10 từ có nghĩa.",
+    REJECTION_REASON_MIN_11_WORDS: "Lý do từ chối phải có hơn 10 từ có nghĩa.",
+    AUTH_NOT_CONFIGURED: "Chưa cấu hình Supabase Auth để tạo đăng nhập cho tài khoản.",
+    AUTH_CREATE_FAILED: "Không tạo được đăng nhập Supabase cho tài khoản mới."
   };
-  return messages[code] || "Account database operation failed";
+  return messages[code] || "Thao tác tài khoản thất bại. Vui lòng thử lại.";
 }

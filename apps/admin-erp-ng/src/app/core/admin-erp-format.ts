@@ -71,7 +71,25 @@ export function adminIsHttpUrl(value: string | null | undefined): boolean {
  */
 export function adminWordCount(value: string | null | undefined): number {
   const text = String(value || '').trim();
-  return text ? text.split(/\s+/u).filter(Boolean).length : 0;
+  if (!text) {
+    return 0;
+  }
+  // Chỉ token có chữ hoặc số mới là "từ": chuỗi "! ! ! ..." không được tính là lý do hợp lệ.
+  return text.split(/\s+/u).filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
+}
+
+/**
+ * Folds Vietnamese text for duplicate checks: case, diacritics and `đ` are ignored, so
+ * "Thu đông 2026" and "thu dong 2026" count as the same campaign name (UAT TC_PROMO_13).
+ */
+export function adminFoldText(value: string | null | undefined): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
 }
 
 /**

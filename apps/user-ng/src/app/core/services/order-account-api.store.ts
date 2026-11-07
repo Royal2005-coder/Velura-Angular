@@ -618,8 +618,10 @@ export class OrderAccountApiStore implements OrderAccountModel {
     if (!order) throw new Error('Không tìm thấy đơn hàng.');
     if (!this.canAccess(order)) throw new Error('Vui lòng xác thực chủ đơn trước.');
     const context = this.context();
+    // Both branches are the same versioned cancel; a guest only differs in how they prove
+    // ownership (order code + phone session instead of a member token).
+    if (!order.expectedVersion) throw new Error('Dữ liệu đơn chưa sẵn sàng, vui lòng tải lại.');
     if (context.userId) {
-      if (!order.expectedVersion) throw new Error('Dữ liệu đơn chưa sẵn sàng, vui lòng tải lại.');
       await firstValueFrom(
         this.api.patch('/api/user/orders', {
           order_id: order.orderId,
@@ -634,6 +636,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
           order_code: order.id,
           guest_access_token: context.guestToken,
           reason,
+          expectedVersion: order.expectedVersion,
         }),
       );
     }

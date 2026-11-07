@@ -21,7 +21,8 @@ import {
   validateCheckoutContact
 } from "./checkout-service.js";
 import { loyaltyActor, readPoints } from "../loyalty/loyalty-service.js";
-import { createStripePaymentIntent, refundStripeOrder, STRIPE_CHECKOUT_TTL_SECONDS, stripeConfigured } from "../payments/stripe.js";
+import { createStripePaymentIntent, STRIPE_CHECKOUT_TTL_SECONDS, stripeConfigured, type RefundResult } from "../payments/stripe.js";
+import { refundOrderPayment } from "../payments/local-gateway-refund.js";
 import { assertLocalGatewayReady, openLocalGateway, type HostedPayment } from "../payments/local-gateways.js";
 import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
 import { returnWindowOpen } from "./return-window.js";
@@ -485,12 +486,14 @@ export async function handleOrdersRoute(
       const order = await selectOne("orders", /^[0-9a-f-]{36}$/i.test(code) ? {order_id:"eq."+code} : {order_code:"eq."+code});
       if (!order) throw new HttpError(404,"NOT_FOUND","Order not found");
       requireCustomerOrderAccess(order, context, body);
-      const result = await cancelOrderForCustomer(createCustomerOrderCancelRepository(), {
-        orderId: asString(order.order_id), userId: asString(order.user_id), reason:body.reason,
-        expectedVersion:body.expectedVersion
+      const result = await cancelOrderWithRefund({
+        orderId: asString(order.order_id),
+        userId: asString(order.user_id),
+        reason: body.reason,
+        expectedVersion: body.expectedVersion,
+        link: `/guest/orders/${asString(order.order_id)}`
       });
-      const refund = result.refundRequired ? await refundStripeOrder(asString(order.order_id)) : null;
-      return sendJson(res,200,{success:true,order:presentOrderForCustomer(result.order,[],[]),refund},corsHeaders);
+      return sendJson(res,200,{success:true,order:presentOrderForCustomer(result.order,[],[]),refund:result.refund},corsHeaders);
     }
 
     if (req.method === "PATCH") {
@@ -509,21 +512,13 @@ export async function handleOrdersRoute(
 
       // Rule nghiệp vụ (quyền sở hữu, trạng thái, version) nằm ở order-cancel-service để test
       // được bằng repository giả, không cần DB thật.
-      const { order: updatedOrder, refundRequired, reason } = await cancelOrderForCustomer(
-        createCustomerOrderCancelRepository(),
-        { orderId: asString(order_id), userId: profile.user_id, reason: cancelled_reason, expectedVersion }
-      );
-      const refund = refundRequired ? await refundStripeOrder(String(order_id)) : null;
-
-      await createNotification(
-        profile.user_id,
-        "order_status",
-        `Đơn hàng #${asString(updatedOrder.order_code)} đã được huỷ`,
-        refund
-          ? `Lý do: ${reason}. Tiền sẽ được hoàn về phương thức thanh toán ban đầu.`
-          : `Lý do: ${reason}.`,
-        `/account/orders/${updatedOrder.order_id}`
-      );
+      const { order: updatedOrder, refund } = await cancelOrderWithRefund({
+        orderId: asString(order_id),
+        userId: profile.user_id,
+        reason: cancelled_reason,
+        expectedVersion,
+        link: `/account/orders/${asString(order_id)}`
+      });
       return sendJson(res, 200, { success: true, order: presentOrderForCustomer(updatedOrder, [], []), refund }, corsHeaders);
     }
 
@@ -1124,6 +1119,37 @@ export function validateCheckoutExtras(body: JsonObject): void {
       throw new HttpError(422,"INVALID_VAT_INVOICE","Vui lòng nhập đủ tên công ty, mã số thuế, địa chỉ và email nhận hóa đơn hợp lệ.");
     }
   }
+}
+
+/**
+ * Luồng huỷ đơn dùng chung cho thành viên và khách tra cứu bằng số điện thoại: state machine
+ * có version → hoàn tiền theo đúng nhà mạng đã thu tiền → thông báo trong ứng dụng. Trước đây
+ * nhánh guest thiếu cả hai bước sau, nên khách hủy đơn online mà không thấy tiền về ở đâu.
+ */
+async function cancelOrderWithRefund(input: {
+  orderId: string;
+  userId: string;
+  reason: unknown;
+  expectedVersion: unknown;
+  link: string;
+}): Promise<{ order: JsonObject; refund: RefundResult | null }> {
+  const { order, refundRequired, reason } = await cancelOrderForCustomer(
+    createCustomerOrderCancelRepository(),
+    { orderId: input.orderId, userId: input.userId, reason: input.reason, expectedVersion: input.expectedVersion }
+  );
+  const refund = refundRequired ? await refundOrderPayment(input.orderId) : null;
+  if (input.userId) {
+    await createNotification(
+      input.userId,
+      "order_status",
+      `Đơn hàng #${asString(order.order_code)} đã được huỷ`,
+      refund
+        ? `Lý do: ${reason}. Tiền sẽ được hoàn về phương thức thanh toán ban đầu.`
+        : `Lý do: ${reason}.`,
+      input.link
+    );
+  }
+  return { order, refund };
 }
 
 async function openLocalPayment(orderId: unknown, method: unknown, clientIp: string): Promise<HostedPayment|null> {

@@ -163,6 +163,36 @@
   white-space: pre-line;
 }
 
+.record__brief {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface-muted);
+}
+
+.record__brief-title {
+  color: var(--erp-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.record__brief-list {
+  margin: 0;
+  color: var(--erp-text);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.record__brief-list strong {
+  color: var(--erp-muted);
+  font-weight: 700;
+  margin-right: 4px;
+}
+
 .record__notes span,
 .record__evidence span,
 .record__lines span,

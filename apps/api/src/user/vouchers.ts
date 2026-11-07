@@ -1,5 +1,5 @@
 import { HttpError, readJson, sendJson } from "../http.js";
-import { callRpc, selectRows } from "../supabase.js";
+import { callRpc, quotePostgrestValue, selectRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
 import {
   buildPromotionStateMap,
@@ -168,9 +168,8 @@ export async function buildWallet(
     }
   };
 
-  const [voucherResult, promotionResult, orderResult, confirmedOfferIds] = await Promise.all([
+  const [voucherResult, orderResult, confirmedOfferIds] = await Promise.all([
     fetchVouchers(),
-    selectRows("promotion", { limit: 200 }),
     profile?.user_id
       ? selectRows("orders", { user_id: `eq.${profile.user_id}`, limit: 500 })
       : Promise.resolve({ rows: [] as JsonObject[] }),
@@ -178,8 +177,17 @@ export async function buildWallet(
   ]);
 
   const rawVouchers = voucherResult.rows || [];
+  // Parent campaigns must be read by id, not by an arbitrary first-200 window: a campaign
+  // outside that window used to skip the paused/date guard entirely (TC_PROMO_26).
+  const promoIds = Array.from(new Set(rawVouchers.map((voucher) => String(voucher.promo_id || "")).filter(Boolean)));
+  const promotionRows = promoIds.length
+    ? (await selectRows("promotion", {
+        promo_id: `in.(${promoIds.map(quotePostgrestValue).join(",")})`,
+        limit: promoIds.length
+      }).catch(() => ({ rows: [] as JsonObject[] }))).rows
+    : [];
   const confirmedOffers = new Set(confirmedOfferIds);
-  const recoveryCampaigns = new Set((promotionResult.rows || []).filter((p) => Number(p.recovery_revision || 0) > 0).map((p) => String(p.promo_id)));
+  const recoveryCampaigns = new Set(promotionRows.filter((p) => Number(p.recovery_revision || 0) > 0).map((p) => String(p.promo_id)));
   const activeVouchers = rawVouchers.filter((v) => {
     if (v.reward_member_id != null && (!actor || v.reward_member_id !== actor)) return false;
     const recoveryOnly = Number(v.recovery_revision || 0) > 0 || recoveryCampaigns.has(String(v.promo_id));
@@ -209,7 +217,7 @@ export async function buildWallet(
     isMember: Boolean(profile?.user_id),
     isFirstOrder: countBillableOrders(orders) === 0,
     usageByVoucherId: buildUsageMap(orders),
-    promotionByPromoId: buildPromotionStateMap(promotionResult.rows || []),
+    promotionByPromoId: buildPromotionStateMap(promotionRows),
     lines: cart?.lines,
     categoryNameById: cart?.categoryNameById,
     isBirthdayMonth,

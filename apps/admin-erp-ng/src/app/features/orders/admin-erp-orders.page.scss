@@ -398,6 +398,54 @@
   font-size: 0.86rem;
 }
 
+.shipment-locked {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface-muted);
+}
+
+.shipment-locked__title {
+  color: var(--erp-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.shipment-locked__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.shipment-locked__grid div {
+  display: grid;
+  gap: 2px;
+}
+
+.shipment-locked__grid dt {
+  color: var(--erp-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.shipment-locked__grid dd {
+  margin: 0;
+  font-size: 12.5px;
+  word-break: break-all;
+}
+
+.shipment-locked__grid a {
+  color: var(--erp-accent);
+}
+
 .order-qr summary,
 .order-shipment-url summary {
   cursor: pointer;

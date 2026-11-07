@@ -17,6 +17,13 @@
   </div>
 </app-erp-page-header>
 
+@if (notice()) {
+  <div class="accounts-notice" role="status">
+    <app-erp-icon name="check" [size]="'16'" />
+    {{ notice() }}
+  </div>
+}
+
 <section class="accounts-kpis" aria-label="Tóm tắt tài khoản">
   <app-erp-kpi-card label="Tổng tài khoản" [value]="kpi(allCount())" hint="Toàn bộ danh bạ" tone="accent" icon="users" [loading]="loading() && !hasLoadedOnce()" />
   <app-erp-kpi-card label="Thành viên" [value]="kpi(memberCount())" hint="Khách hàng" icon="users" [loading]="loading() && !hasLoadedOnce()" />
@@ -32,7 +39,7 @@
       <span class="accounts-eyebrow">Directory</span>
       <h2 id="accounts-title">Danh sách tài khoản</h2>
     </div>
-    <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />
+    <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading() && !hasLoadedOnce()" (changed)="setTab($event)" />
   </div>
 
   @if (tab() !== 'promotions' && tab() !== 'logs') {

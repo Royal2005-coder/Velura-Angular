@@ -66,6 +66,8 @@ export interface PromotionState {
   limit: number;
   issued: number;
   isActive: boolean;
+  /** Set while the campaign is paused; checkout must reject even if `is_active` lags (TC_PROMO_26). */
+  pausedAt: string | null;
   startDate: string | null;
   endDate: string | null;
 }
@@ -239,9 +241,10 @@ export function evaluateVoucher(
     if (promotion) {
       // Chiến dịch cha bị tạm dừng hoặc ngoài khung ngày thì mã của nó phải ngừng theo.
       // Cascade ở migration 028 đã tắt voucher con, nhưng chốt lại ở đây để một lần
-      // cascade lỡ nhịp không biến thành giảm giá ngoài ý muốn.
-      if (!promotion.isActive) {
-        return reject("PROMOTION_INACTIVE", "Chiến dịch của mã này đã tạm dừng.");
+      // cascade lỡ nhịp không biến thành giảm giá ngoài ý muốn. `paused_at` là dấu hiệu
+      // admin bấm Pause giữa lúc khách đang checkout (TC_PROMO_26).
+      if (!promotion.isActive || promotion.pausedAt) {
+        return reject("PROMOTION_INACTIVE", "Chiến dịch đã tạm dừng, mã không còn khả dụng.");
       }
       if (promotion.startDate && promotion.startDate > nowIso) {
         return reject("PROMOTION_INACTIVE", `Chiến dịch của mã bắt đầu từ ${formatDate(promotion.startDate)}.`);
@@ -380,6 +383,7 @@ export function buildPromotionStateMap(
       limit: Number(promotion.budget_limit || 0),
       issued: Number(promotion.total_discount_issued || 0),
       isActive: promotion.is_active !== false,
+      pausedAt: promotion.paused_at ? String(promotion.paused_at) : null,
       startDate: promotion.start_date ? String(promotion.start_date) : null,
       endDate: promotion.end_date ? String(promotion.end_date) : null
     };

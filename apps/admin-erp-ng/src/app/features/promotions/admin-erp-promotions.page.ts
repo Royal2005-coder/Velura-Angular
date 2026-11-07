@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { catchError, finalize, of } from 'rxjs';
+import { catchError, finalize, of, timeout } from 'rxjs';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -8,7 +8,7 @@ import {
   AdminPromotionSummary,
   AdminVoucherRow,
 } from '../../core/admin-erp-api.service';
-import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
+import { adminDateTime, adminFoldText, adminMoney } from '../../core/admin-erp-format';
 import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import {
   adminErrorMessage,
@@ -216,7 +216,7 @@ export class AdminErpPromotionsPage {
     if (this.activeFilter()) listParams['isActive'] = this.activeFilter();
     if (this.view() === 'vouchers' && this.campaignFilter()) listParams['promoId'] = this.campaignFilter();
     if (this.view() === 'campaigns') {
-      this.api.listPromotions(listParams).subscribe({
+      this.api.listPromotions(listParams).pipe(timeout(15_000)).subscribe({
         next: (payload) => {
           this.campaigns.set(adminListRows(payload));
           this.promoCount.set(adminListCount(payload));
@@ -231,7 +231,7 @@ export class AdminErpPromotionsPage {
       });
       return;
     }
-    this.api.listVouchers(listParams).subscribe({
+    this.api.listVouchers(listParams).pipe(timeout(15_000)).subscribe({
       next: (payload) => {
         this.vouchers.set(adminListRows(payload));
         this.voucherCount.set(adminListCount(payload));
@@ -250,7 +250,7 @@ export class AdminErpPromotionsPage {
    */
   loadLogs(): void {
     this.loading.set(true);
-    this.api.listPricingAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) }).subscribe({
+    this.api.listPricingAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) }).pipe(timeout(15_000)).subscribe({
       next: (payload) => {
         this.logs.set(adminListRows(payload));
         this.logsCount.set(adminListCount(payload));
@@ -276,7 +276,7 @@ export class AdminErpPromotionsPage {
       params['from'] = new Date(now.getTime() - days * 86_400_000).toISOString();
       params['to'] = now.toISOString();
     }
-    this.api.pricingStatistics(params).subscribe({
+    this.api.pricingStatistics(params).pipe(timeout(20_000)).subscribe({
       next: (stats) => {
         this.stats.set(stats);
         this.loading.set(false);
@@ -554,6 +554,26 @@ export class AdminErpPromotionsPage {
       this.formError.set('Ngân sách phải là số không âm.');
       return;
     }
+    const current = this.editingCampaign();
+    const promoId = current?.promo_id || current?.promotion_id || '';
+    // Same name (ignoring case/diacritics) is the only duplicate that is rejected; the same
+    // dates or budget remain valid (UAT TC_PROMO_13).
+    const foldedName = adminFoldText(name);
+    const duplicate = this.campaignOptions().some((campaign) => {
+      const id = campaign.promo_id || campaign.promotion_id || '';
+      return id !== promoId && adminFoldText(this.campaignName(campaign)) === foldedName;
+    });
+    if (duplicate) {
+      this.formError.set('Tên chiến dịch đã tồn tại. Vui lòng chọn tên khác.');
+      return;
+    }
+    // The API rejects this too; failing here keeps the entered form and explains the number
+    // the operator must stay above (UAT TC_PROMO_11).
+    const issued = Number(current?.total_discount_issued || 0);
+    if (current && issued > 0 && budget > 0 && budget < issued) {
+      this.formError.set(`Ngân sách không được nhỏ hơn số tiền đã sử dụng thực tế (${this.money(issued)}).`);
+      return;
+    }
     const payload: Record<string, unknown> = {
       name,
       startDate: new Date(start).toISOString(),
@@ -562,8 +582,6 @@ export class AdminErpPromotionsPage {
       bannerImageUrl: this.campaignBannerUrl().trim() || null,
       description: this.field(form, 'description'),
     };
-    const current = this.editingCampaign();
-    const promoId = current?.promo_id || current?.promotion_id;
     this.saving.set(true);
     this.formError.set(null);
     const request$ = current && promoId
@@ -575,6 +593,8 @@ export class AdminErpPromotionsPage {
         this.dirty.set(false);
         this.closeOverlays();
         this.reload();
+        // Keep the voucher form's campaign picker current after a rename/create.
+        this.loadCampaignOptions();
       },
       error: (error: unknown) => {
         this.saving.set(false);

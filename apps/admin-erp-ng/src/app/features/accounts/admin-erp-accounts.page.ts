@@ -70,6 +70,8 @@ const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
 export class AdminErpAccountsPage {
   private readonly api = inject(AdminErpApiService);
   private readonly session = inject(AdminErpSessionService);
+  /** Guard so a slow response from the previous tab cannot overwrite the current one. */
+  private reloadId = 0;
 
   readonly tab = signal<AccountTab>('all');
   readonly query = signal('');
@@ -81,6 +83,8 @@ export class AdminErpAccountsPage {
   readonly loadError = signal<string | null>(null);
   readonly requestError = signal<string | null>(null);
   readonly logsError = signal<string | null>(null);
+  /** Confirmation banner for actions whose result is not a visible row change (202 approvals). */
+  readonly notice = signal<string | null>(null);
   readonly actionSaving = signal(false);
   readonly requestSaving = signal(false);
   readonly loading = signal(true);
@@ -183,7 +187,8 @@ export class AdminErpAccountsPage {
 
   readonly requestColumns: readonly AdminTableColumn[] = [
     { key: 'request', label: 'Yêu cầu', value: (row) => String((row as AdminRoleRequestRow).request_id).slice(0, 12) },
-    { key: 'user', label: 'Tài khoản đích', value: (row) => String((row as AdminRoleRequestRow).target_user_id || '—') },
+    { key: 'user', label: 'Tài khoản đích', value: (row) => this.requestTarget(row as AdminRoleRequestRow) },
+    { key: 'requester', label: 'Người yêu cầu', value: (row) => this.requestRequester(row as AdminRoleRequestRow) },
     {
       key: 'role',
       label: 'Vai trò yêu cầu',
@@ -193,7 +198,11 @@ export class AdminErpAccountsPage {
     {
       key: 'status',
       label: 'Trạng thái',
-      value: (row) => String((row as AdminRoleRequestRow).status || '—'),
+      value: (row) => {
+        const request = row as AdminRoleRequestRow;
+        const status = String(request.status || '—');
+        return request.rejection_reason ? `${status} · ${request.rejection_reason}` : status;
+      },
       badge: (row) => ({ label: String((row as AdminRoleRequestRow).status || '—'), tone: 'warning' as AdminBadgeTone }),
     },
   ];
@@ -223,6 +232,7 @@ export class AdminErpAccountsPage {
    * Reloads the active account tab and the count chips.
    */
   reload(): void {
+    const reloadId = ++this.reloadId;
     this.loading.set(true);
     this.loadError.set(null);
     this.requestError.set(null);
@@ -268,6 +278,11 @@ export class AdminErpAccountsPage {
       locked: this.countQuery({ lockState: 'locked' }),
       unverified: this.countQuery({ lockState: 'unverified' }),
     }).subscribe((payload) => {
+      // A response from a tab the operator already left must not repaint the new tab
+      // (UAT saw the members tab showing the admins count).
+      if (reloadId !== this.reloadId) {
+        return;
+      }
       if (tab !== 'promotions' && tab !== 'logs') {
         this.rows.set(adminListRows(payload.accounts));
         this.total.set(adminListCount(payload.accounts));
@@ -295,11 +310,12 @@ export class AdminErpAccountsPage {
    * Switches account tabs and resets paging.
    */
   setTab(tab: string): void {
-    if (this.loading()) return;
+    if (!this.hasLoadedOnce() && this.loading()) return;
     if (!['all', 'members', 'admins', 'locked', 'unverified', 'promotions', 'logs'].includes(tab)) {
       return;
     }
     this.tab.set(tab as AccountTab);
+    this.notice.set(null);
     this.page.set(1);
     this.logsPage.set(1);
     this.requestPage.set(1);
@@ -560,7 +576,17 @@ export class AdminErpAccountsPage {
             });
     this.actionSaving.set(true);
     request$.pipe(finalize(() => this.actionSaving.set(false))).subscribe({
-      next: () => {
+      next: (result) => {
+        const kind = (result as { kind?: string } | null)?.kind;
+        this.notice.set(
+          kind === 'approval'
+            ? 'Yêu cầu nâng quyền đã được gửi và đang chờ một Super Admin khác phê duyệt.'
+            : type === 'lock'
+              ? 'Đã khóa tài khoản.'
+              : type === 'unlock'
+                ? 'Đã mở khóa tài khoản.'
+                : 'Đã cập nhật vai trò tài khoản.',
+        );
         this.dirty.set(false);
         this.closeOverlays();
         this.reload();
@@ -591,13 +617,31 @@ export class AdminErpAccountsPage {
       .reviewRoleRequest(row.request_id, decision, { expectedVersion: row.version, note })
       .pipe(finalize(() => this.requestSaving.set(false)))
       .subscribe({
-        next: () => {
+        next: (result) => {
+          const kind = (result as { kind?: string } | null)?.kind;
+          this.notice.set(kind === 'approve' ? 'Đã duyệt yêu cầu nâng quyền.' : 'Đã từ chối yêu cầu nâng quyền.');
           this.dirty.set(false);
           this.closeOverlays();
           this.reload();
         },
         error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
       });
+  }
+
+  /**
+   * Label of the account a role request targets, with the UUID as a last resort.
+   */
+  requestTarget(request: AdminRoleRequestRow): string {
+    return [request.target_name, request.target_email].filter(Boolean).join(' · ')
+      || String(request.target_user_id || '—');
+  }
+
+  /**
+   * Label of the administrator who raised a role request.
+   */
+  requestRequester(request: AdminRoleRequestRow): string {
+    return [request.requester_name, request.requester_email].filter(Boolean).join(' · ')
+      || String(request.requester_id || '—');
   }
 
   /**

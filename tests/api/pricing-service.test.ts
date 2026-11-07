@@ -43,6 +43,22 @@ test("promotion and voucher search reach the repository", async () => {
   assert.equal(voucherFilters.isActive, undefined);
 });
 
+test("a duplicate campaign name is rejected even with different diacritics (TC_PROMO_13)", async () => {
+  const service = createPricingService({ repository: {
+    listPromotions: async () => ({ rows: [{ promo_id: PROMO_ID, promo_name: "Thu đông 2026" }] }),
+    createPromotion: async (input) => input,
+    updatePromotion: async (_id, input) => input
+  } });
+  const body = { name: "thu dong 2026", startDate: at(0), endDate: at(3), budgetLimit: 100 };
+
+  await assert.rejects(
+    () => service.createPromotion(context("super_admin"), body),
+    (error: { status?: number; code?: string }) => error.status === 409 && error.code === "DUPLICATE_PROMOTION_NAME"
+  );
+  // Renaming the same campaign to itself is not a duplicate.
+  await service.updatePromotion(context("super_admin"), PROMO_ID, { ...body, expectedVersion: 2 });
+});
+
 test("recovery approval rejects implicit or unbounded configuration before persistence", async () => {
   const service = createPricingService({ repository: { createVoucher: async (input) => input } });
   const input = { code: "SUPPORT20", type: "percentage", value: 20 };

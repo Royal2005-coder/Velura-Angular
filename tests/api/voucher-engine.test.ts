@@ -301,10 +301,27 @@ test("promotion state map carries budget and campaign lifecycle together", () =>
       limit: 10000000,
       issued: 2500000,
       isActive: false,
+      pausedAt: null,
       startDate: "2026-09-01T00:00:00.000Z",
       endDate: "2026-12-31T00:00:00.000Z"
     }
   });
+});
+
+test("a paused campaign rejects its voucher in checkout even when is_active lags", () => {
+  const states = buildPromotionStateMap([
+    {
+      promo_id: "p-2",
+      budget_limit: 0,
+      total_discount_issued: 0,
+      is_active: true,
+      paused_at: "2026-11-08T00:00:00.000Z",
+      start_date: "2026-09-01T00:00:00.000Z",
+      end_date: "2026-12-31T00:00:00.000Z"
+    }
+  ]);
+
+  assert.equal(states["p-2"].pausedAt, "2026-11-08T00:00:00.000Z");
 });
 
 test("shipping fee falls back to the standard fee when the client sends nonsense", () => {

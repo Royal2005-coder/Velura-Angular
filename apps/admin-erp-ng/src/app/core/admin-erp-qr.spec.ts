@@ -102,7 +102,24 @@ describe('demo shipment payload', () => {
       carrier: 'GHN',
       trackingCode: 'GHN7F20D76F6',
       trackingUrl: 'https://donhang.ghn.vn/?order_code=GHN7F20D76F6',
+      shipperName: 'Nguyễn Văn Giao (demo)',
+      shipperPhone: '0909000111',
     });
     expect(demoShipmentFacts({ order_code: 'X', carrier: 'GHN', tracking_code: 'VN9-1' }).trackingCode).toBe('VN9-1');
+  });
+
+  it('carries the carrier shipper on a shipment QR round-trip', () => {
+    const qr = buildShipmentQr({
+      orderCode: 'VLR-1',
+      carrier: 'GHN',
+      trackingCode: 'GHN42',
+      trackingUrl: 'https://donhang.ghn.vn/?order_code=GHN42',
+      shipperName: 'Trần Giao',
+      shipperPhone: '0909000111',
+    });
+    const parsed = parseScan(qr);
+    expect(parsed.kind).toBe('shipment');
+    expect(parsed.shipperName).toBe('Trần Giao');
+    expect(parsed.shipperPhone).toBe('0909000111');
   });
 });

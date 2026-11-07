@@ -89,9 +89,13 @@ describe('AdminErpPromotionsPage', () => {
     TestBed.resetTestingModule();
     let toggled = '';
     let toggleCalls = 0;
+    const voucherCalls: Array<Record<string, string> | undefined> = [];
     const api = {
       listPromotions,
-      listVouchers: () => of({ rows: vouchers, count: 1 }),
+      listVouchers: (params?: Record<string, string>) => {
+        voucherCalls.push(params);
+        return of({ rows: vouchers, count: 1 });
+      },
       listPricingAuditLogs: () => of({ rows: [], count: 0 }),
       pricingStatistics: () => of(stats),
       toggleVoucher: (voucherId: string) => {
@@ -123,7 +127,7 @@ describe('AdminErpPromotionsPage', () => {
     });
     const fixture = TestBed.createComponent(AdminErpPromotionsPage);
     fixture.detectChanges();
-    return { fixture, toggled: () => toggled, toggleCalls: () => toggleCalls };
+    return { fixture, toggled: () => toggled, toggleCalls: () => toggleCalls, voucherCalls };
   }
 
   it('loads campaigns and the API summary', async () => {
@@ -212,6 +216,18 @@ describe('AdminErpPromotionsPage', () => {
 
     expect(calls.some((params) => params?.['limit'] === '100' && params?.['offset'] === '0')).toBe(true);
     expect(page.campaignOptions().map((campaign) => campaign.promo_id)).toEqual(['p1']);
+  });
+
+  it('sends the selected campaign to the voucher list', async () => {
+    const { fixture, voucherCalls } = await boot(() => of({ rows: campaigns, count: 1, summary: stats.promotions }));
+    const page = fixture.componentInstance;
+
+    page.setView('vouchers');
+    page.onCampaignFilter({ target: { value: 'p1' } } as unknown as Event);
+    page.applyFilters();
+
+    expect(voucherCalls.at(-1)?.['promoId']).toBe('p1');
+    expect(voucherCalls.at(-1)?.['limit']).toBe('10');
   });
 
   it('leaves the new-campaign name empty instead of a placeholder dash', async () => {

@@ -63,6 +63,18 @@
           <option value="false">Đang tắt</option>
         </select>
       </label>
+      @if (view() === 'vouchers') {
+        <label class="erp-field">
+          <span>Chiến dịch</span>
+          <select class="erp-select" [value]="campaignFilter()" (change)="onCampaignFilter($event)">
+            <option value="">Tất cả chiến dịch</option>
+            <option value="none">Không thuộc chiến dịch</option>
+            @for (campaign of campaignOptions(); track campaign.promo_id || campaign.promotion_id) {
+              <option [value]="campaign.promo_id || campaign.promotion_id">{{ campaignName(campaign) }}</option>
+            }
+          </select>
+        </label>
+      }
     </app-erp-filter-bar>
   }
 

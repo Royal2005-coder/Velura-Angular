@@ -35,6 +35,10 @@ export interface AdminAuthMe {
   isAdmin?: boolean;
   allowedPages?: string[];
   allowedModules?: string[];
+  /** Session sign-in methods from the provider token (`password`, `oauth`, …). */
+  authMethods?: string[];
+  /** True only for a password grant; Google SSO sessions cannot change a password. */
+  passwordLogin?: boolean;
 }
 
 export interface AdminSession {
@@ -50,6 +54,8 @@ export interface AdminSession {
   isVerified: boolean;
   allowedPages: string[];
   allowedModules: string[];
+  /** Google SSO sessions never offer password changes; only a password grant does. */
+  passwordLogin: boolean;
 }
 
 /**
@@ -226,6 +232,7 @@ export class AdminSessionService {
           ? context.allowedPages
           : ['welcome'],
       allowedModules: Array.isArray(context.allowedModules) ? context.allowedModules : [],
+      passwordLogin: context.passwordLogin === true,
     };
   }
 

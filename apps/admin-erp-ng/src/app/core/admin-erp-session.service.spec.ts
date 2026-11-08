@@ -66,4 +66,12 @@ describe('AdminErpSessionService capabilities', () => {
     expect(sessionStorage.getItem('velura_admin_erp_access_token')).toBe('token-123');
     expect(sessionStorage.getItem('velura_admin_access_token')).toBeNull();
   });
+
+  it('offers password changes only for a password-grant session', () => {
+    const sso = service.applyAuthContext({ ...superAdmin, authMethods: ['oauth'], passwordLogin: false });
+    expect(sso.passwordLogin).toBe(false);
+    const password = service.applyAuthContext({ ...superAdmin, authMethods: ['password'], passwordLogin: true });
+    expect(password.passwordLogin).toBe(true);
+    expect(service.applyAuthContext(superAdmin).passwordLogin).toBe(false);
+  });
 });

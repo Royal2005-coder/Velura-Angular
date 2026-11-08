@@ -133,8 +133,15 @@ test("checkout OTP uses the simulated SMS code when email is omitted", () => {
   assert.equal(service.verify("0912345678", "123456"), session);
 });
 
-test("checkout client IP prefers the first proxy address", () => {
-  assert.equal(checkoutClientIp({ "x-forwarded-for": "203.0.113.3, 10.0.0.1" }, "127.0.0.1"), "203.0.113.3");
+test("UAT #745: the client cannot pick its own rate-limit key through proxy headers", () => {
+  // Only the hop appended by the closest proxy counts; the first entry is client-controlled.
+  assert.equal(checkoutClientIp({ "x-forwarded-for": "1.1.1.1, 203.0.113.3" }, "127.0.0.1"), "203.0.113.3");
+  // Cloudflare's edge header overrides anything the browser sent.
+  assert.equal(checkoutClientIp({ "cf-connecting-ip": "198.51.100.7", "x-forwarded-for": "1.1.1.1" }, "127.0.0.1"), "198.51.100.7");
+  // A header value that is not an IP literal never becomes a limiter key.
+  assert.equal(checkoutClientIp({ "cf-connecting-ip": "evil\";drop", "x-forwarded-for": "also-not-an-ip" }, "10.0.0.2"), "10.0.0.2");
+  assert.equal(checkoutClientIp({}, "127.0.0.1"), "127.0.0.1");
+  assert.equal(checkoutClientIp({}, undefined), "unknown");
 });
 
 test("member checkout appends a saved address without overwriting existing entries", () => {

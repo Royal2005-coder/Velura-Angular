@@ -29,6 +29,14 @@ export class ApiService {
   }
 
   /**
+   * Thu hồi JWT phía server trước khi trình duyệt quên phiên, để token bị lộ không còn dùng
+   * được sau khi đăng xuất (UAT #742).
+   */
+  logout(): Observable<{ success: boolean }> {
+    return this.post<{ success: boolean }>('/api/user/auth/logout', {});
+  }
+
+  /**
    * Performs a JSON GET against the Velura API.
    */
   get<T>(path: string): Observable<T> {

@@ -3,6 +3,7 @@ import {
   adminErpAuthGuard,
   adminErpGuestGuard,
   adminErpHomeRedirectGuard,
+  adminErpPasswordGuard,
   adminErpSessionGuard,
   adminErpShellGuard,
   adminErpWelcomeGuard,
@@ -32,7 +33,7 @@ export const routes: Routes = [
   {
     path: 'change-password',
     loadComponent: () => import('./features/auth/auth-change-password.page').then((m) => m.AuthChangePasswordPage),
-    canActivate: [adminErpSessionGuard],
+    canActivate: [adminErpPasswordGuard],
   },
   {
     path: '',

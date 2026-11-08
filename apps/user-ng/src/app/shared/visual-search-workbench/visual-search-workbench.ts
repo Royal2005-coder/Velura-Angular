@@ -80,16 +80,14 @@ export class VisualSearchWorkbench {
   /** Close and cancel both browser and server work, revoking every source preview. */
   close(): void {
     this.cancel();
+    this.resetSearch();
     try {
       this.dialog()?.nativeElement.close?.();
     } catch {}
   }
   /** Automatically close the modal when user clicks on a product card or action to view details. */
-  onProductClick(event: MouseEvent): void {
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('a') || target?.closest('button') || target?.closest('.product-card')) {
-      this.close();
-    }
+  onProductClick(): void {
+    this.close();
   }
   /**
    * Load the public deals rail exactly when the fallback shows, so a customer
@@ -229,7 +227,20 @@ export class VisualSearchWorkbench {
     });
   }
   private finish(): void { this.requestId = ''; this.composed = false; this.busy.set(false); this.clearSource(); }
-  clearSource(): void { if (this.preview()) URL.revokeObjectURL(this.preview()); this.preview.set(''); this.file = null; this.consent.set(false); this.modifier.set(''); }
+  clearSource(): void {
+    if (this.preview()) URL.revokeObjectURL(this.preview());
+    this.preview.set('');
+    this.file = null;
+    this.consent.set(false);
+    this.modifier.set('');
+  }
+  resetSearch(): void {
+    this.cancel();
+    this.clearSource();
+    this.result.set(null);
+    this.error.set('');
+    this.offers.set(null);
+  }
   stopCamera(): void { this.stream?.getTracks().forEach(track => track.stop()); this.stream = undefined; this.cameraOpen.set(false); }
   /** Title of the matches rail: an exact photo match, or merely a look-alike. */
   protected matchesTitle(result: VisualResult): string {

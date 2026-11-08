@@ -54,6 +54,8 @@ export interface UserProfile {
   is_active?: boolean | null;
   is_verified?: boolean | null;
   version?: number | null;
+  /** Tăng mỗi lần đăng xuất; JWT mang claim `tv` phải khớp để còn hiệu lực (UAT #742). */
+  token_epoch?: number | null;
   [key: string]: unknown;
 }
 
@@ -73,6 +75,12 @@ export interface AuthContext {
   allowedModules: string[];
   /** Action-level permissions derived from the canonical role matrix. */
   capabilities?: Record<string, string[]>;
+  /**
+   * Authentication methods of this session, taken from the identity provider's
+   * token (`amr`). A Google SSO session is `["oauth"]`, a password grant is
+   * `["password"]`; password-only actions fail closed when this is absent.
+   */
+  authMethods?: string[];
   accessToken: string;
   /** Client IP resolved by the HTTP layer, forwarded to audited RPCs. */
   ipAddress?: string;

@@ -3,6 +3,12 @@ import jsQR from 'jsqr';
 import { AdminErpModal } from './admin-modal';
 import { AdminErpQrCode } from './admin-qr-code';
 
+const DEFAULT_SCAN_STEPS: readonly string[] = [
+  'Đưa camera vào mã QR trên label của ĐVVC, giữ mã nằm trọn trong khung và đủ sáng.',
+  'Camera không dùng được thì tải ảnh label hoặc dán nội dung mã bên dưới.',
+  'Sau khi quét, mã đơn, ĐVVC, mã vận đơn, tracking URL và người giao được khóa lại để bàn giao đúng label.',
+];
+
 /** Longest edge decoded from a camera frame or uploaded photo; jsQR cost grows with pixels. */
 const MAX_SCAN_WIDTH = 800;
 const MAX_PHOTO_WIDTH = 1600;
@@ -22,9 +28,9 @@ const SCAN_INTERVAL_MS = 280;
     <app-erp-modal [open]="open()" [title]="title()" size="md" (closed)="dismiss()">
       <div class="scan">
         <ol class="scan__steps">
-          <li>Đưa camera vào mã QR trên label của ĐVVC, giữ mã nằm trọn trong khung và đủ sáng.</li>
-          <li>Camera không dùng được thì tải ảnh label hoặc dán nội dung mã bên dưới.</li>
-          <li>Sau khi quét, mã đơn, ĐVVC, mã vận đơn, tracking URL và người giao được khóa lại để bàn giao đúng label.</li>
+          @for (step of steps(); track step) {
+            <li>{{ step }}</li>
+          }
         </ol>
         <div class="scan__stage" [class.scan__stage--ready]="cameraReady()">
           <video #video playsinline muted></video>
@@ -132,6 +138,8 @@ export class AdminErpQrScan {
   readonly hint = input('Đưa mã vào khung hình, hoặc tải ảnh QR / dán nội dung mã.');
   readonly sample = input('');
   readonly sampleCaption = input('');
+  /** Caller-specific instructions; the default copy describes a carrier label. */
+  readonly steps = input<readonly string[]>(DEFAULT_SCAN_STEPS);
   readonly scanned = output<string>();
   readonly closed = output<void>();
 

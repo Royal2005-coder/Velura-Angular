@@ -313,11 +313,35 @@ export function applySecurityHeaders(res: HttpResponse, nodeEnv = "development")
 }
 
 /**
- * Best-effort client IP from `x-forwarded-for` or the socket.
+ * Best-effort client IP for rate limits and audit rows.
+ *
+ * Cloudflare overwrites `cf-connecting-ip` at the edge, so a browser cannot
+ * forge it through the tunnel. Otherwise the last `x-forwarded-for` hop is the
+ * address the closest proxy appended; earlier hops are client-controlled and
+ * must never key a limiter (UAT #745).
  */
+export function clientIpFromHeaders(headers: Record<string, unknown>, remoteAddress?: string): string {
+  const header = (name: string): string => {
+    const raw = headers[name];
+    return String(Array.isArray(raw) ? raw[0] : raw ?? "").trim();
+  };
+  const edge = usableIp(header("cf-connecting-ip"));
+  if (edge) return edge;
+  const hops = header("x-forwarded-for").split(",").map((hop) => usableIp(hop)).filter(Boolean);
+  const nearest = hops.length ? hops[hops.length - 1]! : "";
+  return nearest || usableIp(header("x-real-ip")) || usableIp(remoteAddress);
+}
+
+/** Request-scoped client IP; guests still get a stable key when every source is unusable. */
 export function getRequestIp(req: HttpRequest): string {
-  const forwardedHeader = req.headers["x-forwarded-for"];
-  const forwardedRaw = Array.isArray(forwardedHeader) ? forwardedHeader[0] : forwardedHeader;
-  const forwarded = String(forwardedRaw || "").split(",")[0].trim();
-  return forwarded || req.socket?.remoteAddress || "0.0.0.0";
+  return clientIpFromHeaders(req.headers, req.socket?.remoteAddress) || "0.0.0.0";
+}
+
+/** Accept only strings shaped like an IPv4/IPv6 literal so a header cannot inject limiter keys. */
+function usableIp(value: unknown): string {
+  const candidate = String(value ?? "").trim();
+  if (!candidate || candidate.length > 45) return "";
+  if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(candidate)) return candidate;
+  if (/^[0-9a-f:.]+$/i.test(candidate) && candidate.includes(":")) return candidate;
+  return "";
 }

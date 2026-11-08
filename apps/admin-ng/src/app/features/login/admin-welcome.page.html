@@ -9,10 +9,12 @@
     </a>
     <div class="member-userbar">
       <div class="member-userbar__actions">
-        <a class="member-btn member-btn--outline" routerLink="/change-password">
-          <app-admin-icon name="lock" />
-          Đổi mật khẩu
-        </a>
+        @if (session.session()?.passwordLogin) {
+          <a class="member-btn member-btn--outline" routerLink="/change-password">
+            <app-admin-icon name="lock" />
+            Đổi mật khẩu
+          </a>
+        }
         <button class="member-btn member-btn--ghost" type="button" (click)="logout()">Đăng xuất</button>
       </div>
       <div class="member-profile">

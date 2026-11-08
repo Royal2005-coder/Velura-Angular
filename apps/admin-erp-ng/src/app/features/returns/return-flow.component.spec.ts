@@ -1,7 +1,23 @@
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { AdminErpApiService, AdminReturnItemActionInput, AdminReturnLine, AdminReturnRow, AdminManualRefundInput } from '../../core/admin-erp-api.service';
+import { QrConfirmFacts } from '../../shared/ui/admin-qr-confirm';
 import { ReturnFlowComponent, ReturnFlowKind } from './return-flow.component';
+
+/** Fixed facts a real scan would publish for the parcel under test. */
+function qrFacts(overrides: Partial<QrConfirmFacts> = {}): QrConfirmFacts {
+  return {
+    raw: 'velura:return:1?id=return-1&code=RMA-001',
+    returnCode: 'RMA-001',
+    orderCode: 'VLR-777',
+    carrier: 'GHN',
+    trackingCode: 'GHNVL777',
+    shipperName: 'Nguyễn Văn Giao',
+    shipperPhone: '0909000111',
+    scannedAt: '2026-11-08T02:00:00.000Z',
+    ...overrides,
+  };
+}
 
 const line: AdminReturnLine = { return_item_id: 'part-1', order_item_id: 'order-line', quantity: 3, version: 7, decision_status: 'approved', item_status: 'RETURN_SHIPPING', resolution_type: 'exchange', refundable_amount: 120_000 };
 const record: AdminReturnRow = { return_id: 'return-1', return_type: 'exchange', version: 42, status: 'IN_PROGRESS', payment_kind: 'cod', refund_flow: 'cod_manual', refund_receiver_status: 'valid', lines: [line] };
@@ -43,6 +59,7 @@ describe('ReturnFlowComponent per-item operations', () => {
   it('receives only the selected quantity with tag/condition/proof facts and seal false allowed', () => {
     const { component, actions, uploads } = boot('receive');
     component.quantity.set(1); component.receivedQuantity.set(1); component.sealIntact.set(false); component.proofFile.set(image);
+    component.onQrFacts(qrFacts());
     expect(component.canSubmit()).toBe(true);
     component.submit();
     expect(uploads).toEqual(['qa_photo']);
@@ -56,7 +73,8 @@ describe('ReturnFlowComponent per-item operations', () => {
 
   it('records mismatches for the affected part rather than blocking all receipt facts', () => {
     const { component } = boot('receive');
-    component.proofFile.set(image); component.matchesProduct.set(false); component.tagsIntact.set(false);
+    component.proofFile.set(image); component.onQrFacts(qrFacts());
+    component.matchesProduct.set(false); component.tagsIntact.set(false);
     component.conditionAcceptable.set(false); component.disposition.set('repair');
     expect(component.canSubmit()).toBe(true);
   });
@@ -64,7 +82,7 @@ describe('ReturnFlowComponent per-item operations', () => {
   it('does not accept zero, fractional, excessive quantities or missing warehouse proof', () => {
     const { component } = boot('receive');
     expect(component.canSubmit()).toBe(false);
-    component.proofFile.set(image);
+    component.proofFile.set(image); component.onQrFacts(qrFacts());
     for (const quantity of [0, 1.5, 4]) { component.quantity.set(quantity); component.receivedQuantity.set(quantity); expect(component.canSubmit()).toBe(false); }
   });
 
@@ -75,6 +93,7 @@ describe('ReturnFlowComponent per-item operations', () => {
     expect(component.canSubmit()).toBe(false);
     fixture.componentRef.setInput('canApprove', true); fixture.detectChanges();
     component.note.set('Đã xác minh bằng chứng và lịch sử gọi không nghe máy');
+    component.onQrFacts(qrFacts()); component.proofFile.set(image);
     expect(component.canSubmit()).toBe(true); component.submit();
     expect(actions[0].body.action).toBe('approve');
     expect(actions[0].body.expectedVersion).toBe(7);
@@ -110,7 +129,9 @@ describe('ReturnFlowComponent per-item operations', () => {
   it('prefills a unique outbound AWB for the exchange shipment instead of reusing the return code', () => {
     const { component } = boot('ship_exchange', { ...line, item_status: 'EXCHANGE_PREPARING', resolution_type: 'exchange' });
     expect(component.tracking()).toMatch(/^EXC[A-Z0-9]{8,}$/);
-    component.tracking.set('RET1F28AB9201F745388B608B7485FAAA88');
+    component.proofFile.set(image);
+    expect(component.canSubmit()).toBe(false);
+    component.onQrFacts(qrFacts({ trackingCode: 'RET1F28AB9201F745388B608B7485FAAA88' }));
     expect(component.canSubmit()).toBe(true);
   });
 
@@ -169,22 +190,24 @@ describe('ReturnFlowComponent per-item operations', () => {
     expect(manual[0].amount).toBe(120_000);
   });
 
-  it('requires real pickup identity and nonfuture time and submits them with private proof', () => {
+  it('takes the pickup identity, AWB and time from the scanned label', () => {
     const { component, actions } = boot('pickup', { ...line, item_status: 'WAITING_RETURN' });
-    component.pickupPhotos.set([image]); component.tracking.set('GHN-PICKUP-001');
+    component.pickupPhotos.set([image]); component.proofFile.set(image);
+    // No scan → the step cannot be saved, no matter what else is filled in.
     expect(component.canSubmit()).toBe(false);
-    component.pickedUpBy.set('Nguyễn giao nhận'); component.pickedUpAt.set('2999-01-01T10:00');
-    expect(component.canSubmit()).toBe(false);
-    component.pickedUpAt.set('2020-01-01T10:00'); expect(component.canSubmit()).toBe(true); component.submit();
-    expect(actions[0].body.pickedUpBy).toBe('Nguyễn giao nhận');
-    expect(actions[0].body.pickedUpAt).toBe(new Date('2020-01-01T10:00').toISOString());
+    component.onQrFacts(qrFacts({ returnCode: 'RMA-001', orderCode: 'VLR-777', trackingCode: 'GHN-PICKUP-001' }));
+    expect(component.canSubmit()).toBe(true);
+    component.submit();
+    expect(actions[0].body.pickedUpBy).toBe('Nguyễn Văn Giao');
+    expect(actions[0].body.trackingNumber).toBe('GHN-PICKUP-001');
+    expect(actions[0].body.carrier).toBe('GHN');
     expect(actions[0].body.photoUrls).toEqual(['private/pickup_photo/proof']);
   });
 
   it('shows stale-version failure without emitting successful completion', () => {
     const { component, api } = boot('receive');
     api.actOnReturnItem = () => throwError(() => new Error('Phiên bản đã thay đổi'));
-    component.proofFile.set(image); let completed = false; component.done.subscribe(() => { completed = true; });
+    component.proofFile.set(image); component.onQrFacts(qrFacts()); let completed = false; component.done.subscribe(() => { completed = true; });
     component.submit(); expect(completed).toBe(false); expect(component.error()).toContain('Phiên bản'); expect(component.saving()).toBe(false);
   });
 
@@ -195,11 +218,15 @@ describe('ReturnFlowComponent per-item operations', () => {
     expect(actions).toEqual([]);
   });
 
-  it('approves the quantity the customer requested without an editable field', () => {
+  it('approves the quantity the customer requested only after scanning the parcel', () => {
     const part: AdminReturnLine = { ...line, decision_status: 'pending', item_status: 'REQUESTED' };
     const { component, actions } = boot('approve', part);
     expect(component.showQuantityEditor()).toBe(false);
     component.note.set('Đã gọi xác nhận đổi size với khách');
+    expect(component.canSubmit()).toBe(false);
+    component.onQrFacts(qrFacts());
+    expect(component.canSubmit()).toBe(false);
+    component.proofFile.set(image);
     expect(component.canSubmit()).toBe(true); component.submit();
     expect(actions[0].body.quantity).toBe(3);
   });
@@ -212,21 +239,15 @@ describe('ReturnFlowComponent per-item operations', () => {
     expect(contacts[0]['note']).toBe('Xác nhận yêu cầu đổi trả. Khách đổi sang size M.');
   });
 
-  it('fills carrier and AWB from the return QR and refuses a label from another return', () => {
-    const { component, fixture } = boot('pickup', { ...line, item_status: 'WAITING_RETURN' });
-    fixture.componentRef.setInput('record', { ...record, return_code: 'RMA-001', order_code: 'VLR-777' }); fixture.detectChanges();
-    component.applyScan('velura:return:1?id=return-1&code=RMA-001');
-    expect(component.carrier()).toBe('GHN');
-    expect(component.tracking()).toBe('GHNVLR777');
-    component.applyScan('velura:return:1?id=other-return&code=RMA-002');
-    expect(component.scanError()).toContain('phiếu đổi trả khác');
-    expect(component.tracking()).toBe('GHNVLR777');
-  });
-
-  it('accepts a plain AWB scan so a hand-written label still fills the shipment fields', () => {
+  it('keeps the scanned facts read-only and copies them into the stored handover', () => {
     const { component } = boot('pickup', { ...line, item_status: 'WAITING_RETURN' });
-    component.applyScan('GHN-99887766');
+    component.onQrFacts(qrFacts({ returnCode: 'RMA-001', orderCode: 'VLR-777', trackingCode: 'GHN-99887766' }));
+    expect(component.qrFacts()?.returnCode).toBe('RMA-001');
+    expect(component.carrier()).toBe('GHN');
     expect(component.tracking()).toBe('GHN-99887766');
-    expect(component.scanError()).toBeNull();
+    expect(component.pickedUpBy()).toBe('Nguyễn Văn Giao');
+    // A new flow starts from the camera again; facts are never carried across parts.
+    component.onQrFacts(null);
+    expect(component.qrFacts()).toBeNull();
   });
 });

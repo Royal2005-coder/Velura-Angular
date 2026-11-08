@@ -83,21 +83,26 @@
       }
       <p class="flow-hint">Máy chủ kiểm tra cùng sản phẩm và tồn khả dụng khi chuẩn bị đổi.</p>
     }
-    @if (flow() === 'pickup' || flow() === 'ship_exchange') {
-      <div class="flow-scan">
-        <button class="erp-btn erp-btn--scan" type="button" (click)="openScan()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"></path><path d="M7 12h10"></path></svg>
-          Quét QR {{ flow() === 'pickup' ? 'phiếu hoàn' : 'đơn đổi' }}
-        </button>
-        <span class="flow-hint">Quét nhãn on kiện để tự điền ĐVVC và mã vận đơn.</span>
-      </div>
-      @if (scanError()) { <p class="flow-warning" role="alert">{{ scanError() }}</p> }
-      <label class="erp-field"><span>Đơn vị vận chuyển</span><input class="erp-input" [value]="carrier()" (input)="setText('carrier', $event)" /></label>
-      <label class="erp-field"><span>Mã vận đơn của phần hàng</span><input class="erp-input" [value]="tracking()" (input)="setText('tracking', $event)" /></label>
+    @if (needsQrScan()) {
+      <app-erp-qr-confirm
+        kind="return"
+        [open]="flow() !== null"
+        [recordId]="record.return_id || ''"
+        [recordCode]="record.return_code || ''"
+        [orderCode]="record.order_code || ''"
+        [recordHref]="recordHref()"
+        [knownCarrier]="carrier()"
+        [knownTracking]="tracking()"
+        [sample]="scanSample()"
+        sampleCaption="Mã mẫu của phiếu này — quét bằng camera hoặc bấm “Dùng mã mẫu”"
+        (facts)="onQrFacts($event)"
+      />
     }
     @if (flow() === 'pickup') {
-      <label class="erp-field"><span>Người nhận bàn giao / nhân viên lấy hàng</span><input class="erp-input" [value]="pickedUpBy()" (input)="setText('pickedUpBy', $event)" /></label>
-      <label class="erp-field"><span>Thời điểm thực tế lấy hàng</span><input class="erp-input" type="datetime-local" [value]="pickedUpAt()" (input)="setText('pickedUpAt', $event)" /></label>
+      <p class="flow-hint">ĐVVC, mã vận đơn, người giao và thời điểm lấy hàng đã lấy từ mã QR. Chỉ còn ảnh bàn giao là cần tải lên. Nếu nhãn không in tên người giao, quét lại nhãn ĐVVC có tên trước khi lưu.</p>
+      @if (qrFacts() && !qrFacts()?.shipperName) {
+        <label class="erp-field"><span>Người giao nhận (nhãn QR không in tên)</span><input class="erp-input" [value]="pickedUpBy()" (input)="setText('pickedUpBy', $event)" placeholder="Chỉ điền khi nhãn không có tên người giao" /></label>
+      }
       <label class="erp-field"><span>Ảnh bàn giao kiện hàng (bắt buộc)</span><input type="file" accept="image/*" multiple (change)="pickFile('photos', $event)" /><small>{{ pickupPhotos().length }} ảnh đã chọn</small></label>
       <label class="erp-field"><span>Video bàn giao (không bắt buộc)</span><input type="file" accept="video/mp4,video/webm" (change)="pickFile('video', $event)" /><small>{{ pickupVideo()?.name }}</small></label>
     }
@@ -138,9 +143,9 @@
         </div>
       </div>
     }
-    @if (flow() === 'receive' || flow() === 'manual') {
+    @if (flow() === 'receive' || flow() === 'manual' || flow() === 'approve' || flow() === 'ship_exchange' || flow() === 'complete_exchange') {
       <div class="erp-field">
-        <span>{{ flow() === 'manual' ? 'Chứng từ đối soát / chuyển khoản' : 'Ảnh kiểm hàng tại kho (bắt buộc)' }}</span>
+        <span>{{ flow() === 'manual' ? 'Chứng từ đối soát / chuyển khoản' : flow() === 'receive' ? 'Ảnh kiểm hàng tại kho (bắt buộc)' : 'Ảnh minh chứng xác nhận (bắt buộc)' }}</span>
         <div class="custom-file-row">
           <label class="erp-btn erp-btn--sm custom-file-trigger">
             <input type="file" accept="image/*" class="erp-sr-only" (change)="pickFile('proof', $event)" />
@@ -180,6 +185,4 @@
     @if (error()) { <p class="flow-warning" role="alert">{{ error() }}</p> }
   }
   <div footer><button class="erp-btn" type="button" [disabled]="saving()" (click)="dismiss()">Hủy</button><button class="erp-btn erp-btn--primary" type="button" [disabled]="!canSubmit()" (click)="submit()">{{ saving() ? 'Đang lưu…' : 'Xác nhận' }}</button></div>
-  <app-erp-qr-scan [open]="scanOpen()" [sample]="scanSample()" [title]="flow() === 'ship_exchange' ? 'Quét QR đơn đổi' : 'Quét QR phiếu hoàn'"
-    sampleCaption="Mã mẫu — quét bằng camera hoặc bấm “Dùng mã mẫu”" (scanned)="applyScan($event)" (closed)="scanOpen.set(false)" />
 </app-erp-modal>

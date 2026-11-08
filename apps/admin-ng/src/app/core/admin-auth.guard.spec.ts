@@ -3,9 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { AdminApiService } from './admin-api.service';
-import { adminAuthGuard, adminHomeRedirectGuard, adminShellGuard } from './admin-auth.guard';
+import { adminAuthGuard, adminHomeRedirectGuard, adminPasswordGuard, adminShellGuard } from './admin-auth.guard';
 import { AdminHomeRedirectPage } from './admin-home-redirect';
-import { AdminSessionService } from './admin-session.service';
+import { AdminAuthMe, AdminSessionService } from './admin-session.service';
 
 @Component({
   selector: 'app-guard-dummy',
@@ -23,7 +23,7 @@ const productMe = {
 };
 
 describe('admin operator shell routing', () => {
-  async function boot(context = productMe): Promise<Router> {
+  async function boot(context: AdminAuthMe = productMe): Promise<Router> {
     TestBed.resetTestingModule();
     sessionStorage.clear();
     localStorage.clear();
@@ -32,6 +32,7 @@ describe('admin operator shell routing', () => {
         provideRouter([
           { path: 'login', component: GuardDummyPage },
           { path: 'welcome', component: GuardDummyPage },
+          { path: 'change-password', canActivate: [adminPasswordGuard], component: GuardDummyPage },
           {
             path: '',
             canActivate: [adminShellGuard],
@@ -83,5 +84,19 @@ describe('admin operator shell routing', () => {
     const router = await boot();
     await router.navigateByUrl('/accounts');
     expect(router.url).toContain('/forbidden');
+  });
+
+  it('opens /change-password for a password grant and sends SSO sessions back to welcome', async () => {
+    const password = await boot({ ...productMe, authMethods: ['password'], passwordLogin: true });
+    await password.navigateByUrl('/change-password');
+    expect(password.url).toBe('/change-password');
+
+    const sso = await boot({ ...productMe, authMethods: ['oauth'], passwordLogin: false });
+    await sso.navigateByUrl('/change-password');
+    expect(sso.url).toBe('/welcome');
+
+    const missing = await boot(productMe);
+    await missing.navigateByUrl('/change-password');
+    expect(missing.url).toBe('/welcome');
   });
 });

@@ -174,6 +174,33 @@ export const adminErpSessionGuard: CanActivateFn = () => {
  */
 export const adminErpGuestGuard: CanActivateFn = () => true;
 
+/**
+ * Password changes are offered only to sessions established with a password
+ * grant. Google SSO operators enter through their own email identity, so the
+ * page redirects them instead of showing a form the API will refuse.
+ */
+export const adminErpPasswordGuard: CanActivateFn = () => {
+  const session = inject(AdminErpSessionService);
+  const api = inject(AdminErpApiService);
+  const router = inject(Router);
+  if (!session.token()) {
+    return router.createUrlTree(['/login']);
+  }
+  return api.me().pipe(
+    map((context) => session.applyAuthContext(context).passwordLogin
+      ? true
+      : router.createUrlTree(['/welcome'])),
+    catchError((error: unknown) => {
+      if (isAuthFailure(error)) {
+        session.clear();
+        return of(router.createUrlTree(['/login']));
+      }
+      session.restoreStoredSession();
+      return of(session.session()?.passwordLogin === true ? true : router.createUrlTree(['/welcome']));
+    }),
+  );
+};
+
 function isAuthFailure(error: unknown): boolean {
   return error instanceof HttpErrorResponse && (error.status === 401 || error.status === 403);
 }

@@ -52,10 +52,12 @@
           <small>{{ session.roleLabel() }}</small>
         </span>
       </div>
-      <a class="nav-link nav-link--quiet" routerLink="/change-password">
-        <app-erp-icon name="lock" [size]="'16'" />
-        <span class="nav-link__label">Đổi mật khẩu</span>
-      </a>
+      @if (session.session()?.passwordLogin) {
+        <a class="nav-link nav-link--quiet" routerLink="/change-password">
+          <app-erp-icon name="lock" [size]="'16'" />
+          <span class="nav-link__label">Đổi mật khẩu</span>
+        </a>
+      }
       <button class="nav-link nav-link--quiet nav-link--button" type="button" (click)="askLogout()">
         <app-erp-icon name="log" [size]="'16'" />
         <span class="nav-link__label">Đăng xuất</span>
@@ -89,13 +91,23 @@
           <app-erp-icon name="refresh" [size]="'14'" />
           <span>Làm mới</span>
         </button>
-        <a class="topbar__avatar" routerLink="/change-password" [attr.aria-label]="'Tài khoản ' + session.displayName()">
-          @if (session.avatarUrl()) {
-            <img [src]="session.avatarUrl()" alt="" />
-          } @else {
-            {{ session.initials() }}
-          }
-        </a>
+        @if (session.session()?.passwordLogin) {
+          <a class="topbar__avatar" routerLink="/change-password" [attr.aria-label]="'Tài khoản ' + session.displayName()">
+            @if (session.avatarUrl()) {
+              <img [src]="session.avatarUrl()" alt="" />
+            } @else {
+              {{ session.initials() }}
+            }
+          </a>
+        } @else {
+          <span class="topbar__avatar" [attr.aria-label]="'Tài khoản ' + session.displayName()">
+            @if (session.avatarUrl()) {
+              <img [src]="session.avatarUrl()" alt="" />
+            } @else {
+              {{ session.initials() }}
+            }
+          </span>
+        }
       </div>
     </header>
 

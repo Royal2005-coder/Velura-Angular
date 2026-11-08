@@ -10,6 +10,16 @@ export function maskEmail(email: string): string {
   return `${name.slice(0, 1)}***@${domain}`;
 }
 
+/** Escape customer-controlled text before it is interpolated into an HTML email body. */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /**
  * Enforces a timeout on an asynchronous promise.
  */

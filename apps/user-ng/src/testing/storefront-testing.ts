@@ -80,6 +80,7 @@ export function stubApiService(): ApiService {
     post: () => of({}),
     patch: () => of({}),
     delete: () => of({}),
+    logout: () => of({ success: true }),
   } as unknown as ApiService;
 }
 

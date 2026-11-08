@@ -17,7 +17,8 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const guestSessionId = currentGuestSessionId();
 
   const isPublicCatalog = PUBLIC_API_PREFIXES.some((prefix) => req.url.includes(prefix));
-  const isAuthApi = req.url.includes('/api/user/auth');
+  // Logout phải mang token để API thu hồi đúng phiên (UAT #742); các auth route khác thì không.
+  const isAuthApi = req.url.includes('/api/user/auth') && !req.url.includes('/api/user/auth/logout');
   const headers: Record<string, string> = {
     'X-Guest-Session-ID': guestSessionId,
   };

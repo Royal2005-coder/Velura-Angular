@@ -11,7 +11,7 @@ import {
   type LoginLockUser
 } from "../auth-lockout.js";
 import { createNotification } from "./notifications.js";
-import { OTP_TTL_MS } from "./otp-policy.js";
+import { OTP_MAX_ATTEMPTS, OTP_TTL_MS, nextOtpAttemptFailure } from "./otp-policy.js";
 import { isSmsConfigured, requireSmsDelivery, sendAuthOtpSms } from "../sms/twilio.js";
 import { checkoutClientIp, normalizeVietnamesePhone, type CheckoutService } from "./checkout-service.js";
 import { escapeHtml, sendDirectEmail } from "../email/mailer.js";
@@ -96,6 +96,61 @@ async function inspectSignupIdentityPair(email: string | null, phone: string): P
       asString(emailUser.user_id) === asString(phoneUser.user_id)
     )
   };
+}
+
+/**
+ * Token phiên của storefront mang `tv` = users.token_epoch. Đăng xuất tăng epoch nên token
+ * đã phát trước đó bị rbac coi là thu hồi (UAT #742).
+ */
+function sessionToken(user: JsonObject): string {
+  return signJwt({
+    user_id: user.user_id,
+    email: user.email,
+    role: user.role,
+    tv: Number(user.token_epoch ?? 0)
+  });
+}
+
+/**
+ * Ghi nhận một lần nhập sai OTP và luôn ném lỗi để caller không thể bỏ qua kiểm tra.
+ *
+ * Chạm trần `OTP_MAX_ATTEMPTS` thì huỷ mã hiện tại: mã 6 số không được phép bị dò tiếp trong
+ * 5 phút hiệu lực (UAT #747).
+ */
+async function recordWrongOtp(user: JsonObject): Promise<never> {
+  const failure = nextOtpAttemptFailure(user.otp_attempt_count);
+  await updateRows("users", { user_id: `eq.${user.user_id}` }, failure.blocked
+    ? { otp_code: null, otp_expires_at: null, otp_attempt_count: 0 }
+    : { otp_attempt_count: failure.attemptCount });
+  if (failure.blocked) {
+    throw new HttpError(
+      429,
+      "OTP_ATTEMPTS_EXCEEDED",
+      `Bạn đã nhập sai mã OTP quá ${OTP_MAX_ATTEMPTS} lần. Vui lòng yêu cầu mã mới.`
+    );
+  }
+  throw new HttpError(
+    400,
+    "INVALID_OTP",
+    `Mã OTP không chính xác hoặc đã hết hạn. Bạn còn ${OTP_MAX_ATTEMPTS - failure.attemptCount} lần thử.`
+  );
+}
+
+/**
+ * Chấp nhận OTP đúng hạn (hoặc shortcut dev), còn lại đếm lần sai và ném lỗi.
+ *
+ * @param expiredMessage Câu báo lỗi riêng của luồng đang gọi (kích hoạt hay đặt lại mật khẩu)
+ */
+async function assertOtpAccepted(user: JsonObject, submittedOtp: unknown, expiredMessage: string): Promise<void> {
+  const submitted = asString(submittedOtp);
+  const now = new Date().toISOString();
+  const matches = Boolean(user.otp_code) && user.otp_code === submitted;
+  const expired = typeof user.otp_expires_at === "string" && user.otp_expires_at < now;
+  if ((matches && !expired) || (allowDevOtpBypass() && submitted === "123456")) return;
+  if (!user.otp_code || expired) {
+    throw new HttpError(400, "INVALID_OTP", expiredMessage);
+  }
+  await recordWrongOtp(user);
 }
 
 /**
@@ -314,7 +369,8 @@ export async function handleAuthRoute(
     const jwt = signJwt({
       user_id: user.user_id,
       email: user.email || `${user.phone}@velura.vn`,
-      role: "member"
+      role: "member",
+      tv: Number(user.token_epoch ?? 0)
     });
     try {
       await createNotification(
@@ -488,19 +544,15 @@ export async function handleAuthRoute(
       }));
     } else {
       assertAccountNotLocked(user);
-      // Validate OTP for existing user
-      const now = new Date().toISOString();
-      if (!user.otp_code || user.otp_code !== otp_code || (typeof user.otp_expires_at === "string" && user.otp_expires_at < now)) {
-        if (!allowDevOtpBypass() || otp_code !== "123456") {
-          throw new HttpError(400, "INVALID_OTP", "Mã OTP không chính xác hoặc đã hết hạn");
-        }
-      }
+      // Số lần nhập sai được đếm trên mã đang lưu, không phải trên định danh.
+      await assertOtpAccepted(user, otp_code, "Mã OTP không chính xác hoặc đã hết hạn");
     }
 
     // Activate user if inactive
     const updates: JsonObject = {
       is_active: true,
-      last_login_at: new Date().toISOString()
+      last_login_at: new Date().toISOString(),
+      otp_attempt_count: 0
     };
     const wasInactive = !user.is_active;
     // Keep OTP for password reset flow because reset-password endpoint needs to check it.
@@ -520,7 +572,7 @@ export async function handleAuthRoute(
       );
     }
 
-    const token = signJwt({ user_id: user.user_id, email: user.email, role: user.role });
+    const token = sessionToken(user);
 
     return sendJson(res, 200, {
       success: true,
@@ -590,7 +642,8 @@ export async function handleAuthRoute(
       // Chỉ lưu mã sau khi tin đã gửi được, để không còn mã rác chưa ai nhận.
       await updateRows("users", { user_id: `eq.${user.user_id}` }, {
         otp_code: otpCode,
-        otp_expires_at: otpExpiresAt
+        otp_expires_at: otpExpiresAt,
+        otp_attempt_count: 0
       });
 
       return sendJson(res, 200, {
@@ -602,7 +655,7 @@ export async function handleAuthRoute(
       }, corsHeaders);
     }
 
-    const token = signJwt({ user_id: user.user_id, email: user.email, role: user.role });
+    const token = sessionToken(user);
 
     return sendJson(res, 200, {
       success: true,
@@ -616,6 +669,17 @@ export async function handleAuthRoute(
         is_new_user: false
       }
     }, corsHeaders);
+  }
+
+  // POST /api/user/auth/logout — thu hồi JWT phía server, không chỉ xoá localStorage.
+  if (action === "logout" && req.method === "POST") {
+    const profile = context.profile;
+    if (profile?.user_id) {
+      await updateRows("users", { user_id: `eq.${profile.user_id}` }, {
+        token_epoch: Number(profile.token_epoch ?? 0) + 1
+      });
+    }
+    return sendJson(res, 200, { success: true }, corsHeaders);
   }
 
   // POST /api/user/auth/otp-send (Forgot Password / Reset OTP)
@@ -680,7 +744,8 @@ export async function handleAuthRoute(
     // Chỉ lưu mã sau khi tin đã gửi được, để không còn mã rác chưa ai nhận.
     await updateRows("users", { user_id: `eq.${user.user_id}` }, {
       otp_code: otpCode,
-      otp_expires_at: otpExpiresAt
+      otp_expires_at: otpExpiresAt,
+      otp_attempt_count: 0
     });
 
     return sendJson(res, 200, {
@@ -709,12 +774,7 @@ export async function handleAuthRoute(
     }
     assertAccountNotLocked(user);
 
-    const now = new Date().toISOString();
-    if (!user.otp_code || user.otp_code !== otp_code || (typeof user.otp_expires_at === "string" && user.otp_expires_at < now)) {
-      if (!allowDevOtpBypass() || otp_code !== "123456") {
-        throw new HttpError(400, "INVALID_OTP", "Mã xác thực không chính xác hoặc đã hết hạn");
-      }
-    }
+    await assertOtpAccepted(user, otp_code, "Mã xác thực không chính xác hoặc đã hết hạn");
 
     const hashedPassword = hashPassword(asString(password));
     await updateRows("users", { user_id: `eq.${user.user_id}` }, {
@@ -723,6 +783,7 @@ export async function handleAuthRoute(
       locked_until: null,
       otp_code: null,
       otp_expires_at: null,
+      otp_attempt_count: 0,
       is_active: true
     });
 
@@ -764,7 +825,12 @@ export async function handleAuthRoute(
       login_fail_count: 0,
       updated_at: new Date().toISOString()
     });
-    const session = signJwt({ user_id: user.user_id, email: user.email || `${user.phone}@velura.vn`, role: "member" });
+    const session = signJwt({
+      user_id: user.user_id,
+      email: user.email || `${user.phone}@velura.vn`,
+      role: "member",
+      tv: Number(user.token_epoch ?? 0)
+    });
     return sendJson(res, 200, {
       success: true,
       token: session,
@@ -868,7 +934,7 @@ export async function handleAuthRoute(
       );
     }
 
-    const veluraToken = signJwt({ user_id: user.user_id, email: user.email, role: user.role });
+    const veluraToken = sessionToken(user);
 
     return sendJson(res, 200, {
       success: true,

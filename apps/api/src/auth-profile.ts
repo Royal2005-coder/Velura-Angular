@@ -17,6 +17,7 @@ export const AUTH_PROFILE_SELECT = [
   "created_at",
   "last_login_at",
   "version",
+  "token_epoch",
   "updated_at",
   "saved_addresses"
 ].join(",");

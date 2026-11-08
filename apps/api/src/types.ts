@@ -54,6 +54,8 @@ export interface UserProfile {
   is_active?: boolean | null;
   is_verified?: boolean | null;
   version?: number | null;
+  /** Tăng mỗi lần đăng xuất; JWT mang claim `tv` phải khớp để còn hiệu lực (UAT #742). */
+  token_epoch?: number | null;
   [key: string]: unknown;
 }
 

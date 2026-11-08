@@ -3,6 +3,7 @@ import {
   ADMIN_ERP_NAV_ITEMS,
   adminErpNavItemForPage,
   adminErpNavLink,
+  adminErpNavMatchesSearch,
 } from './admin-erp-navigation';
 
 describe('ERP admin navigation registry', () => {
@@ -28,6 +29,17 @@ describe('ERP admin navigation registry', () => {
     expect(adminErpNavItemForPage('returns-cskh')?.key).toBe('returns');
     expect(adminErpNavItemForPage('pricing')?.key).toBe('pricing');
     expect(adminErpNavItemForPage('unknown-page')).toBeNull();
+  });
+
+  it('finds a workspace typed without Vietnamese diacritics', () => {
+    const selling = ADMIN_ERP_NAV_GROUPS.find((group) => group.key === 'selling')!.label;
+    // "don hang" is what operators actually type; it must match "Đơn hàng".
+    expect(adminErpNavMatchesSearch(ADMIN_ERP_NAV_ITEMS.orders, selling, 'don hang')).toBe(true);
+    expect(adminErpNavMatchesSearch(ADMIN_ERP_NAV_ITEMS.orders, selling, 'DON-HANG')).toBe(true);
+    expect(adminErpNavMatchesSearch(ADMIN_ERP_NAV_ITEMS.returns, selling, 'doi tra')).toBe(true);
+    // The page title is searchable too, not only the sidebar label.
+    expect(adminErpNavMatchesSearch(ADMIN_ERP_NAV_ITEMS.products, 'Danh mục', 'danh muc san pham')).toBe(true);
+    expect(adminErpNavMatchesSearch(ADMIN_ERP_NAV_ITEMS.orders, selling, 'kho van')).toBe(false);
   });
 
   it('marks shipped workspaces ready and the remaining workspaces planned', () => {

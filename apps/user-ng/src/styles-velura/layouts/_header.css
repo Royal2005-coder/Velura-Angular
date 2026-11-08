@@ -199,7 +199,20 @@
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif !important;
 }
 
-/* Suppress browser native cancel button to eliminate duplicate X */
+/* Suppress browser native clear button (blue X in Edge/IE and WebKit cancel button) */
+.site-header__search input::-ms-clear,
+.site-header__search input::-ms-reveal,
+.cm-search-topbar__input::-ms-clear,
+.cm-search-topbar__input::-ms-reveal,
+.js-search-input::-ms-clear,
+.js-search-input::-ms-reveal,
+input::-ms-clear,
+input::-ms-reveal {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 .site-header__search input::-webkit-search-decoration,
 .site-header__search input::-webkit-search-cancel-button,
 .site-header__search input::-webkit-search-results-button,
@@ -207,10 +220,20 @@
 .cm-search-topbar__input::-webkit-search-decoration,
 .cm-search-topbar__input::-webkit-search-cancel-button,
 .cm-search-topbar__input::-webkit-search-results-button,
-.cm-search-topbar__input::-webkit-search-results-decoration {
+.cm-search-topbar__input::-webkit-search-results-decoration,
+.js-search-input::-webkit-search-decoration,
+.js-search-input::-webkit-search-cancel-button,
+.js-search-input::-webkit-search-results-button,
+.js-search-input::-webkit-search-results-decoration,
+input::-webkit-search-decoration,
+input::-webkit-search-cancel-button,
+input::-webkit-search-results-button,
+input::-webkit-search-results-decoration {
   -webkit-appearance: none !important;
   appearance: none !important;
   display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .site-header__search-ai-btn {

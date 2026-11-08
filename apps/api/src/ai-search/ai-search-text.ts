@@ -75,7 +75,7 @@ export function extractQueryAttributes(text: string): QueryAttributes {
   if (/\b(dam|vay|chan vay)\b/.test(norm)) attrs.category = "dam-vay";
   else if (/\b(ao khoac|blazer|vest|hoodie|cardigan)\b/.test(norm)) attrs.category = "ao-khoac";
   else if (/\b(ao|so mi|thun|croptop|blouse|len)\b/.test(norm)) attrs.category = "ao";
-  else if (/\b(quan|jean|jeans|tay|short|kaki)\b/.test(norm)) attrs.category = "quan";
+  else if (/\b(quan|jean|jeans|quan tay|short|kaki)\b/.test(norm)) attrs.category = "quan";
   else if (/\b(set do|bo do)\b/.test(norm)) attrs.category = "set-do";
   else if (/\b(giay|dep|sandal)\b/.test(norm)) attrs.category = "giay-dep";
   else if (/\b(tui|tui xach|khan|that lung)\b/.test(norm)) attrs.category = "phu-kien";

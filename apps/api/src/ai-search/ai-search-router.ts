@@ -1,6 +1,6 @@
 import { HttpError, readJson, sendJson } from "../http.js";
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "../types.js";
-import { aiOwner } from "../ai/ai-router.js";
+import { aiOwner, assertAiSearchReady } from "../ai/ai-router.js";
 import { readVisualUpload } from "../visual-search/visual-search-router.js";
 import { ShopVisualSearchRepository } from "../visual-search/visual-search-repository.js";
 import { uuid } from "../visual-search/visual-search-types.js";
@@ -21,6 +21,7 @@ export async function handleAiSearchRoute(req: HttpRequest, res: HttpResponse, p
   if (req.method !== "POST") throw new HttpError(405, "METHOD_NOT_ALLOWED", "Chỉ hỗ trợ POST.");
   if (parts[3] === "text" && parts.length === 4) {
     service.consume(owner);
+    await assertAiSearchReady();
     const body = await readJson(req, 16_384);
     const requestId = String(body.request_id || "");
     if (!uuid(requestId)) throw new HttpError(400, "AI_SEARCH_REQUEST_INVALID", "Yêu cầu không hợp lệ.");
@@ -30,6 +31,7 @@ export async function handleAiSearchRoute(req: HttpRequest, res: HttpResponse, p
   }
   if (parts[3] === "composed" && parts.length === 4) {
     service.consume(owner);
+    await assertAiSearchReady();
     const upload = await readVisualUpload(req);
     try {
       if (upload.metadata.consent !== true || upload.metadata.confirmed !== true) throw new HttpError(400, "CONSENT_REQUIRED", "Xác nhận vùng ảnh và đồng ý xử lý trước khi tìm.");

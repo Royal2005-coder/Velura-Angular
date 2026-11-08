@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { HttpError } from "../../apps/api/src/http.js";
-import { AiSearchService, type AiSearchProviders } from "../../apps/api/src/ai-search/ai-search-service.js";
+import { AiSearchService, aiSearchProviders, type AiSearchProviders } from "../../apps/api/src/ai-search/ai-search-service.js";
 import type { AiSearchRepository } from "../../apps/api/src/ai-search/ai-search-types.js";
 import { fashionQuery, validateSearchText, MAX_QUERY_CHARS } from "../../apps/api/src/ai-search/ai-search-text.js";
 import { composedQueryVector } from "../../apps/api/src/ai/image-vector-repository.js";
@@ -179,4 +181,36 @@ test("Session rate limit counts failures and does not block unrelated sessions",
   const f = fixture(); for (let i = 0; i < 15; i++) f.service.consume("guest:a");
   assert.throws(() => f.service.consume("guest:a"), { code: "AI_SEARCH_RATE_LIMIT" });
   assert.doesNotThrow(() => f.service.consume("guest:b"));
+});
+
+test("A worker image without the text task fails closed on the first response", async () => {
+  const paths: string[] = [];
+  const server = createServer((req, res) => {
+    paths.push(String(req.url));
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ detail: "Not Found" }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+  const previous = {
+    endpoint: process.env.AI_CLUSTER_ENDPOINT,
+    key: process.env.AI_WORKER_KEY,
+    disabled: process.env.AI_DISABLE,
+  };
+  process.env.AI_CLUSTER_ENDPOINT = `http://127.0.0.1:${port}`;
+  process.env.AI_WORKER_KEY = "k".repeat(48);
+  delete process.env.AI_DISABLE;
+  try {
+    await assert.rejects(
+      aiSearchProviders.embedText("đầm đỏ", new AbortController().signal, 5000),
+      { status: 503, code: "AI_SEARCH_UNAVAILABLE" },
+    );
+    assert.deepEqual(paths, ["/embed/text"]);
+  } finally {
+    server.close();
+    for (const [name, value] of [["AI_CLUSTER_ENDPOINT", previous.endpoint], ["AI_WORKER_KEY", previous.key], ["AI_DISABLE", previous.disabled]] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
 });

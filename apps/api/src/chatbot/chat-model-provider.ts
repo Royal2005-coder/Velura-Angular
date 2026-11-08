@@ -14,16 +14,22 @@ export class ChatModelError extends HttpError {
 
 /** Collects provider output privately; partial, truncated or refused output never becomes a result. */
 export async function requestChatJson(provider: "mistral" | "gemini", model: string, operation: ChatModelTrace["operation"], prompt: string): Promise<{ value: JsonObject; trace: ChatModelTrace }> {
-  const candidates: { provider: "mistral" | "gemini"; model: string }[] = [{ provider, model }];
+  // A provider without a configured key is skipped silently; no key at all fails closed later.
+  const candidates: { provider: "mistral" | "gemini"; model: string }[] = [];
   if (provider === "mistral") {
-    candidates.push({ provider: "gemini", model: "gemini-3.5-flash-lite" });
-    const geminiFallback = config.geminiModel || "gemini-3.5-flash-lite";
-    if (geminiFallback !== "gemini-3.5-flash-lite") {
-      candidates.push({ provider: "gemini", model: geminiFallback });
+    if (config.mistralApiKey) {
+      candidates.push({ provider: "mistral", model });
+      candidates.push({ provider: "gemini", model: "gemini-3.5-flash-lite" });
+      const geminiFallback = config.geminiModel || "gemini-3.5-flash-lite";
+      if (geminiFallback !== "gemini-3.5-flash-lite") candidates.push({ provider: "gemini", model: geminiFallback });
+    } else {
+      candidates.push({ provider: "gemini", model: config.geminiModel || "gemini-3.5-flash-lite" });
     }
-  } else if (model !== "gemini-3.5-flash-lite") {
-    candidates.push({ provider: "gemini", model: "gemini-3.5-flash-lite" });
+  } else if (config.geminiApiKey) {
+    candidates.push({ provider: "gemini", model });
+    if (model !== "gemini-3.5-flash-lite") candidates.push({ provider: "gemini", model: "gemini-3.5-flash-lite" });
   }
+  if (!candidates.length) throw new ChatModelError("CHAT_PROVIDER_UNVERIFIED", []);
   const traces: ChatModelTrace[] = [];
   for (const candidate of candidates) {
     try {

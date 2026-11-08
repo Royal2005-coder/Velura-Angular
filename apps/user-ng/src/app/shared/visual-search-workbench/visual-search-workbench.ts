@@ -186,7 +186,8 @@ export class VisualSearchWorkbench {
   private begin(): void {
     const requestId = crypto.randomUUID(), epoch = ++this.epoch;
     this.requestId = requestId; this.busy.set(true); this.error.set('');
-    const filters = { ...this.filters(), ...(this.candidateProductIds() !== undefined ? { product_ids: this.candidateProductIds() } : {}) };
+    const candidates = this.candidateProductIds();
+    const filters = { ...this.filters(), ...(candidates && candidates.length > 0 ? { product_ids: candidates } : {}) };
     const modifier = this.modifier().trim();
     this.composed = Boolean(modifier);
     const request = modifier

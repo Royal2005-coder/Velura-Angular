@@ -4,6 +4,7 @@ import { aiOwner } from "../../apps/api/src/ai/ai-router.js";
 import { filterCatalogProducts } from "../../apps/api/src/user/catalog-search.js";
 import { rankVisualMatches } from "../../apps/api/src/visual-search/visual-search-service.js";
 import type { VisualCandidate } from "../../apps/api/src/visual-search/visual-search-types.js";
+import { extractQueryAttributes } from "../../apps/api/src/ai-search/ai-search-text.js";
 import type { HttpRequest, AuthContext } from "../../apps/api/src/types.js";
 
 test("aiOwner: accepts guest session without authorization and rejects invalid authorization", () => {
@@ -171,4 +172,19 @@ test("Attribute-Aware Boost: Product matching color and sleeve surfaces to the t
 
   assert.equal(matches[0].product_id, "dress-long-sleeve-red", "Red long-sleeve dress must rank first due to attribute boost");
   assert.equal(matches[1].product_id, "dress-short-sleeve-black", "Short-sleeve black dress ranks second");
+});
+
+test("Multimodal text modifier: sleeve phrases like 'tay dài' or 'màu đỏ tay dài' never misclassify as pants (quan)", () => {
+  const sleeveOnly = extractQueryAttributes("tay dài");
+  assert.equal(sleeveOnly.category, undefined, "'tay dài' must not set category to 'quan'");
+  assert.equal(sleeveOnly.sleeve, "tay dài");
+
+  const colorSleeve = extractQueryAttributes("màu đỏ tay dài");
+  assert.equal(colorSleeve.category, undefined, "'màu đỏ tay dài' must not set category to 'quan'");
+  assert.equal(colorSleeve.color, "đỏ");
+  assert.equal(colorSleeve.sleeve, "tay dài");
+
+  const realPants = extractQueryAttributes("quần tây đen");
+  assert.equal(realPants.category, "quan");
+  assert.equal(realPants.color, "đen");
 });

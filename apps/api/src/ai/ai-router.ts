@@ -35,6 +35,16 @@ const service = new AiService(
 );
 /** Shared engine enforces one private ledger and queue for image approvals and Personal Color assets. */
 export function getAiService(): AiService { return service; }
+/**
+ * Semantic search encodes text with the same private CLIP worker, so it stays
+ * fail-closed until that worker advertises the task. A stale observation is
+ * re-probed once, so readiness is never inferred from configuration.
+ */
+export async function assertAiSearchReady(): Promise<void> {
+  if (aiWorker.textEmbeddingReady?.() === true) return;
+  await service.refreshReadiness();
+  if (aiWorker.textEmbeddingReady?.() !== true) throw new HttpError(503, "AI_SEARCH_UNAVAILABLE", "Tìm kiếm AI ngữ nghĩa chưa sẵn sàng. Vui lòng dùng tìm kiếm theo từ khóa.");
+}
 let recovery: Promise<void> | undefined;
 const catalogIndex = new CatalogIndexLifecycle(service, catalog, vectors);
 /** Recover the existing shared queue once, then backfill/reconcile published catalog revisions in-process. */

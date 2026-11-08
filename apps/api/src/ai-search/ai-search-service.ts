@@ -56,7 +56,12 @@ export const aiSearchProviders: AiSearchProviders = {
       });
       status = response.status;
       payload = await response.json().catch(() => null) as Record<string, unknown> | null;
-      if (!response.ok || payload?.status !== "success") throw new HttpError(502, "AI_SEARCH_EMBED_FAILED", "Chưa phân tích được từ khóa. Vui lòng thử lại.");
+      if (!response.ok || payload?.status !== "success") {
+        // A worker build without the text task answers 404/405/501: a deployment
+        // fact that retrying cannot change, not a transient inference failure.
+        if ([404, 405, 501].includes(response.status)) throw new HttpError(503, "AI_SEARCH_UNAVAILABLE", "Tìm kiếm AI ngữ nghĩa chưa sẵn sàng. Vui lòng dùng tìm kiếm theo từ khóa.");
+        throw new HttpError(502, "AI_SEARCH_EMBED_FAILED", "Chưa phân tích được từ khóa. Vui lòng thử lại.");
+      }
     } catch (error) {
       if (signal.aborted) throw signal.reason;
       if (error instanceof HttpError) throw error;

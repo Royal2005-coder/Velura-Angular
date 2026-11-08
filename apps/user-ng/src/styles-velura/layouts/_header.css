@@ -199,6 +199,20 @@
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif !important;
 }
 
+/* Suppress browser native cancel button to eliminate duplicate X */
+.site-header__search input::-webkit-search-decoration,
+.site-header__search input::-webkit-search-cancel-button,
+.site-header__search input::-webkit-search-results-button,
+.site-header__search input::-webkit-search-results-decoration,
+.cm-search-topbar__input::-webkit-search-decoration,
+.cm-search-topbar__input::-webkit-search-cancel-button,
+.cm-search-topbar__input::-webkit-search-results-button,
+.cm-search-topbar__input::-webkit-search-results-decoration {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  display: none !important;
+}
+
 .site-header__search-ai-btn {
   display: inline-flex;
   align-items: center;

@@ -70,9 +70,20 @@ export class VisualSearchWorkbench {
     this.destroy.onDestroy(() => this.cancel());
   }
   /** Existing header camera calls the same accessible modal entry point. */
-  open(): void { this.error.set(''); this.offers.set(null); this.dialog()?.nativeElement.showModal(); }
+  open(): void {
+    this.error.set('');
+    this.offers.set(null);
+    try {
+      this.dialog()?.nativeElement.showModal?.();
+    } catch {}
+  }
   /** Close and cancel both browser and server work, revoking every source preview. */
-  close(): void { this.cancel(); this.dialog()?.nativeElement.close(); }
+  close(): void {
+    this.cancel();
+    try {
+      this.dialog()?.nativeElement.close?.();
+    } catch {}
+  }
   /** Automatically close the modal when user clicks on a product card or action to view details. */
   onProductClick(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;

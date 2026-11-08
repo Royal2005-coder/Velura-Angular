@@ -12,12 +12,18 @@ export interface VisualFilters { product_ids?: string[]; category_id?: string; m
 /** Actual matches and explicitly separate featured suggestions. */
 export interface VisualResult {
   attributes: VisualAttributes;
-  matches: Array<ProductSummary & { similarity: number; rank_score?: number; tier?: 'strong' | 'similar' }>;
+  matches: Array<ProductSummary & { similarity: number; rank_score?: number; tier?: 'strong' | 'similar'; em_score?: number; is_score?: number }>;
   featured: ProductSummary[]; catalog_version: string; personalized: boolean;
   fallback?: {
     category: string | null; category_name: string | null;
     color_tone: string | null; color_name: string | null;
   } | null;
+}
+/** Semantic text or photo+modifier search; composed matches carry the CLARTEMIS EM/IS components. */
+export interface AiSearchResult extends VisualResult {
+  mode: 'text' | 'composed';
+  /** Exact normalized text the CLIP encoder received, so the UI can show what was understood. */
+  query_text: string;
 }
 /** Camera/decode/crop and HTTP stay in the Model, never a page. */
 @Injectable({ providedIn: 'root' })
@@ -72,4 +78,18 @@ export class VisualSearchModel {
   }
   /** Stop server work as well as ignoring late callbacks. */
   cancel(requestId: string): Observable<unknown> { return this.http.delete(`${this.base}/requests/${requestId}`); }
+  private readonly aiBase = `${environment.apiUrl || window.location.origin}/api/user/ai-search`;
+  /** Semantic text query over the CLIP catalog index; no image and no stored query vector. */
+  textSearch(query: string, requestId: string, filters: VisualFilters): Observable<AiSearchResult> {
+    return this.http.post<AiSearchResult>(`${this.aiBase}/text`, { request_id: requestId, query, filters });
+  }
+  /** Photo + text feedback (CLARTEMIS composition); consent covers the same single cropped preview. */
+  searchComposed(file: File, requestId: string, modifier: string, filters: VisualFilters): Observable<AiSearchResult> {
+    const body = new FormData();
+    body.append('file', file);
+    body.append('metadata', JSON.stringify({ request_id: requestId, modifier, filters, consent: true, confirmed: true }));
+    return this.http.post<AiSearchResult>(`${this.aiBase}/composed`, body);
+  }
+  /** Cancel a composed request on the AI search lifecycle, not the photo-only one. */
+  cancelAiSearch(requestId: string): Observable<unknown> { return this.http.delete(`${this.aiBase}/requests/${requestId}`); }
 }

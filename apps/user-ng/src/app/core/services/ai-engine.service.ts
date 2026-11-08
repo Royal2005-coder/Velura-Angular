@@ -44,6 +44,8 @@ export interface AiCapabilities {
   max_vto_attempts?: number;
   tasks: { task: AiTask; enabled: boolean; reason?: string }[];
   studio_assets?: StudioAsset[];
+  /** Semantic search readiness; false until the owner rolls a worker exposing text_embedding. */
+  ai_search?: { text: boolean; composed: boolean };
 }
 /** Explicitly consented input; product and studio IDs are validated against server allowlists. */
 export interface AiJobInput {

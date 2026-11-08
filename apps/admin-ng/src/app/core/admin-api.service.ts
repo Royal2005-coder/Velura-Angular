@@ -184,6 +184,7 @@ export interface AdminTicketRow {
 export interface AdminChatContext {
   guest_email?: string;
   supervisor_required?: boolean;
+  handoff_reason?: string;
   handoff_summary?: { summary?: string; problem?: string; wanted?: string; failed_approaches?: string[]; verified_status?: string; risk?: string; sentiment?: string };
   intelligence?: { confidence?: number; reasons?: string[]; trend?: string; updated_at?: string; source_seq?: number; filter_status?: 'ready' | 'pending' | 'outage'; corrected?: boolean; customer_sentiment?: string; staff_sentiment?: string };
   warnings?: Array<{ id: string; text: string; action?: string; resolved?: boolean }>;

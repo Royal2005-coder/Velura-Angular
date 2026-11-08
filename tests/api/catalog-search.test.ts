@@ -188,3 +188,38 @@ test("Multimodal text modifier: sleeve phrases like 'tay dài' or 'màu đỏ ta
   assert.equal(realPants.category, "quan");
   assert.equal(realPants.color, "đen");
 });
+
+test("Occasion search: 'đầm dự tiệc' matches dresses with Party occasion or 'dạ hội' in name", () => {
+  const products = [
+    {
+      product_id: "dress-party-01",
+      name: "Đầm Tweed Cổ Vuông Dáng Tầng",
+      category_name: "Đầm & Váy",
+      category_slug: "dam-vay",
+      occasions: ["Party", "Casual"],
+      description: "Đầm tweed cao cấp thanh lịch."
+    },
+    {
+      product_id: "dress-gala-02",
+      name: "Đầm Dạ Hội Cúp Ngực Phối Nơ",
+      category_name: "Đầm & Váy",
+      category_slug: "dam-vay",
+      occasions: ["Party"],
+      description: "Thiết kế dạ tiệc lộng lẫy."
+    },
+    {
+      product_id: "shirt-casual-03",
+      name: "Áo Sơ Mi Cổ Đức",
+      category_name: "Áo",
+      category_slug: "ao",
+      occasions: ["Office", "Casual"],
+      description: "Áo sơ mi văn phòng."
+    }
+  ];
+
+  const filtered = filterCatalogProducts(products, { query: "đầm dự tiệc", category: "", material: "" });
+  const ids = filtered.map(p => p.product_id);
+  assert.ok(ids.includes("dress-party-01"), "Dress with Party occasion must match 'đầm dự tiệc'");
+  assert.ok(ids.includes("dress-gala-02"), "Gala dress with 'dạ hội' must match 'đầm dự tiệc'");
+  assert.ok(!ids.includes("shirt-casual-03"), "Casual shirt must not match 'đầm dự tiệc'");
+});

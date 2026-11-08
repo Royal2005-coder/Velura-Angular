@@ -44,7 +44,18 @@ const COMPOUND_PHRASE_MAPPINGS: Array<[RegExp, string]> = [
   [/(?<![\p{L}\p{N}])(?:chân\s+váy|chan\s+vay)(?![\p{L}\p{N}])/gui, 'chan_vay'],
   [/(?<![\p{L}\p{N}])(?:đầm|đam|dam|váy|vay)(?![\p{L}\p{N}])/gui, 'dam_vay'],
   [/(?<![\p{L}\p{N}])(?:độ\s+dài|do\s+dai)(?![\p{L}\p{N}])/gui, 'do_dai'],
+  [/(?<![\p{L}\p{N}])(?:dự\s+tiệc|du\s+tiec|dạ\s+tiệc|da\s+tiec|dạ\s+hội|da\s+hoi)(?![\p{L}\p{N}])/gui, 'du_tiec'],
+  [/(?<![\p{L}\p{N}])(?:công\s+sở|cong\s+so|đi\s+làm|di\s+lam)(?![\p{L}\p{N}])/gui, 'cong_so'],
 ];
+
+export const OCCASION_VIETNAMESE_MAP: Readonly<Record<string, string>> = {
+  Party: 'dự tiệc dạ tiệc dạ hội tiệc party',
+  Casual: 'dạo phố thường ngày đi chơi casual',
+  Office: 'công sở đi làm văn phòng office',
+  Wedding: 'đám cưới tiệc cưới wedding',
+  Travel: 'du lịch đi biển dạo biển nghỉ dưỡng travel',
+  School: 'đi học học sinh sinh viên school',
+};
 
 export function bindCompoundPhrases(text: string): string {
   let result = text;

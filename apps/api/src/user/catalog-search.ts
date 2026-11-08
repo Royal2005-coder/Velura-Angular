@@ -58,7 +58,18 @@ const COMPOUND_PHRASE_MAPPINGS: Array<[RegExp, string]> = [
   [/(?<![\p{L}\p{N}])(?:chân\s+váy|chan\s+vay)(?![\p{L}\p{N}])/gui, "chan_vay"],
   [/(?<![\p{L}\p{N}])(?:đầm|đam|dam|váy|vay)(?![\p{L}\p{N}])/gui, "dam_vay"],
   [/(?<![\p{L}\p{N}])(?:độ\s+dài|do\s+dai)(?![\p{L}\p{N}])/gui, "do_dai"],
+  [/(?<![\p{L}\p{N}])(?:dự\s+tiệc|du\s+tiec|dạ\s+tiệc|da\s+tiec|dạ\s+hội|da\s+hoi)(?![\p{L}\p{N}])/gui, "du_tiec"],
+  [/(?<![\p{L}\p{N}])(?:công\s+sở|cong\s+so|đi\s+làm|di\s+lam)(?![\p{L}\p{N}])/gui, "cong_so"],
 ];
+
+const OCCASION_VIETNAMESE_MAP: Readonly<Record<string, string>> = {
+  Party: "dự tiệc dạ tiệc dạ hội tiệc party",
+  Casual: "dạo phố thường ngày đi chơi casual",
+  Office: "công sở đi làm văn phòng office",
+  Wedding: "đám cưới tiệc cưới wedding",
+  Travel: "du lịch đi biển dạo biển nghỉ dưỡng travel",
+  School: "đi học học sinh sinh viên school",
+};
 
 export function bindCompoundPhrases(text: string): string {
   let result = text;
@@ -116,7 +127,10 @@ function joinText(parts: unknown[]): string {
 }
 
 const GARMENT_CATEGORY_TERMS: Record<string, string[]> = {
-  "dam-vay": ["vay", "dam", "chan vay", "dam da hoi", "dam tiec"],
+  "dam-vay": [
+    "vay", "dam", "chan vay", "dam da hoi", "dam tiec", "dam du tiec",
+    "vay du tiec", "vay da hoi", "dam da tiec", "vay da tiec", "vay tiec"
+  ],
   "ao": ["ao", "ao so mi", "ao thun", "ao kieu", "ao len", "ao croptop", "croptop", "blouse"],
   "quan": ["quan", "quan jean", "quan jeans", "quan tay", "quan short", "quan ong rong"],
   "ao-khoac": ["ao khoac", "blazer", "vest", "hoodie", "cardigan"],
@@ -147,7 +161,10 @@ function primarySearchableText(product: JsonObject): string {
     product.collection,
     product.seo_title,
     product.style_tags,
-    product.occasions
+    product.occasions,
+    Array.isArray(product.occasions)
+      ? product.occasions.map((o) => OCCASION_VIETNAMESE_MAP[String(o)] || String(o))
+      : (typeof product.occasions === "string" ? OCCASION_VIETNAMESE_MAP[product.occasions] || product.occasions : "")
   ]);
 }
 

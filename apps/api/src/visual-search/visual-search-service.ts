@@ -65,7 +65,8 @@ export async function decodeSearchImage(bytes: Buffer, mime: string): Promise<De
 function workerBinding(requestId: string): { body: string; requestId: string } {
   return { requestId, body: JSON.stringify({ schema_version: WORKER_VERSION, request_id: requestId, task: "image_embedding", product_id: "", variant_id: "", image_id: "query.image" }) };
 }
-const providers: VisualProviders = {
+/** Shared photo adapters; composed AI search reuses the same decode/embed contract. */
+export const visualProviders: VisualProviders = {
   decode: decodeSearchImage,
   async embedImage(bytes, mime, signal, timeoutMs) {
     const endpoint = (process.env.AI_CLUSTER_ENDPOINT || "http://ai-worker.ai-staging.svc:8000").replace(/\/$/, "");
@@ -129,7 +130,7 @@ export class VisualSearchService {
   private readonly threshold: number;
   private readonly similarThreshold: number;
   private readonly garmentFloor: number;
-  constructor(private readonly repo: VisualSearchRepository, private readonly provider: VisualProviders = providers,
+  constructor(private readonly repo: VisualSearchRepository, private readonly provider: VisualProviders = visualProviders,
     private readonly timeoutMs = Math.min(15000, Math.max(100, Number(process.env.VISUAL_SEARCH_TOTAL_TIMEOUT_MS || 15000)))) {
     this.threshold = Number(process.env.VISUAL_SEARCH_THRESHOLD) || MATCH_THRESHOLD;
     this.similarThreshold = Math.min(Number(process.env.VISUAL_SEARCH_MIN_SIMILARITY) || SIMILAR_THRESHOLD, this.threshold);

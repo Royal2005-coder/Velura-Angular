@@ -1,12 +1,13 @@
 import { VisualSearchWorkbench } from '../../shared/visual-search-workbench/visual-search-workbench';
 import { useBodyClass } from '../../core/utils/body-class';
-import type { VisualResult, VisualFilters } from '../../core/services/visual-search.service';
-import { AfterViewInit, Component, ElementRef, ViewChild, computed, inject, signal } from '@angular/core';
+import { VisualSearchModel, type AiSearchResult, type VisualResult, type VisualFilters } from '../../core/services/visual-search.service';
+import { HttpErrorResponse } from '@angular/common/http';
+import { AfterViewInit, Component, DestroyRef, ElementRef, ViewChild, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { matchesAllSearchWords, normalizeSearchText } from '../../core/utils/search';
 import { productMaterial, productMaterialText } from '../../core/utils/material';
-import { catchError, finalize, of, switchMap, tap } from 'rxjs';
+import { catchError, finalize, of, switchMap, tap, type Subscription } from 'rxjs';
 import { ProductSummary } from '../../core/models/product.interface';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -104,6 +105,8 @@ export class ProductListPage implements AfterViewInit {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly visual = inject(VisualSearchModel);
+  private readonly destroy = inject(DestroyRef);
 
   @ViewChild('heroVideo') private heroVideo?: ElementRef<HTMLVideoElement>;
   readonly videoSoundOn = signal(false);
@@ -146,6 +149,85 @@ export class ProductListPage implements AfterViewInit {
     ...(this.selectedSize() ? { size: this.selectedSize() } : {}),
     ...(this.selectedShapes()[0] ? { body_shape: this.selectedShapes()[0] } : {}),
   }));
+  /** Semantic AI text search; the server owns readiness, so an unrolled worker surfaces as an honest notice. */
+  readonly aiRequested = signal(false);
+  readonly aiSearchBusy = signal(false);
+  readonly aiSearchError = signal('');
+  readonly aiQueryText = signal('');
+  private aiSubscription?: Subscription;
+  private aiRequestId = '';
+  private aiEpoch = 0;
+
+  /** Runs the CLIP text query against the current filters; a late callback never overwrites a newer route. */
+  startAiTextSearch(query: string): void {
+    const epoch = ++this.aiEpoch;
+    this.aiSubscription?.unsubscribe();
+    this.aiSearchBusy.set(true);
+    this.aiSearchError.set('');
+    this.aiQueryText.set('');
+    const requestId = crypto.randomUUID();
+    this.aiRequestId = requestId;
+    this.aiSubscription = this.visual.textSearch(query, requestId, this.visualFilters())
+      .pipe(takeUntilDestroyed(this.destroy))
+      .subscribe({
+        next: (result: AiSearchResult) => {
+          if (epoch !== this.aiEpoch) return;
+          this.aiRequestId = '';
+          this.aiSearchBusy.set(false);
+          this.aiQueryText.set(result.query_text);
+          this.applyVisualResult(result);
+        },
+        error: (error: unknown) => {
+          if (epoch !== this.aiEpoch) return;
+          this.aiRequestId = '';
+          this.aiSearchBusy.set(false);
+          this.aiSearchError.set(this.aiErrorMessage(error));
+        },
+      });
+  }
+
+  /** Aborts the in-flight semantic query on the server as well as ignoring its callback. */
+  cancelAiTextSearch(): void {
+    this.aiEpoch++;
+    this.aiSubscription?.unsubscribe();
+    this.aiSubscription = undefined;
+    if (this.aiRequestId) {
+      const requestId = this.aiRequestId;
+      this.aiRequestId = '';
+      this.visual.cancelAiSearch(requestId).subscribe({ error: () => undefined });
+    }
+    this.aiSearchBusy.set(false);
+  }
+
+  /** Turns off AI mode, restores keyword results and drops the ai route flag. */
+  clearAiSearch(): void {
+    this.cancelAiTextSearch();
+    this.aiRequested.set(false);
+    this.aiQueryText.set('');
+    this.aiSearchError.set('');
+    this.imageMatches.set(null);
+    this.visualFeatured.set([]);
+    void this.router.navigate(['/products'], { queryParams: { ai: null }, queryParamsHandling: 'merge' });
+  }
+
+  /** Surfaces the server's honest failure message instead of pretending the query returned nothing. */
+  private aiErrorMessage(error: unknown): string {
+    if (error instanceof HttpErrorResponse) {
+      const body = error.error as Record<string, unknown> | string | null;
+      if (typeof body === 'string' && body) return body;
+      if (body && typeof body === 'object') {
+        const nested = body['error'];
+        if (typeof nested === 'string' && nested) return nested;
+        if (nested && typeof nested === 'object') {
+          const message = (nested as Record<string, unknown>)['message'];
+          if (typeof message === 'string' && message) return message;
+        }
+        const message = body['message'];
+        if (typeof message === 'string' && message) return message;
+      }
+    }
+    return 'Tìm kiếm AI ngữ nghĩa chưa khả dụng. Đang hiển thị kết quả theo từ khóa.';
+  }
   readonly activeVoucherCode = signal<string | null>(null);
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
@@ -219,7 +301,10 @@ export class ProductListPage implements AfterViewInit {
 
   readonly catalogFilteredProducts = computed(() => {
     const slugs = this.selectedSlugs();
-    const query = this.searchQuery().trim().toLowerCase();
+    // Semantic AI mode encodes the query with CLIP, so keyword matching here would empty a
+    // paraphrased query; the AI match list (imageMatches) filters instead. Before results arrive
+    // (or if the worker is unavailable) keyword matching stays active as the honest fallback.
+    const query = this.aiRequested() && this.imageMatches() !== null ? '' : this.searchQuery().trim().toLowerCase();
     const normQuery = normalizeSearchText(query);
     const minPrice = this.minPrice();
     const maxPrice = this.maxPrice();
@@ -442,6 +527,7 @@ export class ProductListPage implements AfterViewInit {
 
   constructor() {
     useBodyClass('page-product-list');
+    this.destroy.onDestroy(() => this.cancelAiTextSearch());
     this.route.queryParamMap.pipe(tap((params) => {
       const category = params.get('category') || '';
       const slug = CATEGORY_QUERY_MAP[category] || category;
@@ -453,6 +539,15 @@ export class ProductListPage implements AfterViewInit {
       this.imageMatches.set(parsedIds?.length ? parsedIds : matchIds === null ? null : null);
       this.visualFeatured.set([]);
       this.currentPage.set(1);
+      const ai = params.get('ai') === '1';
+      this.aiRequested.set(ai);
+      this.aiSearchError.set('');
+      this.aiQueryText.set('');
+      if (ai && this.searchQuery()) {
+        this.startAiTextSearch(this.searchQuery());
+      } else {
+        this.cancelAiTextSearch();
+      }
       const voucherParam = params.get('voucher');
       if (voucherParam) {
         this.activeVoucherCode.set(voucherParam.trim());
@@ -612,8 +707,14 @@ export class ProductListPage implements AfterViewInit {
    */
   clearSearch(): void {
     this.searchQuery.set('');
+    this.cancelAiTextSearch();
+    this.aiRequested.set(false);
+    this.aiQueryText.set('');
+    this.aiSearchError.set('');
+    this.imageMatches.set(null);
+    this.visualFeatured.set([]);
     void this.router.navigate(['/products'], {
-      queryParams: { ...this.route.snapshot.queryParams, q: null },
+      queryParams: { ...this.route.snapshot.queryParams, q: null, ai: null },
       queryParamsHandling: 'merge',
     });
   }

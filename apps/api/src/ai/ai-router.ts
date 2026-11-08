@@ -10,6 +10,7 @@ import type {
   HttpResponse,
 } from "../types.js";
 import { AiService } from "./ai-service.js";
+import type { AiWorker } from "./ai-types.js";
 import { LocalAiRepository } from "./ai-repository.js";
 import { ColabAiWorker } from "./colab-worker.js";
 import { ClusterAiWorker } from "./cluster-worker.js";
@@ -17,7 +18,7 @@ import { ShopAiCatalog } from "./ai-catalog.js";
 import { LocalImageVectorRepository } from "./image-vector-repository.js";
 import { CatalogIndexLifecycle } from "./catalog-index-lifecycle.js";
 
-const aiWorker =
+const aiWorker: AiWorker =
   process.env.AI_ENGINE_MODE === "colab-local"
     ? new ColabAiWorker()
     : new ClusterAiWorker();
@@ -114,12 +115,18 @@ export async function handleAiRoute(
     const url = new URL(req.url || "/", "http://localhost");
     const productId = url.searchParams.get("product_id"),
       variantId = url.searchParams.get("variant_id") || undefined;
+    const visualIndex = { ...await vectors.readiness(), ...catalogIndex.status() };
+    const textReady = aiWorker.textEmbeddingReady?.() === true;
     sendJson(
       res,
       200,
       {
         ...service.capabilities(),
-        visual_index: { ...await vectors.readiness(), ...catalogIndex.status() },
+        visual_index: visualIndex,
+        ai_search: {
+          text: visualIndex.ready && textReady,
+          composed: visualIndex.ready && textReady && aiWorker.ready("image_embedding"),
+        },
         ...(productId
           ? await service.productCapabilities(productId, variantId)
           : {}),

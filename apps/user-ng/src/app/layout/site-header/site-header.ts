@@ -268,6 +268,13 @@ export class SiteHeader {
     this.searchOpen.set(false);
     void this.router.navigate(['/products'], { queryParams: trimmed ? { q: trimmed } : {} });
   }
+  /** Routes a natural-language query to the catalog's CLIP semantic search; the page owns readiness and errors. */
+  executeAiSearch(query: string): void {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    this.searchOpen.set(false);
+    void this.router.navigate(['/products'], { queryParams: { q: trimmed, ai: '1' } });
+  }
   /**
    * Handles form submission from pressing Enter or clicking search button.
    */

@@ -37,6 +37,8 @@ export class VisualSearchWorkbench {
   readonly titleId = `visual-${crypto.randomUUID()}`;
   readonly preview = signal('');
   readonly crop = signal({ x: 0, y: 0, width: 100, height: 100 });
+  /** Optional text feedback turns the photo search into a CLARTEMIS-style composed query. */
+  readonly modifier = signal('');
   readonly consent = signal(false);
   readonly busy = signal(false);
   readonly error = signal('');
@@ -53,6 +55,7 @@ export class VisualSearchWorkbench {
   private file: File | null = null;
   private stream?: MediaStream;
   private requestId = '';
+  private composed = false;
   private subscription?: Subscription;
   private offersSubscription?: Subscription;
   private epoch = 0;
@@ -113,6 +116,8 @@ export class VisualSearchWorkbench {
   }
   /** Consent never carries across file/crop changes. */
   setConsent(event: Event): void { this.consent.set((event.target as HTMLInputElement).checked); }
+  /** Text feedback is optional; it never changes the consented pixels, only the composed query. */
+  setModifier(event: Event): void { this.modifier.set((event.target as HTMLInputElement).value); }
   /** Capture live camera using browser permissions; permission errors do not pretend success. */
   async camera(): Promise<void> {
     if (this.busy()) return;
@@ -144,8 +149,8 @@ export class VisualSearchWorkbench {
   cancel(): void {
     this.epoch++;
     this.subscription?.unsubscribe();
-    if (this.requestId) this.model.cancel(this.requestId).subscribe({ error: () => undefined });
-    this.requestId = ''; this.busy.set(false); this.clearSource(); this.stopCamera();
+    if (this.requestId) (this.composed ? this.model.cancelAiSearch(this.requestId) : this.model.cancel(this.requestId)).subscribe({ error: () => undefined });
+    this.requestId = ''; this.composed = false; this.busy.set(false); this.clearSource(); this.stopCamera();
   }
   private async accept(file: File): Promise<void> {
     if (this.busy()) return;
@@ -160,7 +165,11 @@ export class VisualSearchWorkbench {
     const requestId = crypto.randomUUID(), epoch = ++this.epoch;
     this.requestId = requestId; this.busy.set(true); this.error.set('');
     const filters = { ...this.filters(), ...(this.candidateProductIds() !== undefined ? { product_ids: this.candidateProductIds() } : {}) };
-    const request = this.model.search(this.file!, requestId, filters);
+    const modifier = this.modifier().trim();
+    this.composed = Boolean(modifier);
+    const request = modifier
+      ? this.model.searchComposed(this.file!, requestId, modifier, filters)
+      : this.model.search(this.file!, requestId, filters);
     this.subscription = request.subscribe({
       next: response => {
         if (epoch !== this.epoch) return;
@@ -195,12 +204,16 @@ export class VisualSearchWorkbench {
       },
     });
   }
-  private finish(): void { this.requestId = ''; this.busy.set(false); this.clearSource(); }
-  clearSource(): void { if (this.preview()) URL.revokeObjectURL(this.preview()); this.preview.set(''); this.file = null; this.consent.set(false); }
+  private finish(): void { this.requestId = ''; this.composed = false; this.busy.set(false); this.clearSource(); }
+  clearSource(): void { if (this.preview()) URL.revokeObjectURL(this.preview()); this.preview.set(''); this.file = null; this.consent.set(false); this.modifier.set(''); }
   stopCamera(): void { this.stream?.getTracks().forEach(track => track.stop()); this.stream = undefined; this.cameraOpen.set(false); }
   /** Title of the matches rail: an exact photo match, or merely a look-alike. */
   protected matchesTitle(result: VisualResult): string {
     return result.matches.some((row) => row.tier === 'strong') ? 'Tìm thấy sản phẩm' : 'Sản phẩm tương tự';
+  }
+  /** The exact text the AI encoder understood, shown so a composed query is never a black box. */
+  protected understoodText(result: VisualResult): string {
+    return 'query_text' in result && typeof result.query_text === 'string' ? result.query_text : '';
   }
   /** Label catalog suggestions without claiming the uploaded photo was classified. */
   protected fallbackSentence(result: VisualResult): string {

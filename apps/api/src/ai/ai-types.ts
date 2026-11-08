@@ -95,6 +95,8 @@ export interface AiWorker {
   /** Optional 360° stage: adapters that cannot reconstruct simply omit both members. */
   turntableReady?(): boolean;
   turntable?(directory: string, signal: AbortSignal): Promise<TurntableStage>;
+  /** Optional search text tower: worker digests without CLIP text encoding omit it. */
+  textEmbeddingReady?(): boolean;
   /** Refresh authenticated backend health before advertising or enqueuing a capability. */
   refreshReadiness?(): Promise<void>;
   run(directory: string, signal: AbortSignal): Promise<AiWorkerResult>;

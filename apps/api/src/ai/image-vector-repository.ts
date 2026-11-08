@@ -45,6 +45,16 @@ export function normalizedImageVector(vector: unknown): number[] {
     throw new HttpError(422, "INVALID_IMAGE_VECTOR", "Vector hình ảnh rỗng.");
   return vector.map((value: number) => value / norm);
 }
+/**
+ * Zero-shot composed query normalize(reference + modifier) in the shared CLIP space.
+ * Because every vector is unit-length, ranking by this cosine is exactly the
+ * equal-weight EM+IS sum of CLARTEMIS (arXiv:2203.08101) without trained attention.
+ */
+export function composedQueryVector(reference: number[], modifier: number[]): number[] {
+  const image = normalizedImageVector(reference);
+  const text = normalizedImageVector(modifier);
+  return normalizedImageVector(image.map((value, i) => value + text[i]));
+}
 /** Isolated local catalog index; never persist user search vectors or return random suggestions. */
 export class LocalImageVectorRepository {
   private mutation: Promise<unknown> = Promise.resolve();
@@ -157,6 +167,22 @@ export class LocalImageVectorRepository {
     this.mutation = pending.catch(() => undefined);
     await pending;
   }
+  /** Rows compatible with the declared CLIP namespace and explicit catalog filters. */
+  private async filtered(filters: VisualSearchFilters): Promise<CatalogImageVector[]> {
+    return (await this.rows()).filter(
+      (row) =>
+        row.model === "openclip-vit-b32-laion2b" &&
+        (filters.product_ids === undefined ||
+          filters.product_ids.includes(row.product_id)) &&
+        (!filters.category_id || row.category_id === filters.category_id) &&
+        (!filters.color_tone || row.color_tone === filters.color_tone) &&
+        (["style_tags", "occasions", "suitable_body_shapes"] as const).every(
+          (key) =>
+            !filters[key]?.length ||
+            filters[key]!.some((value) => row[key]?.includes(value)),
+        ),
+    );
+  }
   /** Rank actual compatible indexed products by cosine score, retaining catalog filters. */
   async search(
     vector: number[],
@@ -165,20 +191,7 @@ export class LocalImageVectorRepository {
     Array<{ product_id: string; score: number; image_revision: string }>
   > {
     const query = normalizedImageVector(vector);
-    return (await this.rows())
-      .filter(
-        (row) =>
-          row.model === "openclip-vit-b32-laion2b" &&
-          (filters.product_ids === undefined ||
-            filters.product_ids.includes(row.product_id)) &&
-          (!filters.category_id || row.category_id === filters.category_id) &&
-          (!filters.color_tone || row.color_tone === filters.color_tone) &&
-          (["style_tags", "occasions", "suitable_body_shapes"] as const).every(
-            (key) =>
-              !filters[key]?.length ||
-              filters[key]!.some((value) => row[key]?.includes(value)),
-          ),
-      )
+    return (await this.filtered(filters))
       .map((row) => ({
         product_id: row.product_id,
         image_revision: row.image_revision,
@@ -186,6 +199,26 @@ export class LocalImageVectorRepository {
           (sum, value, i) => sum + value * query[i],
           0,
         ),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 24);
+  }
+  /**
+   * Top composed-query neighbours with their vectors, so composed search can score
+   * explicit text matching and implicit reference similarity separately (CLARTEMIS
+   * EM/IS decomposition, arXiv:2203.08101) without a second index scan.
+   */
+  async searchWithVectors(
+    vector: number[],
+    filters: VisualSearchFilters = {},
+  ): Promise<Array<{ product_id: string; score: number; image_revision: string; embedding: number[] }>> {
+    const query = normalizedImageVector(vector);
+    return (await this.filtered(filters))
+      .map((row) => ({
+        product_id: row.product_id,
+        image_revision: row.image_revision,
+        embedding: row.embedding,
+        score: row.embedding.reduce((sum, value, i) => sum + value * query[i], 0),
       }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 24);

@@ -73,6 +73,7 @@ export class ClusterAiWorker implements AiWorker {
   private readonly http: typeof fetch;
   private tasks: Partial<Record<AiTask, boolean>> = {};
   private turntableTask = false;
+  private textEmbeddingTask = false;
   private observedAt = 0;
   private refreshing?: Promise<void>;
 
@@ -96,6 +97,11 @@ export class ClusterAiWorker implements AiWorker {
     return this.ready() && this.turntableTask;
   }
 
+  /** Search text encoding shares the CLIP weights; older worker digests never report the task. */
+  textEmbeddingReady(): boolean {
+    return this.ready("image_embedding") && this.textEmbeddingTask;
+  }
+
   /** Refresh task-specific health; unavailable GPU/weights never enables VTO or fake CPU fallback. */
   async refreshReadiness(): Promise<void> {
     if (this.refreshing) return this.refreshing;
@@ -106,6 +112,7 @@ export class ClusterAiWorker implements AiWorker {
   private async observe(): Promise<void> {
     const observed: Partial<Record<AiTask, boolean>> = {};
     let turntable = false;
+    let textEmbedding = false;
     let observedAt = 0;
     try {
       if (this.key.length < 32 || process.env.AI_DISABLE === "true") return;
@@ -122,12 +129,14 @@ export class ClusterAiWorker implements AiWorker {
       observed.product_image_enhance = (tasks.product_image_enhance === true || feats.includes("product_image_enhance")) && loaded;
       observed.virtual_try_on = (tasks.virtual_try_on === true || feats.includes("virtual_try_on")) && loaded && (health.gpu === true || typeof health.gpu === "string");
       turntable = observed.virtual_try_on === true && tasks[TURNTABLE_TASK] === true;
+      textEmbedding = tasks.text_embedding === true && loaded;
       observedAt = Date.now();
     } catch {
       // Failed observations revoke readiness; an in-flight refresh never erases a fresh good observation.
     } finally {
       this.tasks = observed;
       this.turntableTask = turntable;
+      this.textEmbeddingTask = textEmbedding;
       this.observedAt = observedAt;
     }
   }

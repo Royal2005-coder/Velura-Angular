@@ -8,8 +8,10 @@ from PIL import Image, ImageOps
 
 VERSION = "velura-worker-v1"
 TASKS = {"/ai/quality": "image_quality", "/embed/image": "image_embedding",
+         "/embed/text": "text_embedding",
          "/ai/enhance": "product_image_enhance", "/ai/try-on": "virtual_try_on",
          "/ai/try-on-3d": "virtual_try_on_3d"}
+MAX_TEXT_CHARS = 500
 MAX_PIXELS = 12_000_000
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS

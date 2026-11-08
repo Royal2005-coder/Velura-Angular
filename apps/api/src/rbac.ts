@@ -1,5 +1,5 @@
 import { asProfile, AUTH_PROFILE_SELECT, loadProfileForAuthUser } from "./auth-profile.js";
-import { verifyJwt } from "./auth-helper.js";
+import { jwtClaims, verifyJwt } from "./auth-helper.js";
 import { HttpError, getRequestIp } from "./http.js";
 import { getAuthUser, selectOne } from "./supabase.js";
 import type { AuthContext, AuthUser, HttpRequest, UserProfile } from "./types.js";
@@ -132,6 +132,15 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
   const ipAddress = getRequestIp(req);
   const token = getToken(req);
   if (!token) return buildGuestContext(ipAddress);
+  /** Supabase stamps `amr` with the methods used for this session (`password`, `oauth`, `otp`). */
+  const authMethods = (claims: Record<string, unknown> | null): string[] => {
+    const amr = claims?.amr;
+    if (!Array.isArray(amr)) return [];
+    return amr.flatMap((entry) => {
+      const method = entry && typeof entry === "object" ? (entry as Record<string, unknown>).method : undefined;
+      return typeof method === "string" ? [method] : [];
+    });
+  };
 
   let authUser: AuthUser | null = null;
   try {
@@ -155,6 +164,10 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
 
     if (!profile) return buildGuestContext();
 
+    // Đăng xuất tăng users.token_epoch, nên token phát trước đó (claim `tv` cũ, hoặc token cũ
+    // chưa từng có `tv`) không còn là phiên hợp lệ — không cần bảng thu hồi theo từng token.
+    if (Number(decoded.tv ?? 0) !== Number(profile.token_epoch ?? 0)) return buildGuestContext(ipAddress);
+
     const roleCode = roleCodeOf(profile);
     const access = accessForRole(roleCode);
     return {
@@ -166,12 +179,16 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
       allowedPages: access.allowedPages,
       allowedModules: access.allowedModules,
       capabilities: access.capabilities,
+      // A Velura-signed token is only issued by a password/OTP sign-in.
+      authMethods: ["password"],
       accessToken: token,
       ipAddress
     };
   }
 
   if (!authUser?.id) return buildGuestContext(ipAddress);
+
+  const methods = authMethods(jwtClaims(token));
 
   let profile: UserProfile | null = null;
   try {
@@ -190,6 +207,7 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
       allowedPages: rolePages.member,
       allowedModules: roleModules.member,
       capabilities: capabilitiesForRole("member"),
+      authMethods: methods,
       accessToken: token,
       ipAddress
     };
@@ -206,6 +224,7 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
     allowedPages: access.allowedPages,
     allowedModules: access.allowedModules,
     capabilities: access.capabilities,
+    authMethods: methods,
     accessToken: token,
     ipAddress
   };

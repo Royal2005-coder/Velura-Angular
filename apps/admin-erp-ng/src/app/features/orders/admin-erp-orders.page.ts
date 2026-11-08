@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, DestroyRef, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink, type ParamMap } from '@angular/router';
-import { catchError, finalize, of } from 'rxjs';
+import { catchError, finalize, forkJoin, of, switchMap } from 'rxjs';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -55,6 +55,7 @@ import { AdminErpModal } from '../../shared/ui/admin-modal';
 import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
 import { AdminErpPagination } from '../../shared/ui/admin-pagination';
 import { AdminErpQrCode } from '../../shared/ui/admin-qr-code';
+import { AdminErpQrConfirm, QrConfirmFacts } from '../../shared/ui/admin-qr-confirm';
 import { AdminErpQrScan } from '../../shared/ui/admin-qr-scan';
 import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
@@ -64,6 +65,7 @@ type OrderModal =
   | { kind: 'action'; action: AdminOrderAction }
   | { kind: 'payment' }
   | { kind: 'cod_call'; order: AdminOrderRow }
+  | { kind: 'confirm_qr' }
   | null;
 
 const STALE_ORDER_CODES = new Set(['VERSION_CONFLICT', 'INVALID_ORDER_ACTION', 'ORDER_ALREADY_HANDED_OVER', 'PAYMENT_VERSION_CONFLICT']);
@@ -118,6 +120,7 @@ const STAGE_LABELS: Readonly<Record<string, string>> = {
     AdminErpStatusBadge,
     AdminErpIcon,
     AdminErpQrCode,
+    AdminErpQrConfirm,
     AdminErpQrScan,
     RouterLink,
   ],
@@ -184,6 +187,23 @@ export class AdminErpOrdersPage {
   readonly copiedPhone = signal(false);
   private copiedPhoneTimer: ReturnType<typeof setTimeout> | null = null;
   private detailRequestId = 0;
+  /**
+   * Fixed facts read from the order QR. Confirmation only opens once the operator scanned the
+   * parcel in their hands; the fields are never typed by hand (UAT: xác nhận đơn qua QR).
+   */
+  readonly confirmFacts = signal<QrConfirmFacts | null>(null);
+  readonly confirmPhoto = signal<File | null>(null);
+  readonly confirmVideo = signal<File | null>(null);
+  readonly confirmNote = signal('');
+  readonly confirmQuickNotes: readonly string[] = [
+    'Khách đã xác nhận đơn qua điện thoại',
+    'Đã đối chiếu đúng mã đơn và người nhận',
+    'Đơn đủ điều kiện xác nhận, giao đúng hẹn',
+  ];
+  /** Proof photo is mandatory; the optional video rides along only when the operator recorded it. */
+  readonly canSubmitConfirm = computed(
+    () => !!this.selected() && !!this.confirmFacts() && !!this.confirmPhoto() && !this.submitting(),
+  );
   readonly codDecision = signal<'' | 'confirm' | 'cancel' | 'no_answer' | 'invalid'>('');
   readonly codCancelReason = signal('customer_request');
   readonly codNote = signal('');
@@ -644,8 +664,8 @@ export class AdminErpOrdersPage {
       if (order) this.openCodCall(order);
       return;
     }
-    if (action.code === 'confirm_cod' && this.requiresCallConfirmation()) {
-      this.notice.set('Đơn COD từ 1.000.000đ cần ghi nhận cuộc gọi xác nhận thành công trước khi duyệt.');
+    if (action.code === 'confirm_cod') {
+      this.openConfirmQr();
       return;
     }
     this.modal.set({ kind: 'action', action });
@@ -661,6 +681,105 @@ export class AdminErpOrdersPage {
       trackingUrl: this.prefill().trackingUrl,
     });
     this.shipmentUrlEdited.set(false);
+  }
+
+  /**
+   * Opens the QR-first order confirmation: scan the parcel, attach proof, confirm.
+   *
+   * Nothing about the order is typed here — code, URL, carrier, shipper and time all come from
+   * the label, so the confirmation always matches the parcel the operator is holding.
+   */
+  openConfirmQr(callAlreadyStored = false): void {
+    if (!this.canMutate() || !this.selected()) return;
+    if (!callAlreadyStored && this.requiresCallConfirmation()) {
+      this.notice.set('Đơn COD từ 1.000.000đ cần ghi nhận cuộc gọi xác nhận thành công trước khi duyệt.');
+      return;
+    }
+    this.confirmFacts.set(null);
+    this.confirmPhoto.set(null);
+    this.confirmVideo.set(null);
+    this.confirmNote.set('');
+    this.actionError.set(null);
+    this.modal.set({ kind: 'confirm_qr' });
+  }
+
+  onConfirmFacts(facts: QrConfirmFacts | null): void {
+    this.confirmFacts.set(facts);
+  }
+
+  /** Proof photo of the confirmed parcel; images only, because it is the audit evidence. */
+  onConfirmPhoto(event: Event): void {
+    const picker = event.target as HTMLInputElement;
+    const file = Array.from(picker.files || []).find((item) => item.type.startsWith('image/')) || null;
+    picker.value = '';
+    this.confirmPhoto.set(file);
+    this.actionError.set(null);
+  }
+
+  /** Optional clip; the API stores it as evidence of the same stage. */
+  onConfirmVideo(event: Event): void {
+    const picker = event.target as HTMLInputElement;
+    const file = Array.from(picker.files || []).find(
+      (item) => ['video/mp4', 'video/webm'].includes(item.type) && item.size <= 50 * 1024 * 1024,
+    ) || null;
+    picker.value = '';
+    this.confirmVideo.set(file);
+  }
+
+  onConfirmNote(event: Event): void {
+    this.confirmNote.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  setConfirmQuickNote(text: string): void {
+    this.confirmNote.set(text);
+  }
+
+  /**
+   * Uploads the mandatory proof (and the optional clip), then confirms the order in one step.
+   * The stored note carries the scanned facts so the audit row proves which parcel was checked.
+   */
+  submitQrConfirm(): void {
+    const order = this.selected();
+    const facts = this.confirmFacts();
+    const photo = this.confirmPhoto();
+    if (!order || !facts || !photo || this.submitting()) return;
+    if (this.requiresCallConfirmation()) {
+      this.actionError.set('Đơn COD từ 1.000.000đ bắt buộc ghi nhận cuộc gọi xác nhận thành công trước khi duyệt.');
+      return;
+    }
+    const typed = this.confirmNote().trim();
+    const trace = [facts.orderCode || order.order_code || order.order_id, facts.carrier, facts.trackingCode]
+      .filter(Boolean)
+      .join(' · ');
+    const note = `${typed || 'Xác nhận đơn sau khi quét QR trên phiếu.'}${trace ? ` [QR: ${trace}]` : ''}`;
+    const video = this.confirmVideo();
+    this.submitting.set(true);
+    this.actionError.set(null);
+    const uploads = [this.api.uploadOrderEvidence(order.order_id, photo, 'confirmed', note)];
+    if (video) {
+      uploads.push(this.api.uploadOrderEvidence(order.order_id, video, 'confirmed', note));
+    }
+    forkJoin(uploads)
+      .pipe(
+        switchMap((rows) => {
+          this.selected.update((current) =>
+            current ? { ...current, evidence: [...rows, ...(current.evidence || [])] } : current,
+          );
+          return this.api.performOrderAction(order.order_id, 'confirm_cod', {
+            note,
+            expectedVersion: order.version,
+          });
+        }),
+      )
+      .subscribe({
+        next: (result) => {
+          this.applyResult(result);
+          this.notice.set(
+            `Đã quét QR ${facts.orderCode || order.order_code || ''} và xác nhận đơn ${order.order_code || order.order_id} kèm ảnh minh chứng.`,
+          );
+        },
+        error: (error: unknown) => this.handleActionError(order.order_id, error),
+      });
   }
 
   /**
@@ -813,20 +932,10 @@ export class AdminErpOrdersPage {
           }
           return;
         }
-        this.api
-          .performOrderAction(result.order.order_id, 'confirm_cod', { note, expectedVersion: result.order.version })
-          .subscribe({
-            next: (confirmed) => {
-              this.applyResult(confirmed);
-              this.notice.set('Đã lưu cuộc gọi và xác nhận đơn trong cùng một bước.');
-            },
-            error: (error: unknown) => {
-              this.applyResult(result);
-              this.notice.set(
-                `Đã lưu kết quả cuộc gọi, nhưng xác nhận đơn chưa thành công: ${adminErrorMessage(error)} Bấm "Xác nhận đơn" để đi tiếp.`,
-              );
-            },
-          });
+        // Confirmation itself always goes through the parcel QR; the call only unlocks it.
+        this.applyResult(result);
+        this.openConfirmQr(true);
+        this.notice.set('Đã lưu kết quả cuộc gọi. Quét QR trên phiếu đơn để xác nhận đơn kèm ảnh minh chứng.');
       },
       error: (error: unknown) => this.handleActionError(order.order_id, error),
     });

@@ -53,6 +53,32 @@ test("password changes require twelve characters and call the typed API", async 
   assert.match(server, /change-password/);
 });
 
+test("password changes exist only for password-grant sessions, never Google SSO", async () => {
+  const [server, rbac, erpShell, erpWelcome, erpRoutes, erpSession, adminWelcome, adminRoutes, adminGuard] = await Promise.all([
+    source("apps/api/src/server.ts"),
+    source("apps/api/src/rbac.ts"),
+    source("apps/admin-erp-ng/src/app/layout/admin-erp-shell.html"),
+    source("apps/admin-erp-ng/src/app/features/auth/auth-welcome.page.ts"),
+    source("apps/admin-erp-ng/src/app/app.routes.ts"),
+    source("apps/admin-erp-ng/src/app/core/admin-erp-session.service.ts"),
+    source("apps/admin-ng/src/app/features/login/admin-welcome.page.html"),
+    source("apps/admin-ng/src/app/app.routes.ts"),
+    source("apps/admin-ng/src/app/core/admin-auth.guard.ts")
+  ]);
+  assert.match(server, /PASSWORD_LOGIN_REQUIRED/);
+  assert.match(server, /authMethods\?\.includes\("password"\)/);
+  assert.match(server, /passwordLogin: context\.authMethods\?\.includes\("password"\) === true/);
+  assert.match(rbac, /jwtClaims\(token\)/);
+  assert.match(rbac, /authMethods: \["password"\]/);
+  assert.match(erpRoutes, /canActivate: \[adminErpPasswordGuard\]/);
+  assert.match(erpSession, /passwordLogin: context\.passwordLogin === true/);
+  assert.match(adminRoutes, /canActivate: \[adminPasswordGuard\]/);
+  assert.match(adminGuard, /passwordLogin/);
+  for (const template of [erpShell, erpWelcome, adminWelcome]) {
+    assert.match(template, /passwordLogin/);
+  }
+});
+
 test("active seed directory contains no privilege hotfix SQL", async () => {
   const seedDirectory = path.join(ROOT, "database", "seed");
   const entries = await readdir(seedDirectory);
@@ -152,7 +178,7 @@ test("customer member flows require a real auth session", async () => {
     source("apps/user-ng/src/app/core/interceptors/auth.interceptor.ts"),
     source("apps/user-ng/src/app/core/services/wishlist.store.ts")
   ]);
-  assert.match(rbac, /import \{ verifyJwt \} from "\.\/auth-helper\.js"/);
+  assert.match(rbac, /import \{[^}]*verifyJwt[^}]*\} from "\.\/auth-helper\.js"/);
   assert.match(rbac, /const decoded = verifyJwt\(token\)/);
   assert.match(interceptor, /Authorization/);
   assert.match(wishlist, /\/api\/user\/wishlist/);

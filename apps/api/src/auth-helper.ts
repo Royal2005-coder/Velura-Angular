@@ -81,3 +81,19 @@ export function verifyJwt(token: string): Record<string, unknown> | null {
     return null;
   }
 }
+
+/**
+ * Read claims from a token the identity provider already accepted. Signature
+ * verification stays with that provider (`getAuthUser`); never use this on
+ * input whose validity has not been established.
+ */
+export function jwtClaims(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const claims = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8")) as unknown;
+    return claims && typeof claims === "object" ? claims as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}

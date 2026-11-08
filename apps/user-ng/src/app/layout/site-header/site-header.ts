@@ -3,6 +3,7 @@ import { Component, DestroyRef, ElementRef, HostListener, computed, effect, inje
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import type { ProductSummary } from '../../core/models/product.interface';
+import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { AiEngineService } from '../../core/services/ai-engine.service';
 import { CartStore } from '../../core/services/cart.store';
@@ -31,6 +32,7 @@ const CATEGORY_QUERY_MAP: Record<string, string> = {
 })
 export class SiteHeader {
   private readonly auth = inject(AuthService);
+  private readonly api = inject(ApiService);
   private readonly aiEngine = inject(AiEngineService);
   private readonly cart = inject(CartStore);
   private readonly wishlist = inject(WishlistStore);
@@ -153,8 +155,18 @@ export class SiteHeader {
 
   /**
    * Signs the member out and returns header to guest actions.
+   *
+   * Gọi API thu hồi token trước khi xoá khỏi trình duyệt; mất mạng vẫn phải đăng xuất cục bộ
+   * để người dùng không bị kẹt trong một phiên họ đã chủ động thoát.
    */
   logout(): void {
+    this.api.logout().subscribe({
+      next: () => this.finishLogout(),
+      error: () => this.finishLogout(),
+    });
+  }
+
+  private finishLogout(): void {
     this.auth.signOut();
     void this.router.navigateByUrl('/');
   }

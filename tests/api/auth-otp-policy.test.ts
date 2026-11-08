@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { OTP_TTL_MS } from "../../apps/api/src/user/otp-policy.js";
+import { OTP_MAX_ATTEMPTS, OTP_TTL_MS, nextOtpAttemptFailure } from "../../apps/api/src/user/otp-policy.js";
 import { CheckoutOtpService } from "../../apps/api/src/user/checkout-service.js";
 import { signinPhoneFilter } from "../../apps/api/src/user/auth.js";
 
@@ -13,6 +13,19 @@ test("AUTH-08: OTP lives exactly 5 minutes (299s ok, 301s expired)", () => {
   service.issue(contact, now);
   assert.doesNotThrow(() => service.verify("0912345678", "123456", now + 299_000));
   assert.throws(() => service.verify("0912345678", "123456", now + 301_000), /hết hạn/);
+});
+
+test("UAT #747: wrong OTP attempts hit a hard cap and destroy the current code", () => {
+  let attemptCount = 0;
+  for (let attempt = 1; attempt < OTP_MAX_ATTEMPTS; attempt += 1) {
+    const state = nextOtpAttemptFailure(attemptCount);
+    assert.equal(state.blocked, false);
+    assert.equal(state.attemptCount, attempt);
+    attemptCount = state.attemptCount;
+  }
+  assert.deepEqual(nextOtpAttemptFailure(attemptCount), { attemptCount: 0, blocked: true });
+  // A new code starts from a clean counter, and stale/garbage counters cannot skip the cap.
+  assert.deepEqual(nextOtpAttemptFailure("unexpected"), { attemptCount: 1, blocked: false });
 });
 
 test("AUTH-02: phone sign-in treats spaces, +84 and 84 as the same number", () => {

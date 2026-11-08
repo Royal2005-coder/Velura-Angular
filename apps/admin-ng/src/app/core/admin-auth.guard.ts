@@ -1,4 +1,5 @@
 import { inject } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { CanActivateFn, Router } from '@angular/router';
 import { catchError, map, of } from 'rxjs';
 import { AdminApiService } from './admin-api.service';
@@ -129,6 +130,32 @@ export const adminSessionGuard: CanActivateFn = () => {
     catchError(() => {
       session.clear();
       return of(router.createUrlTree(['/login']));
+    }),
+  );
+};
+
+/**
+ * Refreshes `/api/auth/me` and allows the password page only for a password
+ * grant; Google SSO sessions enter through their own email identity.
+ */
+export const adminPasswordGuard: CanActivateFn = () => {
+  const session = inject(AdminSessionService);
+  const api = inject(AdminApiService);
+  const router = inject(Router);
+  if (!session.token()) {
+    return router.createUrlTree(['/login']);
+  }
+  return api.me().pipe(
+    map((context) => session.applyAuthContext(context).passwordLogin
+      ? true
+      : router.createUrlTree(['/welcome'])),
+    catchError((error: unknown) => {
+      if (error instanceof HttpErrorResponse && (error.status === 401 || error.status === 403)) {
+        session.clear();
+        return of(router.createUrlTree(['/login']));
+      }
+      // A network or 5xx blip must not sign the operator out of a valid session.
+      return of(session.session()?.passwordLogin === true ? true : router.createUrlTree(['/welcome']));
     }),
   );
 };

@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { hashPassword, signJwt, verifyJwt } from "../auth-helper.js";
-import { HttpError } from "../http.js";
+import { HttpError, clientIpFromHeaders } from "../http.js";
 import { asJsonObject, asString, type AuthContext, type JsonObject } from "../types.js";
 import type { CheckoutAddressInput, CheckoutRepository } from "./checkout-repository.js";
 import { buildCartLines, loadCatalog, loadCategoryTree } from "./cart-catalog.js";
@@ -508,11 +508,13 @@ export class CheckoutService {
   }
 }
 
-/** Lấy IP gốc từ proxy đầu tiên hoặc socket để áp dụng chống spam OTP. */
+/**
+ * Lấy IP gốc cho chống spam OTP. Ưu tiên `cf-connecting-ip` do edge ghi đè;
+ * nếu không có thì lấy hop cuối của `x-forwarded-for` (proxy gần nhất thêm vào),
+ * không bao giờ tin hop đầu do client tự gửi (UAT #745).
+ */
 export function checkoutClientIp(headers: Record<string, unknown>, remoteAddress?: string): string {
-  const forwarded = headers["x-forwarded-for"];
-  const first = Array.isArray(forwarded) ? forwarded[0] : String(forwarded ?? "").split(",")[0];
-  return String(first || remoteAddress || "unknown").trim();
+  return clientIpFromHeaders(headers, remoteAddress) || "unknown";
 }
 
 /**

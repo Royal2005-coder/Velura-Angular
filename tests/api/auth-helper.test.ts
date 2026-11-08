@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { hashPassword, verifyPassword } from "../../apps/api/src/auth-helper.js";
+import { hashPassword, verifyPassword, jwtClaims } from "../../apps/api/src/auth-helper.js";
 
 test("hashPassword produces a salted scrypt hash, not the legacy unsalted digest", () => {
   const hash = hashPassword("Correct-Horse-Battery-9!");
@@ -30,4 +30,13 @@ test("verifyPassword rejects malformed input without throwing", () => {
   assert.equal(verifyPassword("", "scrypt$abc$def"), false);
   assert.equal(verifyPassword("pw", ""), false);
   assert.equal(verifyPassword("pw", "scrypt$onlyonepart"), false);
+});
+
+test("jwtClaims reads the amr of a provider-verified token without verifying a local signature", () => {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const token = `${encode({ alg: "HS256" })}.${encode({ amr: [{ method: "password", timestamp: 1 }], session_id: "s" })}.sig`;
+  const claims = jwtClaims(token);
+  assert.deepEqual(claims?.amr, [{ method: "password", timestamp: 1 }]);
+  assert.equal(jwtClaims("not-a-jwt"), null);
+  assert.equal(jwtClaims("a.b"), null);
 });

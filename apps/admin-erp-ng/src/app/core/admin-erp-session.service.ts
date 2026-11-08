@@ -28,6 +28,10 @@ export interface AdminAuthMe {
   allowedPages?: string[];
   allowedModules?: string[];
   capabilities?: Record<string, string[]>;
+  /** Session sign-in methods from the provider token (`password`, `oauth`, …). */
+  authMethods?: string[];
+  /** True only for a password grant; Google SSO sessions cannot change a password. */
+  passwordLogin?: boolean;
 }
 
 export interface AdminErpSession {
@@ -44,6 +48,8 @@ export interface AdminErpSession {
   allowedPages: string[];
   allowedModules: string[];
   capabilities: AdminErpCapabilities;
+  /** Google SSO sessions never offer password changes; only a password grant does. */
+  passwordLogin: boolean;
 }
 
 /**
@@ -225,6 +231,7 @@ export class AdminErpSessionService {
           : ['welcome'],
       allowedModules: Array.isArray(context.allowedModules) ? context.allowedModules : [],
       capabilities: normalizeCapabilities(context.capabilities),
+      passwordLogin: context.passwordLogin === true,
     };
   }
 

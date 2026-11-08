@@ -1,5 +1,5 @@
 import { HttpError } from "../http.js";
-
+import type { QueryAttributes } from "../visual-search/visual-search-types.js";
 /** One bounded customer utterance; the worker additionally caps encoded text at 500 characters. */
 export const MAX_QUERY_CHARS = 200;
 /** Reject non-text, control characters and punctuation-only queries before any inference. */
@@ -65,4 +65,35 @@ export function fashionQuery(text: string): string {
   let value = text.toLowerCase().replace(/[-_/]+/g, " ").replace(/\s+/g, " ").trim();
   for (const [pattern, replacement] of ENTRIES) value = value.replace(pattern, replacement);
   return value.replace(/\s+/g, " ").trim();
+}
+
+/** Extract explicit fashion attributes (category, color, sleeve style) from text query. */
+export function extractQueryAttributes(text: string): QueryAttributes {
+  const norm = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
+  const attrs: QueryAttributes = {};
+
+  if (/\b(dam|vay|chan vay)\b/.test(norm)) attrs.category = "dam-vay";
+  else if (/\b(ao khoac|blazer|vest|hoodie|cardigan)\b/.test(norm)) attrs.category = "ao-khoac";
+  else if (/\b(ao|so mi|thun|croptop|blouse|len)\b/.test(norm)) attrs.category = "ao";
+  else if (/\b(quan|jean|jeans|tay|short|kaki)\b/.test(norm)) attrs.category = "quan";
+  else if (/\b(set do|bo do)\b/.test(norm)) attrs.category = "set-do";
+  else if (/\b(giay|dep|sandal)\b/.test(norm)) attrs.category = "giay-dep";
+  else if (/\b(tui|tui xach|khan|that lung)\b/.test(norm)) attrs.category = "phu-kien";
+
+  if (/(?<!\p{L})đỏ(?!\p{L})/iu.test(text) || /\b(red|mau do|sac do)\b/i.test(norm)) attrs.color = "đỏ";
+  else if (/\b(den|black)\b/.test(norm)) attrs.color = "đen";
+  else if (/\b(trang|white)\b/.test(norm)) attrs.color = "trắng";
+  else if (/\b(xanh duong|blue|navy)\b/.test(norm)) attrs.color = "xanh dương";
+  else if (/\b(xanh la|green)\b/.test(norm)) attrs.color = "xanh lá";
+  else if (/\b(vang|yellow)\b/.test(norm)) attrs.color = "vàng";
+  else if (/\b(hong|pink)\b/.test(norm)) attrs.color = "hồng";
+  else if (/\b(be|kem|beige|cream)\b/.test(norm)) attrs.color = "be";
+  else if (/\b(nau|brown)\b/.test(norm)) attrs.color = "nâu";
+  else if (/\b(xam|gray|grey)\b/.test(norm)) attrs.color = "xám";
+
+  if (/\b(tay dai|dai tay|long sleeve)\b/.test(norm)) attrs.sleeve = "tay dài";
+  else if (/\b(tay ngan|ngan tay|short sleeve)\b/.test(norm)) attrs.sleeve = "tay ngắn";
+  else if (/\b(khong tay|sat nach|sleeveless)\b/.test(norm)) attrs.sleeve = "không tay";
+
+  return attrs;
 }

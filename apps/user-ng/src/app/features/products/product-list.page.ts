@@ -314,6 +314,26 @@ export class ProductListPage implements AfterViewInit {
     const specials = this.specials();
     const shapes = this.selectedShapes().map((shape) => shape.toLowerCase());
     const sort = this.sort();
+    const GARMENT_TERMS: Record<string, string[]> = {
+      'dam-vay': ['vay', 'dam', 'chan vay', 'dam da hoi', 'dam tiec'],
+      'ao': ['ao', 'ao so mi', 'ao thun', 'ao kieu', 'ao len', 'ao croptop', 'croptop', 'blouse'],
+      'quan': ['quan', 'quan jean', 'quan jeans', 'quan tay', 'quan short', 'quan ong rong'],
+      'ao-khoac': ['ao khoac', 'blazer', 'vest', 'hoodie', 'cardigan'],
+      'set-do': ['set do', 'bo do'],
+      'giay-dep': ['giay', 'dep', 'giay cao got', 'giay the thao', 'sandal', 'sandals'],
+      'phu-kien': ['phu kien', 'tui', 'tui xach', 'khan', 'that lung', 'non', 'mu', 'kinh', 'vong tay']
+    };
+
+    let queryTargetCategory: string | null = null;
+    if (normQuery) {
+      for (const [catSlug, terms] of Object.entries(GARMENT_TERMS)) {
+        if (terms.some((term) => normQuery === term || normQuery.startsWith(term + ' ') || normQuery.endsWith(' ' + term) || normQuery.includes(' ' + term + ' '))) {
+          queryTargetCategory = catSlug;
+          break;
+        }
+      }
+    }
+
     const tokens = query.split(/\s+/).filter((token) => token.length > 0);
     const normTokens = normQuery.split(/\s+/).filter((token) => token.length > 0);
 
@@ -396,13 +416,40 @@ export class ProductListPage implements AfterViewInit {
             score += 3;
           }
         }
-        // Every typed word must appear somewhere on the product, so a renamed product is not
-        // found through a word (or category) that only its previous name shared with the query.
-        const everyField = [
-          prodName, prodSku, prodCat, prodSlug, prodBrand, prodCollection, seoTitle, seoDesc, styleTags, occasions, prodDesc,
+        // Primary fields: name, sku, category, slug, brand, collection, seoTitle, styleTags, occasions
+        const primaryField = [
+          prodName, prodSku, prodCat, prodSlug, prodBrand, prodCollection, seoTitle, styleTags, occasions,
         ].join(' ');
+        const everyField = [primaryField, seoDesc, prodDesc].join(' ');
+
         if (!matchesAllSearchWords(everyField, query)) {
           score = 0;
+        }
+
+        // Category Isolation: If query targets a specific category (e.g. 'dam-vay'), exclude products from other categories that only match via description
+        if (score > 0 && queryTargetCategory) {
+          const prodCatSlug = normalizeSearchText(product.category_slug || product.category_name);
+          const isSameCategory = prodCatSlug === queryTargetCategory || prodCatSlug.includes(queryTargetCategory);
+          const nameHasCategoryTerm = (GARMENT_TERMS[queryTargetCategory] || []).some((term) =>
+            normName.includes(term)
+          );
+          if (!isSameCategory && !nameHasCategoryTerm) {
+            score = 0;
+          }
+        }
+
+        // Color Attribute Guard: If query explicitly requests a color like "đỏ", require that the product actually has that color
+        if (score > 0 && /(?<!\p{L})đỏ(?!\p{L})/iu.test(query)) {
+          const hasRedInName = /(?<!\p{L})đỏ(?!\p{L})/iu.test(prodName);
+          const hasRedInVariants = (product.variants || []).some((v) =>
+            /(?<!\p{L})đỏ(?!\p{L})/iu.test(v.color || '')
+          );
+          const hasRedInImageColors = Object.values(product.image_colors || {}).some((c) =>
+            /(?<!\p{L})đỏ(?!\p{L})/iu.test(c || '')
+          );
+          if (!hasRedInName && !hasRedInVariants && !hasRedInImageColors) {
+            score = 0;
+          }
         }
       }
       return { product, score };
@@ -454,8 +501,15 @@ export class ProductListPage implements AfterViewInit {
       const productB = b.product;
       const priceA = productA.sale_price || productA.base_price || 0;
       const priceB = productB.sale_price || productB.base_price || 0;
-      if (query && sort === 'newest' && b.score !== a.score) {
-        return b.score - a.score;
+      if (query) {
+        const tierA = a.score >= 20 ? 1 : 2;
+        const tierB = b.score >= 20 ? 1 : 2;
+        if (tierA !== tierB) {
+          return tierA - tierB;
+        }
+        if (sort === 'newest' && b.score !== a.score) {
+          return b.score - a.score;
+        }
       }
       if (sort === 'price-asc') {
         return priceA - priceB;

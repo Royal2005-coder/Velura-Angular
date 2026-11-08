@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import type { ProductSummary } from '../../core/models/product.interface';
 import { AuthService } from '../../core/services/auth.service';
+import { AiEngineService } from '../../core/services/ai-engine.service';
 import { CartStore } from '../../core/services/cart.store';
 import { CatalogService } from '../../core/services/catalog.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
@@ -30,6 +31,7 @@ const CATEGORY_QUERY_MAP: Record<string, string> = {
 })
 export class SiteHeader {
   private readonly auth = inject(AuthService);
+  private readonly aiEngine = inject(AiEngineService);
   private readonly cart = inject(CartStore);
   private readonly wishlist = inject(WishlistStore);
   readonly notifications = inject(NotificationsService);
@@ -60,6 +62,8 @@ export class SiteHeader {
   // Search dropdown states
   readonly searchOpen = signal(false);
   readonly searchQuery = signal('');
+  /** Semantic search is offered only while the server reports the worker text task ready. */
+  readonly aiTextSearchReady = signal(false);
   readonly allProducts = signal<ProductSummary[]>([]);
   readonly recentlyViewed = signal<ProductSummary[]>([]);
 
@@ -120,6 +124,13 @@ export class SiteHeader {
       this.auth.session();
       this.avatarImgError.set(false);
     });
+    this.aiEngine
+      .capabilities()
+      .pipe(takeUntilDestroyed(this.destroy))
+      .subscribe({
+        next: (capabilities) => this.aiTextSearchReady.set(capabilities.ai_search?.text === true),
+        error: () => this.aiTextSearchReady.set(false),
+      });
   }
 
   /** Refreshes suggestions when search opens so an admin rename does not remain cached in the header. */

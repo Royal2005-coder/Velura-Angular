@@ -105,7 +105,7 @@
             </div>
             <div class="results">
               @for (product of response.matches; track product.product_id) {
-                <div class="product-result-card">
+                <div class="product-result-card" (click)="onProductClick($event)">
                   <app-product-card [product]="product" />
                   <div class="product-result-meta">
                     <span class="similarity-chip" [class.similarity-chip--strong]="product.tier === 'strong'">
@@ -128,7 +128,7 @@
             @if (response.featured.length) {
               <div class="results">
                 @for (product of response.featured; track product.product_id) {
-                  <div class="product-result-card">
+                  <div class="product-result-card" (click)="onProductClick($event)">
                     <app-product-card [product]="product" />
                     @if (product.is_combo || product.category_slug === 'set-do') {
                       <div class="product-result-meta"><span class="combo-badge">Set Combo</span></div>

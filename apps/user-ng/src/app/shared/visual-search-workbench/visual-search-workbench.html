@@ -101,11 +101,11 @@
           <div class="results-section">
             <div class="results-header">
               <h3>{{ matchesTitle(response) }}{{ response.attributes.category ? ' · ' + categoryLabel(response.attributes.category) : '' }} ({{ response.matches.length }})</h3>
-              <button type="button" class="btn btn--outline vs-btn-sm" (click)="clearSource()">Tìm ảnh khác</button>
+              <button type="button" class="btn btn--outline vs-btn-sm" (click)="resetSearch()">Tìm ảnh khác</button>
             </div>
             <div class="results">
               @for (product of response.matches; track product.product_id) {
-                <div class="product-result-card" (click)="onProductClick($event)">
+                <div class="product-result-card" (click)="onProductClick()">
                   <app-product-card [product]="product" />
                   <div class="product-result-meta">
                     <span class="similarity-chip" [class.similarity-chip--strong]="product.tier === 'strong'">
@@ -123,12 +123,12 @@
           <div class="vs-category-fallback">
             <div class="results-header">
               <div class="vs-category-fallback__title">{{ fallbackSentence(response) }}</div>
-              <button type="button" class="btn btn--outline vs-btn-sm" (click)="clearSource()">Tìm ảnh khác</button>
+              <button type="button" class="btn btn--outline vs-btn-sm" (click)="resetSearch()">Tìm ảnh khác</button>
             </div>
             @if (response.featured.length) {
               <div class="results">
                 @for (product of response.featured; track product.product_id) {
-                  <div class="product-result-card" (click)="onProductClick($event)">
+                  <div class="product-result-card" (click)="onProductClick()">
                     <app-product-card [product]="product" />
                     @if (product.is_combo || product.category_slug === 'set-do') {
                       <div class="product-result-meta"><span class="combo-badge">Set Combo</span></div>

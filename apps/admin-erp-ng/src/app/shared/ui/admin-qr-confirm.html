@@ -1,0 +1,78 @@
+<section class="qr-confirm" [class.qr-confirm--verified]="current()">
+  @if (current(); as facts) {
+    <div class="qr-confirm__banner">
+      <span class="qr-confirm__check" aria-hidden="true">✓</span>
+      <div>
+        <strong>Đã đọc thông tin từ mã QR</strong>
+        <span>Các trường bên dưới do mã in trên phiếu quyết định — không sửa tay được.</span>
+      </div>
+      <button class="erp-btn erp-btn--sm" type="button" (click)="openScan()">Quét lại mã khác</button>
+    </div>
+    <dl class="qr-confirm__grid">
+      @if (kind() === 'return') {
+        <div><dt>Mã phiếu</dt><dd class="is-mono">{{ facts.returnCode || recordCode() || '—' }}</dd></div>
+        @if (orderCode()) {
+          <div><dt>Đơn hàng</dt><dd class="is-mono">{{ orderCode() }}</dd></div>
+        }
+      } @else {
+        <div><dt>Mã đơn</dt><dd class="is-mono">{{ facts.orderCode || recordCode() || '—' }}</dd></div>
+      }
+      @if (recordHref()) {
+        <div class="qr-confirm__wide">
+          <dt>URL đơn</dt>
+          <dd><a [href]="recordHref()" target="_blank" rel="noopener">{{ recordHref() }}</a></dd>
+        </div>
+      }
+      <div><dt>Đơn vị vận chuyển</dt><dd>{{ facts.carrier || '—' }}</dd></div>
+      <div><dt>Mã vận đơn</dt><dd class="is-mono">{{ facts.trackingCode || '—' }}</dd></div>
+      <div>
+        <dt>Người giao</dt>
+        <dd>
+          {{ facts.shipperName || '—' }}
+          @if (facts.shipperPhone) { <span class="qr-confirm__muted">· {{ facts.shipperPhone }}</span> }
+        </dd>
+      </div>
+      <div><dt>Thời gian quét</dt><dd>{{ scannedAtLabel(facts.scannedAt) }}</dd></div>
+    </dl>
+  } @else {
+    <div class="qr-confirm__hero">
+      <span class="qr-confirm__glyph" aria-hidden="true">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3" />
+          <path d="M7 7h3v3H7zM14 7h3v3h-3zM7 14h3v3H7zM14 14h1.5v1.5H14zM17 14h.01M14 17h3v.01" />
+        </svg>
+      </span>
+      <div class="qr-confirm__copy">
+        <strong>{{ heroTitle() }}</strong>
+        <p>{{ intro() || heroIntro() }}</p>
+        <ol>
+          @for (step of steps(); track step) {
+            <li>{{ step }}</li>
+          }
+        </ol>
+      </div>
+      <button class="erp-btn erp-btn--primary erp-btn--lg qr-confirm__cta" type="button" (click)="openScan()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3" />
+          <path d="M7 12h10" />
+        </svg>
+        Mở quét QR
+      </button>
+    </div>
+  }
+
+  @if (error()) {
+    <p class="qr-confirm__error" role="alert">{{ error() }}</p>
+  }
+</section>
+
+<app-erp-qr-scan
+  [open]="scanOpen()"
+  [title]="scanTitle()"
+  [hint]="scanHint()"
+  [steps]="steps()"
+  [sample]="sample()"
+  [sampleCaption]="sampleCaption()"
+  (scanned)="applyScan($event)"
+  (closed)="scanOpen.set(false)"
+/>

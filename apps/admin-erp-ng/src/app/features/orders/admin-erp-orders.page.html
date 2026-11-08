@@ -469,13 +469,66 @@
             Chỉ lưu kết quả
           </button>
           <button class="erp-btn erp-btn--primary" type="button" (click)="submitCodCall($event, true)" [disabled]="submitting() || detailLoading()">
-            Lưu &amp; xác nhận đơn
+            Lưu &amp; quét QR xác nhận
           </button>
         } @else {
           <button class="erp-btn erp-btn--primary" type="button" (click)="submitCodCall($event)" [disabled]="submitting() || detailLoading()">
             Lưu kết quả
           </button>
         }
+      </div>
+    </div>
+  }
+</app-erp-modal>
+
+<app-erp-modal [open]="modal()?.kind === 'confirm_qr'" title="Xác nhận đơn hàng bằng QR" size="md" (closed)="closeModal()">
+  @if (selected(); as order) {
+    <div class="order-form">
+      <app-erp-qr-confirm
+        kind="order"
+        [open]="modal()?.kind === 'confirm_qr'"
+        [recordId]="order.order_id"
+        [recordCode]="order.order_code || ''"
+        [recordHref]="orderQr(order)"
+        [knownCarrier]="order.carrier || ''"
+        [knownTracking]="order.tracking_code || ''"
+        [sample]="scanSample()"
+        [sampleCaption]="scanSampleCaption()"
+        (facts)="onConfirmFacts($event)"
+      />
+
+      <label class="erp-field">
+        <span>Ảnh minh chứng xác nhận (bắt buộc)</span>
+        <input class="erp-input" type="file" accept="image/*" (change)="onConfirmPhoto($event)" />
+        <small>{{ confirmPhoto()?.name || 'Chụp ảnh kiện hàng / phiếu đơn đã đối chiếu.' }}</small>
+      </label>
+      <label class="erp-field">
+        <span>Video minh chứng (không bắt buộc)</span>
+        <input class="erp-input" type="file" accept="video/mp4,video/webm" (change)="onConfirmVideo($event)" />
+        <small>{{ confirmVideo()?.name || 'Tối đa 50 MB, chỉ khi cần ghi lại quá trình đóng gói.' }}</small>
+      </label>
+
+      <div class="cod-quick">
+        @for (note of confirmQuickNotes; track note) {
+          <button class="erp-chip" type="button" (click)="setConfirmQuickNote(note)">{{ note }}</button>
+        }
+      </div>
+      <label class="erp-field">
+        <span>Ghi chú xác nhận (không bắt buộc)</span>
+        <textarea class="erp-input" rows="3" [value]="confirmNote()" (input)="onConfirmNote($event)"></textarea>
+      </label>
+
+      @if (!confirmFacts()) {
+        <p class="erp-hint">Chưa quét mã nên chưa xác nhận được. Thông tin đơn chỉ hiện sau khi quét QR.</p>
+      }
+      @if (actionError()) {
+        <p class="erp-error" role="alert">{{ actionError() }}</p>
+      }
+      <div class="order-form__actions">
+        <button class="erp-btn" type="button" (click)="closeModal()" [disabled]="submitting()">Hủy</button>
+        <button class="erp-btn erp-btn--primary" type="button" (click)="submitQrConfirm()" [disabled]="!canSubmitConfirm()">
+          {{ submitting() ? 'Đang xác nhận…' : 'Xác nhận đơn bằng QR' }}
+        </button>
       </div>
     </div>
   }

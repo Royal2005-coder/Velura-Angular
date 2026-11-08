@@ -9,7 +9,7 @@ import threading
 import time
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
-from production_protocol import VERSION, TASKS, binding, decode, encoded
+from production_protocol import VERSION, TASKS, MAX_TEXT_CHARS, binding, decode, encoded
 from production_quality import CpuQuality
 
 MAX_BODY = 17 * 1024 * 1024
@@ -173,7 +173,9 @@ def create_app(loader=None, key: str | None = None) -> FastAPI:
             async with request.form(max_files=2, max_fields=8, max_part_size=2048) as form:
                 envelope = binding(str(form.get("binding", "")), task)
                 allowed = {"binding", "person_check", "file"} if task == "image_quality" else {"binding", "file"}
-                if task == "virtual_try_on":
+                if task == "text_embedding":
+                    allowed = {"binding", "text"}
+                elif task == "virtual_try_on":
                     allowed = {"binding", "person", "garment", "category", "garment_photo_type"}
                 elif task == "product_image_enhance":
                     allowed = {"binding", "file", "background", "brightness", "sharpness"}
@@ -187,8 +189,15 @@ def create_app(loader=None, key: str | None = None) -> FastAPI:
                     payload = await upload.read(maximum + 1)
                     return await asyncio.to_thread(decode, payload, maximum)
 
-                first = await image("person" if task == "virtual_try_on" else "file", 8 * 1024 * 1024)
-                second = await image("garment", 5 * 1024 * 1024) if task == "virtual_try_on" else None
+                text = ""
+                if task == "text_embedding":
+                    text = str(form.get("text", "")).strip()
+                    if not text or len(text) > MAX_TEXT_CHARS:
+                        raise ValueError("TEXT_LENGTH")
+                    first = second = None
+                else:
+                    first = await image("person" if task == "virtual_try_on" else "file", 8 * 1024 * 1024)
+                    second = await image("garment", 5 * 1024 * 1024) if task == "virtual_try_on" else None
                 category = str(form.get("category", ""))
                 photo_type = str(form.get("garment_photo_type", ""))
                 background = str(form.get("background", "white"))
@@ -218,6 +227,9 @@ def create_app(loader=None, key: str | None = None) -> FastAPI:
             if task == "image_embedding":
                 return None, {"status": "success", "model": "openclip-vit-b32-laion2b", "dimensions": 512,
                               "embedding": models.embedding(first)}
+            if task == "text_embedding":
+                return None, {"status": "success", "model": "openclip-vit-b32-laion2b", "dimensions": 512,
+                              "embedding": models.text_embedding(text)}
             if task == "virtual_try_on_3d":
                 import reconstruction_3d
 
@@ -241,7 +253,8 @@ def create_app(loader=None, key: str | None = None) -> FastAPI:
 
         headers = {"X-AI-Binding": encoded(envelope), "Cache-Control": "no-store"}
         try:
-            runner = quality_executor if task == "image_quality" else executor
+            # CLIP text encoding is CPU-only inference; it must not queue behind a GPU try-on lease.
+            runner = quality_executor if task in ("image_quality", "text_embedding") else executor
             budget = THREE_D_DEADLINE_SECONDS if task == "virtual_try_on_3d" else DEADLINE_SECONDS
             payload, result = await runner.run(request, operation, budget=budget)
             if payload is None:

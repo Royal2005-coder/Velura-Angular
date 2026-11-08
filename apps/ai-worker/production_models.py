@@ -40,7 +40,7 @@ class ProductionModels:
                        "gpu_forward_verified": True, "smoke_verified": False,
                        "vton_model": "fashn-vton-1.5-maskless-flatlay", "embedding_model": "openclip-vit-b32-laion2b",
                        "dimensions": 512, "garment_photo_types": ["flat-lay"], "segmentation_free": True,
-                       "tasks": {task: True for task in ("image_quality", "image_embedding", "virtual_try_on", "product_image_enhance")}}
+                       "tasks": {task: True for task in ("image_quality", "image_embedding", "text_embedding", "virtual_try_on", "product_image_enhance")}}
 
     def quality(self, image, person: bool) -> dict:
         """Use measured decode/photometric gate and real pose count when requested."""
@@ -51,6 +51,25 @@ class ProductionModels:
         import torch
         with torch.inference_mode():
             vector = self.clip.encode_image(self.preprocess(image).unsqueeze(0))
+            norm = vector.norm(dim=-1, keepdim=True)
+            if not torch.isfinite(vector).all() or norm.item() <= 0:
+                raise ValueError("EMBEDDING_INVALID")
+            values = (vector / norm).float().squeeze(0).tolist()
+        if len(values) != 512:
+            raise ValueError("EMBEDDING_DIMENSIONS")
+        return values
+
+    def text_embedding(self, text: str) -> list[float]:
+        """Encode a search modifier into the same normalized 512-dim CLIP namespace as catalog photos.
+
+        CLIP's contrastive joint space (Radford et al. 2021) is what lets image+text
+        composition (CLARTEMIS, arXiv:2203.08101 lineage) score against image-only indexes.
+        """
+        import torch
+        import open_clip
+        tokens = open_clip.tokenize([text], context_length=77)
+        with torch.inference_mode():
+            vector = self.clip.encode_text(tokens)
             norm = vector.norm(dim=-1, keepdim=True)
             if not torch.isfinite(vector).all() or norm.item() <= 0:
                 raise ValueError("EMBEDDING_INVALID")

@@ -1,11 +1,13 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { BehaviorSubject, of, throwError } from 'rxjs';
-import { createStorefrontPage, sampleProduct, stubApiService } from '../../../testing/storefront-testing';
+import { HttpErrorResponse } from '@angular/common/http';
+import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
+import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
+import { createStorefrontPage, sampleProduct, stubApiService, stubVisualSearchModel } from '../../../testing/storefront-testing';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
+import { VisualSearchModel, type AiSearchResult } from '../../core/services/visual-search.service';
 import { ProductListPage } from './product-list.page';
 
 describe('ProductListPage', () => {
@@ -21,6 +23,7 @@ describe('ProductListPage', () => {
       { provide: ApiService, useValue: stubApiService() },
       { provide: AuthService, useValue: { isLoggedIn: signal(false) } },
       { provide: CatalogService, useValue: { getProducts } },
+      { provide: VisualSearchModel, useValue: stubVisualSearchModel() },
       { provide: ActivatedRoute, useValue: { queryParamMap: params } },
     ] });
     const page = TestBed.runInInjectionContext(() => new ProductListPage());
@@ -43,6 +46,7 @@ describe('ProductListPage', () => {
       { provide: ApiService, useValue: stubApiService() },
       { provide: AuthService, useValue: { isLoggedIn: signal(false) } },
       { provide: CatalogService, useValue: { getProducts } },
+      { provide: VisualSearchModel, useValue: stubVisualSearchModel() },
       { provide: ActivatedRoute, useValue: { queryParamMap: new BehaviorSubject(convertToParamMap({})) } },
     ] });
     const page = TestBed.runInInjectionContext(() => new ProductListPage());
@@ -120,5 +124,84 @@ describe('ProductListPage', () => {
     expect(page.filteredProducts().map((item) => item.product_id)).toEqual(['p1']);
     page.selectMaterial('Lanh');
     expect(page.productCount()).toBe(0);
+  });
+
+  it('runs CLIP semantic search for an ai=1 route and keeps the understood query visible', () => {
+    const params = new BehaviorSubject(convertToParamMap({ q: 'đầm đỏ dáng xòe', ai: '1' }));
+    const aiResult: AiSearchResult = {
+      mode: 'text', query_text: 'dress red flared',
+      attributes: { category: 'dam-vay', color: 'red', fit: null, material: null, style: null },
+      matches: [{ ...sampleProduct, similarity: 0.7, tier: 'strong' }],
+      featured: [], catalog_version: 'v1', personalized: false,
+    };
+    const textSearch = vi.fn().mockReturnValue(of(aiResult));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: ApiService, useValue: stubApiService() },
+      { provide: AuthService, useValue: { isLoggedIn: signal(false) } },
+      { provide: CatalogService, useValue: { getProducts: () => of([sampleProduct]) } },
+      { provide: VisualSearchModel, useValue: { ...stubVisualSearchModel(), textSearch } },
+      { provide: ActivatedRoute, useValue: { queryParamMap: params, snapshot: { queryParams: { q: 'đầm đỏ dáng xòe', ai: '1' } } } },
+    ] });
+    const page = TestBed.runInInjectionContext(() => new ProductListPage());
+    expect(page.aiRequested()).toBe(true);
+    expect(textSearch).toHaveBeenCalledTimes(1);
+    expect(textSearch.mock.calls[0][0]).toBe('đầm đỏ dáng xòe');
+    expect(page.aiSearchBusy()).toBe(false);
+    expect(page.aiQueryText()).toBe('dress red flared');
+    expect(page.imageMatches()).toEqual([sampleProduct.product_id]);
+    // The paraphrased query never keyword-matches the catalog; semantic matches must survive.
+    expect(page.productCount()).toBe(1);
+  });
+
+  it('shows an honest notice when the AI worker is unavailable and falls back to keyword results', () => {
+    const params = new BehaviorSubject(convertToParamMap({ q: 'linen', ai: '1' }));
+    const textSearch = vi.fn().mockReturnValue(throwError(() => new HttpErrorResponse({
+      status: 503, error: { error: { code: 'AI_SEARCH_EMBEDDER_UNAVAILABLE', message: 'Bộ mã hóa AI chưa sẵn sàng.' } },
+    })));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: ApiService, useValue: stubApiService() },
+      { provide: AuthService, useValue: { isLoggedIn: signal(false) } },
+      { provide: CatalogService, useValue: { getProducts: () => of([sampleProduct]) } },
+      { provide: VisualSearchModel, useValue: { ...stubVisualSearchModel(), textSearch } },
+      { provide: ActivatedRoute, useValue: { queryParamMap: params, snapshot: { queryParams: { q: 'linen', ai: '1' } } } },
+    ] });
+    const page = TestBed.runInInjectionContext(() => new ProductListPage());
+    expect(page.aiRequested()).toBe(true);
+    expect(page.aiSearchBusy()).toBe(false);
+    expect(page.aiSearchError()).toBe('Bộ mã hóa AI chưa sẵn sàng.');
+    expect(page.imageMatches()).toBeNull();
+    expect(page.productCount()).toBe(1);
+  });
+
+  it('cancels the server request and ignores a late result when AI mode is cleared', () => {
+    const params = new BehaviorSubject(convertToParamMap({ q: 'linen', ai: '1' }));
+    const pending = new Subject<AiSearchResult>();
+    const textSearch = vi.fn().mockReturnValue(pending);
+    const cancelAiSearch = vi.fn().mockReturnValue(of({}));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: ApiService, useValue: stubApiService() },
+      { provide: AuthService, useValue: { isLoggedIn: signal(false) } },
+      { provide: CatalogService, useValue: { getProducts: () => of([sampleProduct]) } },
+      { provide: VisualSearchModel, useValue: { ...stubVisualSearchModel(), textSearch, cancelAiSearch } },
+      { provide: ActivatedRoute, useValue: { queryParamMap: params, snapshot: { queryParams: { q: 'linen', ai: '1' } } } },
+    ] });
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const page = TestBed.runInInjectionContext(() => new ProductListPage());
+    expect(page.aiSearchBusy()).toBe(true);
+    page.clearAiSearch();
+    expect(cancelAiSearch).toHaveBeenCalledTimes(1);
+    expect(page.aiRequested()).toBe(false);
+    expect(page.aiSearchBusy()).toBe(false);
+    expect(page.imageMatches()).toBeNull();
+    pending.next({
+      mode: 'text', query_text: 'late',
+      attributes: { category: null, color: null, fit: null, material: null, style: null },
+      matches: [{ ...sampleProduct, similarity: 0.9 }], featured: [], catalog_version: 'v1', personalized: false,
+    });
+    expect(page.aiQueryText()).toBe('');
+    expect(page.imageMatches()).toBeNull();
   });
 });

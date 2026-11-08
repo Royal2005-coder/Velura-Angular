@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { selectOne, selectRows } from "../supabase.js";
 import { asJsonObject, type JsonObject } from "../types.js";
 import { guestStyleProfiles } from "../user/quiz.js";
-import { LocalImageVectorRepository } from "../ai/image-vector-repository.js";
+import { LocalImageVectorRepository, composedQueryVector, normalizedImageVector } from "../ai/image-vector-repository.js";
 import { dominantCategory, dominantTone, type SearchFilters, type VisualCandidate } from "./visual-search-types.js";
 
 /** Retrieval/profile boundary keeps provider orchestration independent of the database. */
@@ -49,6 +49,30 @@ export class ShopVisualSearchRepository implements VisualSearchRepository {
       this.vectors.version(),
     ]);
     const neighbors = await this.hydrate(candidates, filters);
+    return { neighbors, featured: await this.categoryFallback(dominantCategory(neighbors) || "", dominantTone(neighbors)), catalog_version };
+  }
+  /**
+   * Composed retrieval ranks by normalize(reference+modifier) and keeps the EM/IS
+   * components (CLARTEMIS, arXiv:2203.08101) so the service can gate on the photo
+   * signal alone; hydration and fallback stay identical to photo-only search.
+   */
+  async composedSearch(reference: number[], modifier: number[], filters: SearchFilters) {
+    const imageVector = normalizedImageVector(reference);
+    const textVector = normalizedImageVector(modifier);
+    const [candidates, catalog_version] = await Promise.all([
+      this.vectors.searchWithVectors(composedQueryVector(imageVector, textVector), {
+        ...(filters.product_ids ? { product_ids: filters.product_ids } : {}),
+        ...(filters.category_id ? { category_id: filters.category_id } : {}),
+      }),
+      this.vectors.version(),
+    ]);
+    const neighbors = await this.hydrate(candidates, filters);
+    const embeddings = new Map(candidates.map(candidate => [candidate.product_id, candidate.embedding]));
+    for (const row of neighbors) {
+      const target = embeddings.get(row.product_id)!;
+      row.em_score = textVector.reduce((sum, value, i) => sum + value * target[i], 0);
+      row.is_score = imageVector.reduce((sum, value, i) => sum + value * target[i], 0);
+    }
     return { neighbors, featured: await this.categoryFallback(dominantCategory(neighbors) || "", dominantTone(neighbors)), catalog_version };
   }
   /** Hydration keeps CLIP order, so score ties never reorder the neighbour vote. */

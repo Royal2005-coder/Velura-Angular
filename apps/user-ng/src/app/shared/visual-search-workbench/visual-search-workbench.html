@@ -62,10 +62,15 @@
             <input type="checkbox" [checked]="consent()" [disabled]="busy()" (change)="setConsent($event)" />
             <span>Tôi đồng ý xử lý hình ảnh này để tìm kiếm sản phẩm tương đồng với AI</span>
           </label>
+          <label class="vs-modifier">
+            <span class="vs-modifier__label">Chỉnh sửa bằng lời (không bắt buộc)</span>
+            <input type="text" maxlength="200" placeholder="Ví dụ: màu đỏ, dáng xòe, tay dài…" [value]="modifier()" [disabled]="busy()" (input)="setModifier($event)" aria-label="Mô tả chỉnh sửa so với ảnh" />
+            <span class="vs-modifier__hint">AI sẽ tìm trang phục giống ảnh nhưng theo mô tả này.</span>
+          </label>
           <div class="vs-actions">
             <button type="button" class="btn btn--primary vs-btn-search" [disabled]="!consent() || busy()" (click)="search()">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              Tìm kiếm trang phục
+              {{ modifier().trim() ? 'Tìm theo ảnh + mô tả' : 'Tìm kiếm trang phục' }}
             </button>
             <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="clearSource()">
               Đổi ảnh khác
@@ -89,6 +94,9 @@
 
     @if (result(); as response) {
       <div class="vs-results-container">
+        @if (understoodText(response)) {
+          <p class="vs-understood">AI hiểu: <strong>{{ understoodText(response) }}</strong></p>
+        }
         @if (response.matches.length) {
           <div class="results-section">
             <div class="results-header">

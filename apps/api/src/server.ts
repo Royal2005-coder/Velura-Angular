@@ -61,6 +61,7 @@ import { handleRecommendationRoute } from "./recommendation.controller.js";
 import { handleAiRoute, getAiService, startAiRuntime, closeAiRuntime } from "./ai/ai-router.js";
 import { handleRuntimeRoute, observeHttpRequest } from "./ops-runtime.js";
 import { handleVisualSearchRoute } from "./visual-search/visual-search-router.js";
+import { handleAiSearchRoute } from "./ai-search/ai-search-router.js";
 import { handlePersonalColorRoute } from "./personal-color/personal-color-router.js";
 import { createPersonalColorService } from "./personal-color/personal-color-module.js";
 import { handleLoyaltyRoute, loyaltyService } from "./loyalty/loyalty-router.js";
@@ -160,6 +161,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     if (await handleAiRoute(req,res,parts,corsHeaders,context)) return;
     if (await handlePersonalColorRoute(req, res, parts, corsHeaders, context, personalColorService)) return;
     if (parts[1] === "user" && parts[2] === "visual-search" && await handleVisualSearchRoute(req, res, parts, corsHeaders, context)) return;
+    if (parts[1] === "user" && parts[2] === "ai-search" && await handleAiSearchRoute(req, res, parts, corsHeaders, context)) return;
     if (await handleLoyaltyRoute({ req, res, url, parts, headers: corsHeaders, context, service: loyaltyService })) return;
 
     if (parts[1] === "content") {

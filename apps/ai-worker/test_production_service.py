@@ -34,6 +34,19 @@ def binding(task="image_quality"):
                        "task": task, "product_id": "", "variant_id": "", "image_id": "input-1"})
 
 
+class TextModels:
+    """CPU text-tower stand-in; records the stripped query without claiming GPU inference."""
+
+    health = {"schema_version": VERSION, "ready": True, "gpu": False}
+
+    def __init__(self):
+        self.last_text = None
+
+    def text_embedding(self, text):
+        self.last_text = text
+        return [1.0] + [0.0] * 511
+
+
 class WorkerServiceTests(unittest.TestCase):
     """Models absent must not fabricate pose, readiness, embedding or try-on success."""
 
@@ -53,6 +66,7 @@ class WorkerServiceTests(unittest.TestCase):
             self.assertTrue(readiness.json()["ready"])
             self.assertFalse(readiness.json()["models_ready"])
             self.assertEqual(readiness.json()["tasks"], {"image_quality": True, "image_embedding": False,
+                                                        "text_embedding": False,
                                                         "product_image_enhance": False, "virtual_try_on": False,
                                                         "virtual_try_on_3d": False})
             health = client.get("/health", headers={"Authorization": "Bearer " + KEY})
@@ -64,6 +78,10 @@ class WorkerServiceTests(unittest.TestCase):
             embedding = client.post("/embed/image", headers={"Authorization": "Bearer " + KEY})
             self.assertEqual(embedding.status_code, 503)
             self.assertEqual(embedding.json()["error_code"], "DEPENDENCIES_UNAVAILABLE")
+            text = client.post("/embed/text", headers={"Authorization": "Bearer " + KEY},
+                               data={"binding": binding("text_embedding"), "text": "red dress"})
+            self.assertEqual(text.status_code, 503)
+            self.assertEqual(text.json()["error_code"], "DEPENDENCIES_UNAVAILABLE")
 
     def test_cpu_quality_does_not_wait_for_the_gpu_lease(self):
         app = create_app(loader=unavailable, key=KEY)
@@ -109,6 +127,47 @@ class WorkerServiceTests(unittest.TestCase):
                     response = client.post("/ai/quality", headers={"Authorization": "Bearer " + KEY}, content=b"x" * 64)
                 self.assertEqual(response.status_code, 413)
                 self.assertEqual(response.json()["error_code"], "IMAGE_SIZE")
+
+    def test_text_embedding_uses_cpu_lane_and_echoes_binding(self):
+        models = TextModels()
+        app = create_app(loader=lambda: models, key=KEY)
+        with TestClient(app) as client:
+            self.assertTrue(client.get("/ready").json()["tasks"]["text_embedding"])
+            client.portal.call(app.state.executor.slot.acquire)
+            try:
+                job = binding("text_embedding")
+                response = client.post("/embed/text", headers={"Authorization": "Bearer " + KEY},
+                                       data={"binding": job, "text": "  red floral dress  "})
+                self.assertEqual(response.status_code, 200)
+                body = response.json()
+                self.assertEqual(body["status"], "success")
+                self.assertEqual(body["model"], "openclip-vit-b32-laion2b")
+                self.assertEqual(body["dimensions"], 512)
+                self.assertEqual(len(body["embedding"]), 512)
+                self.assertEqual(body["request_id"], json.loads(job)["request_id"])
+                self.assertEqual(body["task"], "text_embedding")
+                self.assertIn("X-AI-Binding", response.headers)
+                self.assertEqual(models.last_text, "red floral dress")
+            finally:
+                client.portal.call(app.state.executor.slot.release)
+
+    def test_text_length_fields_and_task_binding_fail_closed(self):
+        with TestClient(create_app(loader=lambda: TextModels(), key=KEY)) as client:
+            headers = {"Authorization": "Bearer " + KEY}
+            for text in ("", "   ", "x" * 501):
+                response = client.post("/embed/text", headers=headers,
+                                       data={"binding": binding("text_embedding"), "text": text})
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json()["error_code"], "INVALID_INPUT")
+            mismatched = client.post("/embed/text", headers=headers,
+                                     data={"binding": binding("image_embedding"), "text": "red dress"})
+            self.assertEqual(mismatched.status_code, 400)
+            self.assertEqual(mismatched.json()["error_code"], "INVALID_INPUT")
+            extra = client.post("/embed/text", headers=headers,
+                                data={"binding": binding("text_embedding"), "text": "red dress", "extra": "1"})
+            self.assertEqual(extra.status_code, 400)
+            self.assertEqual(extra.json()["error_code"], "INVALID_INPUT")
+            self.assertEqual(client.post("/embed/text", content=b"not multipart").status_code, 401)
 
 
 class SerialExecutorTests(unittest.IsolatedAsyncioTestCase):

@@ -34,7 +34,8 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         !isAuthApi &&
         (req.method === 'GET' ||
           req.url.includes('/api/v1/chat') ||
-          req.url.includes('/api/user/visual-search'));
+          req.url.includes('/api/user/visual-search') ||
+          req.url.includes('/api/user/ai-search'));
       if (!canRetryAsGuest) {
         return throwError(() => error);
       }

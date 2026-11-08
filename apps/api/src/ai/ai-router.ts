@@ -63,21 +63,22 @@ const rates = new Map<string, { count: number; expires: number }>();
 /** Private AI ownership uses authenticated identity or a high-entropy browser-scoped guest principal. */
 export function aiOwner(req: HttpRequest, context: AuthContext): string {
   if (context.authUser) return `member:${context.authUser.id}`;
-  if (req.headers.authorization)
-    throw new HttpError(401, "AUTH_REQUIRED", "Phiên đăng nhập không hợp lệ.");
   const guest = req.headers["x-guest-session-id"];
   if (
-    typeof guest !== "string" ||
-    !/^gs_[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(
+    typeof guest === "string" &&
+    /^gs_[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(
       guest,
     )
-  )
-    throw new HttpError(
-      401,
-      "GUEST_SESSION_REQUIRED",
-      "Hãy mở lại phiên trình duyệt.",
-    );
-  return `guest:${guest}`;
+  ) {
+    return `guest:${guest}`;
+  }
+  if (req.headers.authorization)
+    throw new HttpError(401, "AUTH_REQUIRED", "Phiên đăng nhập không hợp lệ.");
+  throw new HttpError(
+    401,
+    "GUEST_SESSION_REQUIRED",
+    "Hãy mở lại phiên trình duyệt.",
+  );
 }
 
 /** Virtual try-on and its personal-photo quality check store a person's image per account, so they need an authenticated account. */

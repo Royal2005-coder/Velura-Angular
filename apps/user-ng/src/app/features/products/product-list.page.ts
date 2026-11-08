@@ -5,7 +5,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { AfterViewInit, Component, DestroyRef, ElementRef, ViewChild, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { matchesAllSearchWords, normalizeSearchText } from '../../core/utils/search';
+import { matchesAllSearchWords, normalizeSearchText, OCCASION_VIETNAMESE_MAP } from '../../core/utils/search';
 import { productMaterial, productMaterialText } from '../../core/utils/material';
 import { catchError, finalize, of, switchMap, tap, type Subscription } from 'rxjs';
 import { ProductSummary } from '../../core/models/product.interface';
@@ -315,7 +315,10 @@ export class ProductListPage implements AfterViewInit {
     const shapes = this.selectedShapes().map((shape) => shape.toLowerCase());
     const sort = this.sort();
     const GARMENT_TERMS: Record<string, string[]> = {
-      'dam-vay': ['vay', 'dam', 'chan vay', 'dam da hoi', 'dam tiec'],
+      'dam-vay': [
+        'vay', 'dam', 'chan vay', 'dam da hoi', 'dam tiec', 'dam du tiec',
+        'vay du tiec', 'vay da hoi', 'dam da tiec', 'vay da tiec', 'vay tiec'
+      ],
       'ao': ['ao', 'ao so mi', 'ao thun', 'ao kieu', 'ao len', 'ao croptop', 'croptop', 'blouse'],
       'quan': ['quan', 'quan jean', 'quan jeans', 'quan tay', 'quan short', 'quan ong rong'],
       'ao-khoac': ['ao khoac', 'blazer', 'vest', 'hoodie', 'cardigan'],
@@ -360,7 +363,10 @@ export class ProductListPage implements AfterViewInit {
         const normCollection = normalizeSearchText(prodCollection);
         const prodSku = product.sku || '';
         const normSku = normalizeSearchText(prodSku);
-        const occasions = (product.occasions || []).join(' ');
+        const occasions = (product.occasions || [])
+          .flatMap((o) => [o, OCCASION_VIETNAMESE_MAP[o] || ''])
+          .filter(Boolean)
+          .join(' ');
         const normOccasions = normalizeSearchText(occasions);
 
         if (prodName.toLowerCase().includes(query) || (normQuery && normName.includes(normQuery))) {
@@ -654,7 +660,8 @@ export class ProductListPage implements AfterViewInit {
             this.suggestionsEnabled.set(true);
             localStorage.setItem(SUGGESTIONS_KEY, 'true');
           }
-          if (this.suggestionsEnabled() && quiz) {
+          const hasExplicitSearch = Boolean(this.searchQuery().trim());
+          if (this.suggestionsEnabled() && quiz && !hasExplicitSearch) {
             this.applyProfileFilters(true);
           }
         },

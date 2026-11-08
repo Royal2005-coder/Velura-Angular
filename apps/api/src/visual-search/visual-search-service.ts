@@ -3,7 +3,7 @@ import sharp from "sharp";
 import { HttpError } from "../http.js";
 import type { JsonObject } from "../types.js";
 import type { VisualSearchRepository } from "./visual-search-repository.js";
-import { dominantCategory, dominantTone, categoryLabel, toneLabel, validateFilters, type GarmentAttributes, type SearchFilters, type VisualCandidate, type VisualSearchResult } from "./visual-search-types.js";
+import { dominantCategory, dominantTone, categoryLabel, toneLabel, validateFilters, areCategoriesDisjoint, type GarmentAttributes, type SearchFilters, type VisualCandidate, type VisualSearchResult, type QueryAttributes } from "./visual-search-types.js";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const CLIP_DIMENSIONS = 512;
@@ -104,23 +104,60 @@ export const visualProviders: VisualProviders = {
  * matches. A row is `strong` when the photo itself is near-identical to the
  * catalog photo, and `similar` when it merely shows the same garment.
  */
-export function rankVisualMatches(rows: VisualCandidate[], profile: JsonObject | null, threshold = SIMILAR_THRESHOLD, strongThreshold = MATCH_THRESHOLD): VisualCandidate[] {
+export function rankVisualMatches(
+  rows: VisualCandidate[],
+  profile: JsonObject | null,
+  threshold = SIMILAR_THRESHOLD,
+  strongThreshold = MATCH_THRESHOLD,
+  attributes?: QueryAttributes
+): VisualCandidate[] {
   const normalized = (value: unknown) => typeof value === "string" ? value.toLowerCase().replace(/_/g, " ") : "";
   const values = (value: unknown): string[] => (Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : []).map(normalized);
   const overlap = (a: unknown, b: unknown) => values(a).some(value => values(b).includes(value));
-  return rows.filter(row => Number.isFinite(row.similarity) && row.similarity >= threshold && row.status === "on_sale").map(row => {
-    let bonus = 0;
-    if (profile) {
-      if (overlap(row.style_tags, profile.style_tags)) bonus += 0.04;
-      if (overlap(row.occasions, profile.preferred_occasions)) bonus += 0.03;
-      if (values(profile.favorite_colors).includes(normalized(row.color_tone))) bonus += 0.03;
-      if (values(row.suitable_body_shapes).includes(normalized(profile.body_shape))) bonus += 0.04;
-      const price = Number(row.sale_price ?? row.base_price ?? 0);
-      const budget = String(profile.budget_range || "");
-      if ((budget === "under_300k" && price < 300000) || (budget === "300k_700k" && price >= 300000 && price <= 700000) || (budget === "700k_1.5m" && price > 700000 && price <= 1500000) || (budget === "above_1.5m" && price > 1500000)) bonus += 0.03;
-    }
-    return { ...row, rank_score: row.similarity + bonus, tier: row.similarity >= strongThreshold ? ("strong" as const) : ("similar" as const) };
-  }).sort((a, b) => b.rank_score - a.rank_score || b.similarity - a.similarity || a.product_id.localeCompare(b.product_id)).slice(0, 20);
+
+  const targetCat = attributes?.category;
+  const targetColor = attributes?.color ? normalized(attributes.color) : null;
+  const targetSleeve = attributes?.sleeve ? normalized(attributes.sleeve) : null;
+
+  return rows
+    .filter(row => Number.isFinite(row.similarity) && row.similarity >= threshold && row.status === "on_sale")
+    .filter(row => {
+      if (targetCat && areCategoriesDisjoint(targetCat, row.category_slug)) {
+        return false;
+      }
+      return true;
+    })
+    .map(row => {
+      let bonus = 0;
+      if (profile) {
+        if (overlap(row.style_tags, profile.style_tags)) bonus += 0.04;
+        if (overlap(row.occasions, profile.preferred_occasions)) bonus += 0.03;
+        if (values(profile.favorite_colors).includes(normalized(row.color_tone))) bonus += 0.03;
+        if (values(row.suitable_body_shapes).includes(normalized(profile.body_shape))) bonus += 0.04;
+        const price = Number(row.sale_price ?? row.base_price ?? 0);
+        const budget = String(profile.budget_range || "");
+        if ((budget === "under_300k" && price < 300000) || (budget === "300k_700k" && price >= 300000 && price <= 700000) || (budget === "700k_1.5m" && price > 700000 && price <= 1500000) || (budget === "above_1.5m" && price > 1500000)) bonus += 0.03;
+      }
+      let attributeBonus = 0;
+      if (targetColor) {
+        const rowTone = normalized(row.color_tone);
+        if (rowTone.includes(targetColor) || targetColor.includes(rowTone)) {
+          attributeBonus += 0.035;
+        } else if (values(row.style_tags).some(tag => tag.includes(targetColor))) {
+          attributeBonus += 0.025;
+        }
+      }
+      if (targetSleeve) {
+        const rowName = normalized(row.name);
+        if (rowName.includes(targetSleeve) || values(row.style_tags).some(tag => tag.includes(targetSleeve))) {
+          attributeBonus += 0.02;
+        }
+      }
+      bonus += Math.min(0.05, attributeBonus);
+      return { ...row, rank_score: row.similarity + bonus, tier: row.similarity >= strongThreshold ? ("strong" as const) : ("similar" as const) };
+    })
+    .sort((a, b) => b.rank_score - a.rank_score || b.similarity - a.similarity || a.product_id.localeCompare(b.product_id))
+    .slice(0, 20);
 }
 /** Source images exist only during one operation; results carry attributes, never source pixels. */
 export class VisualSearchService {
@@ -181,9 +218,9 @@ export class VisualSearchService {
     if (signal.aborted) throw signal.reason;
     const best = catalog.neighbors.reduce((highest, row) => Math.max(highest, row.similarity), -Infinity);
     if (catalog.neighbors.length && best < this.garmentFloor) throw new HttpError(422, "NOT_A_GARMENT", "Không tìm thấy trang phục nào trong ảnh. Chọn ảnh có trang phục rõ ràng hơn.");
-    const matches = rankVisualMatches(catalog.neighbors, profile, this.similarThreshold, this.threshold);
     const category = dominantCategory(catalog.neighbors);
     const tone = dominantTone(catalog.neighbors);
+    const matches = rankVisualMatches(catalog.neighbors, profile, this.similarThreshold, this.threshold, { category, color: tone });
     const featured = matches.length ? [] : catalog.featured;
     return {
       attributes: { category, color: null, fit: null, material: null, style: null },

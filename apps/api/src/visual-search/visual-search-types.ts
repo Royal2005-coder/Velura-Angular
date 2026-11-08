@@ -11,6 +11,40 @@ export interface GarmentAttributes {
   material: string | null;
   style: string | null;
 }
+
+export interface QueryAttributes {
+  category?: string | null;
+  color?: string | null;
+  sleeve?: string | null;
+  style?: string | null;
+}
+
+export const GARMENT_CATEGORIES: Record<string, true> = {
+  "dam-vay": true,
+  "ao": true,
+  "quan": true,
+  "ao-khoac": true,
+  "set-do": true,
+};
+
+export const ACCESSORY_CATEGORIES: Record<string, true> = {
+  "giay-dep": true,
+  "phu-kien": true,
+};
+
+export function areCategoriesDisjoint(catA: string | null | undefined, catB: string | null | undefined): boolean {
+  if (!catA || !catB) return false;
+  if (catA === catB) return false;
+  if ((GARMENT_CATEGORIES[catA] && ACCESSORY_CATEGORIES[catB]) ||
+      (ACCESSORY_CATEGORIES[catA] && GARMENT_CATEGORIES[catB])) {
+    return true;
+  }
+  if ((catA === "dam-vay" && catB === "quan") || (catA === "quan" && catB === "dam-vay")) {
+    return true;
+  }
+  return false;
+}
+
 /** Explicit retrieval constraints, evaluated before similarity ranking. */
 export interface SearchFilters {
   product_ids?: string[];

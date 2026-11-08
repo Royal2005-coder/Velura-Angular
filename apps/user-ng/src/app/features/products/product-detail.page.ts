@@ -491,11 +491,16 @@ export class ProductDetailPage {
           this.loading.set(false);
           this.catalog.getProducts().subscribe({
             next: (rows) => {
-              const related = rows
+              const targetCategory = row.category_slug || null;
+              const categoryMatches = rows
                 .filter((item) => item.product_id !== row.product_id)
-                .filter((item) => !row.category_slug || item.category_slug === row.category_slug)
-                .slice(0, 8);
-              this.related.set(related.length ? related : rows.filter((item) => item.product_id !== row.product_id).slice(0, 8));
+                .filter((item) => !targetCategory || item.category_slug === targetCategory);
+              const related = categoryMatches.slice(0, 8);
+              this.related.set(
+                related.length
+                  ? related
+                  : rows.filter((item) => item.product_id !== row.product_id).slice(0, 8),
+              );
             },
           });
         },

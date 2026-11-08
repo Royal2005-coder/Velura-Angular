@@ -290,8 +290,12 @@ export async function handleProductsRoute(
           ? Number((reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / reviewCount).toFixed(1))
           : 0;
 
+        const catObj = category as JsonObject | null;
         return sendJson(res, 200, {
           ...product,
+          category_id: product.category_id || catObj?.category_id || null,
+          category_slug: product.category_slug || catObj?.slug || null,
+          category_name: product.category_name || catObj?.name || null,
           rating_value: ratingValue,
           rating_count: reviewCount,
           review_count: reviewCount,

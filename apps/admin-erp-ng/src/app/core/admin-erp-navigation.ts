@@ -207,6 +207,39 @@ export function adminErpNavItemForNavKey(navKey: string): AdminErpNavItem | null
 }
 
 /**
+ * Matches the command palette query against one nav item.
+ *
+ * Operators type "don hang" far more often than "Đơn hàng", so the comparison ignores case,
+ * Vietnamese diacritics and separators: the folded or separator-free form of the label, group
+ * and page title must contain the same form of the query.
+ */
+export function adminErpNavMatchesSearch(item: AdminErpNavItem, groupLabel: string, query: string): boolean {
+  const needle = foldNavText(query);
+  if (!needle) {
+    return true;
+  }
+  const compactNeedle = compactNavText(needle);
+  return [item.label, groupLabel, item.title, item.description].some((value) => {
+    const folded = foldNavText(value);
+    return folded.includes(needle) || (!!compactNeedle && compactNavText(folded).includes(compactNeedle));
+  });
+}
+
+function foldNavText(value: string | null | undefined): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function compactNavText(value: string): string {
+  return value.replace(/[^a-z0-9]+/g, '');
+}
+
+/**
  * Builds the router link for a nav item, including its deep-link query.
  */
 export function adminErpNavLink(item: AdminErpNavItem): string {

@@ -217,8 +217,9 @@ export class SiteHeader {
    */
   onVisualSearchMatches(ids: string[]): void {
     if (ids.length) {
+      this.searchQuery.set('');
       void this.router.navigate(['/products'], {
-        queryParams: { match_ids: ids.join(',') },
+        queryParams: { match_ids: ids.join(','), q: null, ai: null },
       });
     }
   }
@@ -229,12 +230,13 @@ export class SiteHeader {
    */
   onVisualSearchResult(result: VisualResult): void {
     if (result.matches.length > 0) return;
+    this.searchQuery.set('');
     const category = result.attributes.category?.toLowerCase().trim();
     if (category) {
       const slug = CATEGORY_QUERY_MAP[category] || category;
-      void this.router.navigate(['/products'], { queryParams: { category: slug } });
+      void this.router.navigate(['/products'], { queryParams: { category: slug, match_ids: null, q: null, ai: null } });
     } else {
-      void this.router.navigate(['/products'], { queryParams: { match_ids: '' } });
+      void this.router.navigate(['/products'], { queryParams: { match_ids: '', q: null, ai: null } });
     }
   }
 

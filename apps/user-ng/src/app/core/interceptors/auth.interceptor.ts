@@ -39,6 +39,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       if (!canRetryAsGuest) {
         return throwError(() => error);
       }
+      try {
+        localStorage.removeItem('velura_token');
+      } catch {}
       return next(
         req.clone({
           headers: req.headers.delete('Authorization').set('X-Guest-Session-ID', currentGuestSessionId()),

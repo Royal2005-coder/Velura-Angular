@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, ElementRef, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink, NavigationStart } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { Subscription } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
@@ -50,6 +50,7 @@ export class VisualSearchWorkbench {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly destroy = inject(DestroyRef);
+  private readonly router = inject(Router);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
   private readonly video = viewChild<ElementRef<HTMLVideoElement>>('video');
   private file: File | null = null;
@@ -61,12 +62,35 @@ export class VisualSearchWorkbench {
   private epoch = 0;
   constructor() {
     effect(() => { this.auth.session(); untracked(() => { this.cancel(); this.result.set(null); this.offers.set(null); }); });
+    this.router.events.pipe(takeUntilDestroyed(this.destroy)).subscribe((event) => {
+      if (event instanceof NavigationStart) {
+        this.close();
+      }
+    });
     this.destroy.onDestroy(() => this.cancel());
   }
   /** Existing header camera calls the same accessible modal entry point. */
-  open(): void { this.error.set(''); this.offers.set(null); this.dialog()?.nativeElement.showModal(); }
+  open(): void {
+    this.error.set('');
+    this.offers.set(null);
+    try {
+      this.dialog()?.nativeElement.showModal?.();
+    } catch {}
+  }
   /** Close and cancel both browser and server work, revoking every source preview. */
-  close(): void { this.cancel(); this.dialog()?.nativeElement.close(); }
+  close(): void {
+    this.cancel();
+    try {
+      this.dialog()?.nativeElement.close?.();
+    } catch {}
+  }
+  /** Automatically close the modal when user clicks on a product card or action to view details. */
+  onProductClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('a') || target?.closest('button') || target?.closest('.product-card')) {
+      this.close();
+    }
+  }
   /**
    * Load the public deals rail exactly when the fallback shows, so a customer
    * who found no exact product still sees the shop's running campaigns and

@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { HttpError } from "../http.js";
 import type { JsonObject } from "../types.js";
 import { decodeSearchImage, rankVisualMatches, visualProviders, type DecodedImage, type VisualProviders } from "../visual-search/visual-search-service.js";
-import { categoryLabel, dominantCategory, dominantTone, toneLabel, validateFilters, type SearchFilters, type VisualCandidate } from "../visual-search/visual-search-types.js";
+import { categoryLabel, dominantCategory, dominantTone, toneLabel, validateFilters, type SearchFilters, type VisualCandidate, type QueryAttributes } from "../visual-search/visual-search-types.js";
 import type { AiSearchRepository, AiSearchResult } from "./ai-search-types.js";
-import { fashionQuery } from "./ai-search-text.js";
+import { fashionQuery, extractQueryAttributes } from "./ai-search-text.js";
 
 const CLIP_DIMENSIONS = 512;
 const WORKER_VERSION = "velura-worker-v1";
@@ -126,7 +126,8 @@ export class AiSearchService {
       if (signal.aborted) throw signal.reason;
       const catalog = await this.repo.imageSearch(vector, filters);
       if (signal.aborted) throw signal.reason;
-      return this.finish("text", text, catalog, profile, this.textSimilar, this.textStrong);
+      const attrs = extractQueryAttributes(query);
+      return this.finish("text", text, catalog, profile, this.textSimilar, this.textStrong, attrs);
     });
   }
   /**
@@ -153,7 +154,8 @@ export class AiSearchService {
         if (signal.aborted) throw signal.reason;
         const bestReference = catalog.neighbors.reduce((highest, row) => Math.max(highest, row.is_score ?? row.similarity), -Infinity);
         if (catalog.neighbors.length && bestReference < this.garmentFloor) throw new HttpError(422, "NOT_A_GARMENT", "Không tìm thấy trang phục nào trong ảnh. Chọn ảnh có trang phục rõ ràng hơn.");
-        return this.finish("composed", text, catalog, profile, this.composedSimilar, this.composedStrong);
+        const attrs = extractQueryAttributes(modifier);
+        return this.finish("composed", text, catalog, profile, this.composedSimilar, this.composedStrong, attrs);
       });
     } finally { bytes.fill(0); decoded?.bytes.fill(0); }
   }
@@ -166,15 +168,31 @@ export class AiSearchService {
     if (filters.body_shape && !memberUserId) throw new HttpError(401, "BODY_FILTER_MEMBER_REQUIRED", "Đăng nhập để lọc theo dáng người.");
     if (filters.body_shape && !profile) throw new HttpError(409, "BODY_FILTER_QUIZ_REQUIRED", "Hoàn thành hồ sơ phong cách trước khi lọc dáng người.");
   }
-  private finish(mode: "text" | "composed", text: string, catalog: { neighbors: VisualCandidate[]; featured: VisualCandidate[]; catalog_version: string }, profile: JsonObject | null, similar: number, strong: number): AiSearchResult {
-    const matches = rankVisualMatches(catalog.neighbors, profile, similar, strong);
-    const category = dominantCategory(catalog.neighbors);
+  private finish(
+    mode: "text" | "composed",
+    text: string,
+    catalog: { neighbors: VisualCandidate[]; featured: VisualCandidate[]; catalog_version: string },
+    profile: JsonObject | null,
+    similar: number,
+    strong: number,
+    explicitAttrs?: QueryAttributes
+  ): AiSearchResult {
+    const dominantCat = dominantCategory(catalog.neighbors);
+    const targetCat = explicitAttrs?.category || dominantCat;
     const tone = dominantTone(catalog.neighbors);
+    const targetAttrs: QueryAttributes = {
+      category: targetCat,
+      color: explicitAttrs?.color || tone,
+      sleeve: explicitAttrs?.sleeve,
+      style: explicitAttrs?.style
+    };
+    const matches = rankVisualMatches(catalog.neighbors, profile, similar, strong, targetAttrs);
+    const category = targetCat;
     const featured = matches.length ? [] : catalog.featured;
     return {
       mode,
       query_text: text,
-      attributes: { category, color: null, fit: null, material: null, style: null },
+      attributes: { category, color: targetAttrs.color || null, fit: null, material: null, style: targetAttrs.style || null },
       matches,
       featured,
       catalog_version: catalog.catalog_version,

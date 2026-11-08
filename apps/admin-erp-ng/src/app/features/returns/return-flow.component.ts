@@ -4,9 +4,9 @@ import { AdminErpApiService, AdminOrderRow, AdminReturnDisposition, AdminReturnI
 import { CONTACT_RESULTS, MIN_NOTE_LENGTH, MIN_TRANSFER_REFERENCE_LENGTH, gatewayNote, gatewayRefundRefused, isGatewayRefundChannel, itemRefundAllowed, refundReceiverBlocked, returnItemActions } from '../../core/admin-erp-service-desk';
 import { adminErrorMessage } from '../../core/admin-erp-http';
 import { adminMoney } from '../../core/admin-erp-format';
-import { buildReturnQrPayload, demoShipmentFacts, parseScan } from '../../core/admin-erp-qr';
+import { buildReturnQrLink, buildShipmentQr } from '../../core/admin-erp-qr';
 import { AdminErpModal } from '../../shared/ui/admin-modal';
-import { AdminErpQrScan } from '../../shared/ui/admin-qr-scan';
+import { AdminErpQrConfirm, QrConfirmFacts } from '../../shared/ui/admin-qr-confirm';
 
 /**
  * Request-level contact is independent; all business and money actions target one item part.
@@ -28,7 +28,7 @@ export const RETURN_ITEM_ACTION_LABELS: Readonly<Record<Exclude<ReturnFlowKind, 
 
 /** One quantity part is saved at a time; refresh exposes any transactionally split remainder. */
 @Component({
-  selector: 'app-erp-return-flow', imports: [AdminErpModal, AdminErpQrScan],
+  selector: 'app-erp-return-flow', imports: [AdminErpModal, AdminErpQrConfirm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './return-flow.component.html', styleUrl: './return-flow.component.scss',
 })
@@ -73,8 +73,11 @@ export class ReturnFlowComponent {
   readonly transferredAt = signal('');
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
-  readonly scanOpen = signal(false);
-  readonly scanError = signal<string | null>(null);
+  /**
+   * Facts taken from the QR of this parcel. Every confirm step needs one, so a step can never be
+   * saved for a parcel that was not in the operator's hands (xác nhận qua QR, không nhập tay).
+   */
+  readonly qrFacts = signal<QrConfirmFacts | null>(null);
   readonly contactResults = CONTACT_RESULTS;
   readonly minNote = MIN_NOTE_LENGTH;
   readonly title = computed(() => this.flow() ? RETURN_ITEM_ACTION_LABELS[this.flow()!] : '');
@@ -85,6 +88,16 @@ export class ReturnFlowComponent {
   readonly noCustomerEvidence = computed(() => this.flow() === 'approve'
     && !this.record()?.evidence_images?.length && !this.record()?.evidence_videos?.length);
   readonly needsConsent = computed(() => this.flow() === 'convert_refund' || this.flow() === 'change_variant');
+  /** Steps that confirm a parcel being handled; each one is gated by the QR scan. */
+  readonly needsQrScan = computed(() =>
+    ['approve', 'receive', 'pickup', 'ship_exchange', 'complete_exchange'].includes(String(this.flow())),
+  );
+  /** Deep link printed in the return QR, so the scanned URL row points at this exact record. */
+  readonly recordHref = computed(() => {
+    const id = this.record()?.return_id;
+    if (!id) return '';
+    return buildReturnQrLink(typeof window !== 'undefined' ? window.location.origin : '', id);
+  });
   readonly needsReason = computed(() => ['approve', 'reject', 'needs_support', 'resolve', 'stop', 'convert_refund', 'change_variant', 'contact', 'refund-info'].includes(String(this.flow())));
   readonly isMoney = computed(() => this.flow() === 'manual' || this.flow() === 'stripe');
   readonly refundable = computed(() => Number(this.line()?.refundable_amount || 0));
@@ -110,13 +123,17 @@ export class ReturnFlowComponent {
         && Date.parse(this.transferredAt()) <= Date.now();
     }
     if (!returnItemActions(line, this.canApprove()).includes(flow as AdminReturnItemAction)) return false;
+    // Confirm steps start from the parcel QR; evidence photo is mandatory for all of them.
+    if (this.needsQrScan() && !this.qrFacts()) return false;
+    // Pickup carries its own handover photos, every other confirm step needs the proof photo.
+    if (this.needsQrScan() && flow !== 'pickup' && !this.proofFile()) return false;
     if (this.needsConsent() && !this.customerConsent()) return false;
     if (flow === 'change_variant') {
       if (!this.replacementVariantId().trim()) return false;
       const chosen = this.selectedVariantChoice();
       if (chosen && (chosen.available_stock ?? 0) < this.quantity()) return false;
     }
-    if (flow === 'receive') return Boolean(this.proofFile()) && Number.isInteger(this.receivedQuantity())
+    if (flow === 'receive') return Number.isInteger(this.receivedQuantity())
       && this.receivedQuantity() > 0 && this.receivedQuantity() === this.quantity();
     if (flow === 'pickup') return this.pickupPhotos().length > 0 && Boolean(this.tracking().trim()) && Boolean(this.carrier().trim())
       && this.pickedUpBy().trim().length >= 2 && Number.isFinite(Date.parse(this.pickedUpAt())) && Date.parse(this.pickedUpAt()) <= Date.now();
@@ -143,7 +160,7 @@ export class ReturnFlowComponent {
       const isManual = flow === 'manual';
       const autoRef = isManual ? this.newTransferRef() : '';
       if (isManual) { this.createDigitalReceiptFile(autoRef).then((f) => this.proofFile.set(f)); } else { this.proofFile.set(null); }
-      this.pickupPhotos.set([]); this.pickupVideo.set(null);
+      this.pickupPhotos.set([]); this.pickupVideo.set(null); this.qrFacts.set(null);
       this.transferReference.set(autoRef);
       this.note.set(isManual ? 'Đã đối soát & tự động chi hộ Napas B2C khớp mã giao dịch.' : '');
       this.tracking.set(flow === 'ship_exchange' ? this.newExchangeTracking() : flow === 'pickup' ? this.presetTracking() : '');
@@ -528,52 +545,41 @@ export class ReturnFlowComponent {
     }));
   }
 
-  /** Sample label for the demo scanner: the return's own QR, so a phone camera reads the real payload. */
+  /**
+   * Sample label for the demo scanner: a full shipment payload for this return, so the demo fills
+   * the same fixed facts a real carrier label does (carrier, AWB, who hands over, when).
+   */
   readonly scanSample = computed(() => {
     const record = this.record();
-    return record?.return_id ? buildReturnQrPayload(record.return_id, record.return_code) : '';
+    if (!record?.return_id) return '';
+    const tracking = this.flow() === 'ship_exchange'
+      ? (record.exchange_tracking_code || this.tracking())
+      : (record.tracking_return_code || this.tracking());
+    return buildShipmentQr({
+      orderCode: record.order_code || record.return_code || undefined,
+      carrier: this.carrier(),
+      trackingCode: tracking,
+      shipperName: 'Nguyễn Văn Giao (mẫu)',
+      shipperPhone: '0909000111',
+    });
   });
 
-  openScan(): void {
-    this.scanError.set(null);
-    this.scanOpen.set(true);
-  }
-
   /**
-   * Confirms the operator is holding the parcel for THIS return, then fills the carrier and AWB
-   * so only the handover photos stay manual. A code from another return is refused, never applied.
+   * Takes the fixed facts off the scanned label and copies them into the fields the API writes.
+   * The operator no longer types carrier, AWB, who handed over or when: the label owns them, and
+   * the handover photo is the only remaining input.
    */
-  applyScan(text: string): void {
-    const record = this.record();
-    this.scanOpen.set(false);
-    if (!record?.return_id) return;
-    const result = parseScan(text);
-    if (result.kind !== 'return' && result.kind !== 'tracking') {
-      this.scanError.set('Mã này không phải QR phiếu đổi trả. Quét nhãn on phiếu hoặc dán mã vận đơn.');
-      return;
+  onQrFacts(facts: QrConfirmFacts | null): void {
+    this.qrFacts.set(facts);
+    if (!facts) return;
+    if (facts.carrier) this.carrier.set(facts.carrier);
+    if (facts.trackingCode) this.tracking.set(facts.trackingCode);
+    if (facts.shipperName) this.pickedUpBy.set(facts.shipperName);
+    const scannedAt = new Date(facts.scannedAt);
+    if (!Number.isNaN(scannedAt.getTime())) {
+      const local = new Date(scannedAt.getTime() - scannedAt.getTimezoneOffset() * 60_000);
+      this.pickedUpAt.set(local.toISOString().slice(0, 16));
     }
-    if (result.returnId && result.returnId !== record.return_id) {
-      this.scanError.set('Mã QR thuộc phiếu đổi trả khác. Không ghi nhận chéo phiếu.');
-      return;
-    }
-    if (result.returnCode && record.return_code && result.returnCode !== record.return_code) {
-      this.scanError.set('Mã phiếu trên nhãn không khớp phiếu đang mở. Kiểm lại hàng trước khi lấy.');
-      return;
-    }
-    const known = this.flow() === 'ship_exchange'
-      ? (record.exchange_tracking_code || '')
-      : (record.tracking_return_code || '');
-    if (result.trackingCode) {
-      this.tracking.set(result.trackingCode);
-      if (result.carrier) this.carrier.set(result.carrier);
-    } else if (known) {
-      this.tracking.set(known);
-    } else {
-      const facts = demoShipmentFacts({ order_code: record.order_code || record.return_code });
-      this.carrier.set(facts.carrier);
-      this.tracking.set(this.flow() === 'ship_exchange' ? this.newExchangeTracking() : facts.trackingCode);
-    }
-    this.scanError.set(null);
   }
 
   /** Keeps the modal open while an evidence or money operation is in flight. */

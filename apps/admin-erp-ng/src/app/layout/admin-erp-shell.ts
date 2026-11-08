@@ -12,6 +12,7 @@ import {
   AdminErpNavItem,
   adminErpNavItemForNavKey,
   adminErpNavLink,
+  adminErpNavMatchesSearch,
 } from '../core/admin-erp-navigation';
 import { useBodyClass } from '../core/body-class';
 import { AdminErpIcon } from '../shared/ui/admin-erp-icon';
@@ -69,22 +70,17 @@ export class AdminErpShell {
   });
 
   readonly searchResults = computed(() => {
-    const query = this.searchQuery().trim().toLowerCase();
+    const query = this.searchQuery();
     const allItems: { item: AdminErpNavItem; groupLabel: string }[] = [];
     for (const group of this.groups()) {
       for (const item of group.items) {
         allItems.push({ item, groupLabel: group.label });
       }
     }
-    if (!query) {
+    if (!query.trim()) {
       return allItems;
     }
-    return allItems.filter(
-      ({ item, groupLabel }) =>
-        item.label.toLowerCase().includes(query) ||
-        groupLabel.toLowerCase().includes(query) ||
-        item.title.toLowerCase().includes(query),
-    );
+    return allItems.filter(({ item, groupLabel }) => adminErpNavMatchesSearch(item, groupLabel, query));
   });
   readonly currentNav = computed(() => {
     this.navigationTick();

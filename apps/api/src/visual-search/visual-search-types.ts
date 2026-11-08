@@ -40,6 +40,10 @@ export interface VisualCandidate {
   status?: string;
   category_slug?: string;
   is_combo?: boolean;
+  /** Composed AI search only: explicit modifier–target match (CLARTEMIS EM, arXiv:2203.08101). */
+  em_score?: number;
+  /** Composed AI search only: implicit reference–target similarity (CLARTEMIS IS). */
+  is_score?: number;
 }
 /** Search state carries attributes only; a source image never outlives one request. */
 export interface VisualSearchResult {

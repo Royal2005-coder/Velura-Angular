@@ -157,6 +157,22 @@ try {
 
 let lastFixture: ComponentFixture<unknown> | undefined;
 
+/** Visual/AI search Model stub: pages never reach HttpClient; AI results stay empty unless a spec overrides them. */
+export function stubVisualSearchModel(): Pick<VisualSearchModel, 'validate' | 'crop' | 'camera' | 'capture' | 'search' | 'cancel' | 'textSearch' | 'searchComposed' | 'cancelAiSearch'> {
+  const empty = { attributes: { category: null, color: null, fit: null, material: null, style: null }, matches: [], featured: [], catalog_version: 'stub', personalized: false };
+  return {
+    validate: async () => undefined,
+    crop: async (file) => file,
+    camera: async () => { throw new Error('camera unavailable in test'); },
+    capture: async () => new File(['frame'], 'camera.jpg', { type: 'image/jpeg' }),
+    search: () => of(empty),
+    cancel: () => of({}),
+    textSearch: () => of({ ...empty, mode: 'text' as const, query_text: '' }),
+    searchComposed: () => of({ ...empty, mode: 'composed' as const, query_text: '' }),
+    cancelAiSearch: () => of({}),
+  };
+}
+
 /**
  * Boots a storefront page ViewModel with Model stubs (lecture: HTTP lives in services).
  * `apiOverrides` thay từng hàm của ApiService giả cho ca test cần dữ liệu riêng.
@@ -171,7 +187,7 @@ export async function createStorefrontPage<T>(page: Type<T>, apiOverrides: Parti
     imports: [page],
     providers: [
       { provide: AiEngineService, useValue: { capabilities: () => of({enabled:false,local_only:true,tasks:[],max_upload_bytes:5242880,private_ttl_seconds:900}) } },
-      { provide: VisualSearchModel, useValue: { cancel: () => of({}) } },
+      { provide: VisualSearchModel, useValue: stubVisualSearchModel() },
       { provide: AddressGeographyService, useValue: stubAddressGeographyService() },
       { provide: StyleProfileService, useValue: {
         revision: signal(0), guestAnswers: () => null, guestDraft: () => null,

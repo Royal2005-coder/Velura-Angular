@@ -45,7 +45,25 @@
       Khám phá thiết kế hợp phong cách của bạn.
     </p>
     <app-visual-search-workbench [hideTrigger]="true" [candidateProductIds]="imageSearchCandidates()" [filters]="visualFilters()" (searchResult)="applyVisualResult($event)" />
-    @if (imageMatches() !== null) { <button type="button" class="btn btn--outline" (click)="imageMatches.set(null)">Xóa kết quả tìm bằng ảnh</button> }
+    @if (aiRequested()) {
+      <div class="product-ai-bar" role="status" aria-live="polite">
+        @if (aiSearchBusy()) {
+          <span class="product-ai-bar__spinner" aria-hidden="true"></span>
+          <span class="product-ai-bar__text">AI đang hiểu mô tả "{{ searchQuery() }}"…</span>
+          <button type="button" class="btn btn--outline btn--sm" (click)="clearAiSearch()">Hủy</button>
+        } @else if (aiSearchError()) {
+          <span class="product-ai-bar__text product-ai-bar__text--error" role="alert">{{ aiSearchError() }}</span>
+          <button type="button" class="btn btn--outline btn--sm" (click)="clearAiSearch()">✕ Tắt AI</button>
+        } @else {
+          <span class="product-ai-bar__text">
+            <span class="product-ai-bar__badge">✨ AI ngữ nghĩa</span>
+            @if (aiQueryText()) { <span>AI hiểu: <strong>{{ aiQueryText() }}</strong></span> }
+          </span>
+          <button type="button" class="btn btn--outline btn--sm" (click)="clearAiSearch()">✕ Tắt AI</button>
+        }
+      </div>
+    }
+    @if (imageMatches() !== null && !aiRequested()) { <button type="button" class="btn btn--outline" (click)="imageMatches.set(null)">Xóa kết quả tìm bằng ảnh</button> }
     @if (searchQuery()) {
       <div class="product-search-active-bar u-inline-4811ea4c0f">
         <span class="u-inline-137c27134d">Kết quả tìm kiếm cho: <strong class="u-inline-782c8561f4">"{{ searchQuery() }}"</strong></span>

@@ -204,14 +204,16 @@
                       <span class="search-dd__count">{{ instantSuggestions().length }} sản phẩm</span>
                     }
                   </div>
-                  <button type="button" class="search-dd__ai-btn" (click)="executeAiSearch(searchQuery())">
-                    <svg class="search-dd__ai-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                      <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" fill="currentColor"/>
-                    </svg>
-                    <span class="search-dd__ai-btn-text">Tìm bằng AI ngữ nghĩa cho "{{ searchQuery() }}"</span>
-                    <span class="search-dd__ai-btn-arrow" aria-hidden="true">→</span>
-                  </button>
+                  @if (aiTextSearchReady()) {
+                    <button type="button" class="search-dd__ai-btn" (click)="executeAiSearch(searchQuery())">
+                      <svg class="search-dd__ai-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                        <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" fill="currentColor"/>
+                      </svg>
+                      <span class="search-dd__ai-btn-text">Tìm bằng AI ngữ nghĩa cho "{{ searchQuery() }}"</span>
+                      <span class="search-dd__ai-btn-arrow" aria-hidden="true">→</span>
+                    </button>
+                  }
                   @if (instantSuggestions().length) {
                     <div class="search-dd__products">
                       @for (p of instantSuggestions(); track p.product_id) {

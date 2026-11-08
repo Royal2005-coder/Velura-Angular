@@ -56,4 +56,19 @@ describe('SiteHeader', () => {
     expect(header.searchOpen()).toBe(false);
     expect(fixture.nativeElement.querySelector('.search-backdrop')).toBeNull();
   });
+
+  it('offers semantic AI search only when the server reports the worker text task ready', async () => {
+    const header = await createStorefrontPage(SiteHeader);
+    const fixture = lastStorefrontFixture();
+    header.onSearchFocus();
+    header.searchQuery.set('Đầm đỏ dáng xòe');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.search-dd__ai-btn')).toBeNull();
+
+    header.aiTextSearchReady.set(true);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.search-dd__ai-btn')).not.toBeNull();
+  });
 });

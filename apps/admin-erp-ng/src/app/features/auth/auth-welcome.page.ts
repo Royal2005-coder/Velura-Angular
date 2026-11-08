@@ -32,7 +32,9 @@ import { AuthFrame } from './auth-frame';
         <a class="erp-btn erp-btn--primary" href="mailto:admin@velura.vn?subject=Yeu%20cau%20cap%20quyen%20Velura%20ERP">
           Gửi yêu cầu quyền
         </a>
-        <a class="erp-btn" routerLink="/change-password">Đổi mật khẩu</a>
+        @if (session.session()?.passwordLogin) {
+          <a class="erp-btn" routerLink="/change-password">Đổi mật khẩu</a>
+        }
         <button class="erp-btn erp-btn--ghost" type="button" (click)="logout()">Đăng xuất</button>
       </div>
     </app-auth-frame>

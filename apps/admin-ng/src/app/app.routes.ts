@@ -3,6 +3,7 @@ import {
   adminAuthGuard,
   adminGuestGuard,
   adminHomeRedirectGuard,
+  adminPasswordGuard,
   adminSessionGuard,
   adminShellGuard,
   adminWelcomeGuard,
@@ -36,7 +37,7 @@ export const routes: Routes = [
   {
     path: 'change-password',
     loadComponent: () => import('./features/login/admin-change-password.page').then((m) => m.AdminChangePasswordPage),
-    canActivate: [adminSessionGuard],
+    canActivate: [adminPasswordGuard],
     title: 'Đổi mật khẩu',
   },
   {

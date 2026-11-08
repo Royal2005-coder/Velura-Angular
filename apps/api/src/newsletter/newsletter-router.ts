@@ -1,4 +1,4 @@
-import { readJson, sendJson, HttpError } from "../http.js";
+import { readJson, sendJson, HttpError, getRequestIp } from "../http.js";
 import { asString, type HeaderMap, type HttpRequest, type HttpResponse } from "../types.js";
 import { newsletterService } from "./newsletter-service.js";
 
@@ -20,10 +20,7 @@ export async function handleNewsletterRoute(
     const source = asString(body.source) || "storefront_footer";
     const honeypot = asString(body.hp_website || body.honeypot);
 
-    const clientIp =
-      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
-      (req.headers["x-real-ip"] as string)?.trim() ||
-      req.socket?.remoteAddress;
+    const clientIp = getRequestIp(req);
 
     const result = await newsletterService.subscribe({
       email,

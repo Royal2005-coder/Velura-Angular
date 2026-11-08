@@ -496,7 +496,7 @@ function publicSession(session: JsonObject, staff = false): JsonObject {
     ...(staff ? { guest_id: session.guest_id, profile_user_id: session.profile_user_id, assigned_to: session.assigned_to, assigned_admin_id: session.assigned_admin_id } : {}),
     support_ticket: staff ? session.support_ticket : session.support_ticket ? { ticket_id: ticket.ticket_id, status: ticket.status } : null,
     metadata: staff ? {
-      handoff_summary: meta.handoff_summary, supervisor_required: meta.supervisor_required,
+      handoff_summary: meta.handoff_summary, handoff_reason: meta.handoff_reason, supervisor_required: meta.supervisor_required,
       intelligence: meta.intelligence, warnings: meta.warnings, report_status: meta.report_status,
       eligible_offers: meta.eligible_offers, summary_confirmation: meta.summary_confirmation,
       outcome: meta.outcome, previous_session_id: meta.previous_session_id

@@ -200,6 +200,25 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(.cm-sea
   outline: none;
 }
 
+/* Suppress browser native clear/cancel buttons (Edge blue X and WebKit search cancel) */
+input::-ms-clear,
+input::-ms-reveal {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+input::-webkit-search-decoration,
+input::-webkit-search-cancel-button,
+input::-webkit-search-results-button,
+input::-webkit-search-results-decoration {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 /* Home and catalog follow the editorial concept while retaining real catalog data. */
 .hero {
   position: relative;

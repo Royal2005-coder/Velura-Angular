@@ -296,7 +296,8 @@ describe('AdminErpOrdersPage', () => {
     expect(page.selected()?.order_id).toBe('o2');
   });
 
-  it('confirms the COD order in the same step after a successful call', async () => {    const actions: Array<{ action: string; body: Record<string, unknown> }> = [];
+  it('saves the call and hands the order itself to the QR confirmation', async () => {
+    const actions: Array<{ action: string; body: Record<string, unknown> }> = [];
     const fixture = await boot(
       () => of({ rows: [codOrder], count: 1 }),
       [],
@@ -319,11 +320,61 @@ describe('AdminErpOrdersPage', () => {
 
     page.submitCodCall(formEvent({}), true);
 
-    expect(actions.map((entry) => entry.action)).toEqual(['call_confirm', 'confirm_cod']);
-    expect(actions[1].body['expectedVersion']).toBe(4);
-    expect(String(actions[1].body['note'])).toContain('Khách xác nhận');
+    // Confirmation is never fired off a phone call alone: the parcel must be scanned first.
+    expect(actions.map((entry) => entry.action)).toEqual(['call_confirm']);
+    expect(page.modal()?.kind).toBe('confirm_qr');
+    expect(page.notice()).toContain('Quét QR');
+  });
+
+  it('confirms only after a QR scan plus the mandatory proof photo', async () => {
+    const uploaded: Array<{ stage: string; note: string }> = [];
+    const actions: Array<{ action: string; body: Record<string, unknown> }> = [];
+    const fixture = await boot(
+      () => of({ rows: [codOrder], count: 1 }),
+      [],
+      {
+        uploadOrderEvidence: (_id: string, _file: File, stage: string, note: string) => {
+          uploaded.push({ stage, note });
+          return of({ evidence_id: 'e-qr', stage, kind: 'image', created_at: '2026-11-08T02:00:00Z' });
+        },
+        performOrderAction: (orderId: string, action: string, body: Record<string, unknown>) => {
+          actions.push({ action, body });
+          return of({ order: { ...codOrder, status: 'confirmed', version: 5, allowed_actions: [] }, refund: null });
+        },
+      },
+    );
+    const page = fixture.componentInstance;
+    const calledOrder = { ...codOrder, has_successful_call_confirm: true };
+    page.selected.set(calledOrder);
+    page.openConfirmQr();
+    expect(page.modal()?.kind).toBe('confirm_qr');
+
+    // No scan yet → the confirm button stays disabled.
+    expect(page.canSubmitConfirm()).toBe(false);
+    page.onConfirmFacts({
+      raw: 'velura:shipment:1?order=VL-1002',
+      orderCode: 'VL-1002',
+      returnCode: '',
+      carrier: 'GHN',
+      trackingCode: 'GHNVL1002',
+      shipperName: 'Nguyễn Văn Giao',
+      shipperPhone: '0909000111',
+      scannedAt: '2026-11-08T02:00:00.000Z',
+    });
+    // Scanned but without the proof photo it still cannot be confirmed.
+    expect(page.canSubmitConfirm()).toBe(false);
+
+    page.confirmPhoto.set(new File(['x'], 'phieu.png', { type: 'image/png' }));
+    page.setConfirmQuickNote('Đã đối chiếu đúng mã đơn và người nhận');
+    expect(page.canSubmitConfirm()).toBe(true);
+    page.submitQrConfirm();
+
+    expect(uploaded).toHaveLength(1);
+    expect(uploaded[0].stage).toBe('confirmed');
+    expect(uploaded[0].note).toContain('[QR: VL-1002 · GHN · GHNVL1002]');
+    expect(actions.map((entry) => entry.action)).toEqual(['confirm_cod']);
+    expect(String(actions[0].body['note'])).toContain('Đã đối chiếu đúng mã đơn');
     expect(page.selected()?.status).toBe('confirmed');
-    expect(page.notice()).toContain('xác nhận đơn');
   });
 
   it('says so when the shipment stored but the handover did not', async () => {

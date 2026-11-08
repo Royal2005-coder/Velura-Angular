@@ -238,6 +238,11 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       if (!context.accessToken || !context.authUser?.email) {
         throw new HttpError(401, "AUTH_REQUIRED", "Cần đăng nhập để đổi mật khẩu.");
       }
+      // Google SSO sessions enter through the member's own email identity and
+      // have no password to verify, so the feature stays hidden and refuses here.
+      if (context.authMethods?.includes("password") !== true) {
+        throw new HttpError(409, "PASSWORD_LOGIN_REQUIRED", "Tài khoản đăng nhập bằng Google không đổi mật khẩu tại đây. Hãy đăng nhập bằng email và mật khẩu nếu cần đổi mật khẩu.");
+      }
       const body = await readJson(req);
       const currentPassword = asString(body.currentPassword);
       const newPassword = asString(body.newPassword);
@@ -314,7 +319,10 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         isAdmin: context.isAdmin,
         allowedPages: context.allowedPages,
         allowedModules: context.allowedModules,
-        capabilities: context.capabilities || capabilitiesForRole(context.roleCode)
+        capabilities: context.capabilities || capabilitiesForRole(context.roleCode),
+        authMethods: context.authMethods || [],
+        /** Password changes exist only for sessions established with the password grant. */
+        passwordLogin: context.authMethods?.includes("password") === true
       }, corsHeaders);
     }
 

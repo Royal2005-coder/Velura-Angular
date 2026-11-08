@@ -120,6 +120,7 @@ export const routes: Routes = [
       },
       {
         path: 'account/profile',
+        canActivate: [authGuard],
         loadComponent: () => import('./features/account/profile.page').then((m) => m.AccountProfilePage),
         title: 'Tài khoản cá nhân - Velura Store',
       },

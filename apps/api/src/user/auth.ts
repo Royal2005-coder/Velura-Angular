@@ -14,7 +14,7 @@ import { createNotification } from "./notifications.js";
 import { OTP_TTL_MS } from "./otp-policy.js";
 import { isSmsConfigured, requireSmsDelivery, sendAuthOtpSms } from "../sms/twilio.js";
 import { checkoutClientIp, normalizeVietnamesePhone, type CheckoutService } from "./checkout-service.js";
-import { sendDirectEmail } from "../email/mailer.js";
+import { escapeHtml, sendDirectEmail } from "../email/mailer.js";
 import { loyaltyService } from "../loyalty/loyalty-router.js";
 import {
   asJsonObject,
@@ -397,7 +397,7 @@ export async function handleAuthRoute(
           </div>
           <div style="padding: 28px; background-color: #fff;">
             <h2 style="color: #333; margin-top: 0;">Kích hoạt tài khoản</h2>
-            <p style="color: #555; line-height: 1.6;">Chào <strong>${full_name || "bạn"}</strong>,</p>
+            <p style="color: #555; line-height: 1.6;">Chào <strong>${escapeHtml(full_name || "bạn")}</strong>,</p>
             <p style="color: #555; line-height: 1.6;">Cảm ơn bạn đã đăng ký tài khoản tại Velura. Vui lòng sử dụng mã OTP dưới đây để xác thực:</p>
             <div style="background-color: #fcfaf8; border: 1px dashed #d1b8a8; border-radius: 8px; padding: 16px; margin: 24px 0; text-align: center;">
               <span style="font-size: 32px; font-weight: bold; color: #b89b88; letter-spacing: 8px;">${otpCode}</span>
@@ -627,24 +627,28 @@ export async function handleAuthRoute(
       throw new HttpError(400, "BAD_REQUEST", "Email hoặc Số điện thoại là bắt buộc");
     }
 
-    const identityText = asString(identity);
-    const query = identityText.includes("@") ? { email: `eq.${identityText}` } : { phone: `eq.${identityText}` };
+    const identityText = asString(identity).trim().toLowerCase();
+    const byEmail = identityText.includes("@");
+    const query = byEmail ? { email: `eq.${identityText}` } : { phone: `eq.${identityText}` };
     const user = await selectOne("users", query);
     if (!user) {
       throw new HttpError(404, "USER_NOT_FOUND", "Không tìm thấy tài khoản liên kết với thông tin này");
     }
 
+    authOtpLimiter.consume(identityText, checkoutClientIp(req.headers, req.socket?.remoteAddress));
+
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
 
-    console.log(`\n==================================================`);
-    console.log(`[OTP RESET] Mã khôi phục mật khẩu của ${identity} là: ${otpCode}`);
-    console.log(`==================================================\n`);
-
-    if (!user.phone) {
-      throw new HttpError(400, "OTP_PHONE_REQUIRED", "Tài khoản này chưa có số điện thoại nên không nhận được mã OTP. Vui lòng liên hệ bộ phận hỗ trợ.");
+    if (config.nodeEnv !== "production") {
+      console.log(`\n==================================================`);
+      console.log(`[OTP RESET] Mã khôi phục mật khẩu của ${identityText} là: ${otpCode}`);
+      console.log(`==================================================\n`);
     }
-    if (user.email) {
+
+    // Mã đi đúng kênh người dùng nhập: email → email, số điện thoại → SMS.
+    // Trước đây email vẫn bị chặn bởi bước SMS nên mã không bao giờ được lưu (UAT #746).
+    if (byEmail) {
       const emailBody = `Chào ${user.full_name || "bạn"},\n\nMã xác thực khôi phục mật khẩu Velura của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden;">
@@ -653,7 +657,7 @@ export async function handleAuthRoute(
           </div>
           <div style="padding: 28px; background-color: #fff;">
             <h2 style="color: #333; margin-top: 0;">Khôi phục mật khẩu</h2>
-            <p style="color: #555; line-height: 1.6;">Chào <strong>${user.full_name || "bạn"}</strong>,</p>
+            <p style="color: #555; line-height: 1.6;">Chào <strong>${escapeHtml(user.full_name || "bạn")}</strong>,</p>
             <p style="color: #555; line-height: 1.6;">Bạn vừa yêu cầu đặt lại mật khẩu cho tài khoản Velura. Vui lòng sử dụng mã OTP dưới đây để xác nhận:</p>
             <div style="background-color: #fcfaf8; border: 1px dashed #d1b8a8; border-radius: 8px; padding: 16px; margin: 24px 0; text-align: center;">
               <span style="font-size: 32px; font-weight: bold; color: #b89b88; letter-spacing: 8px;">${otpCode}</span>
@@ -662,11 +666,16 @@ export async function handleAuthRoute(
           </div>
         </div>
       `;
-      void sendDirectEmail(user.email, "Mã xác thực khôi phục mật khẩu Velura", emailBody, emailHtml);
+      const delivered = await sendDirectEmail(asString(user.email), "Mã xác thực khôi phục mật khẩu Velura", emailBody, emailHtml);
+      if (!delivered && config.nodeEnv === "production") {
+        throw new HttpError(503, "OTP_EMAIL_UNAVAILABLE", "Hiện không thể gửi mã OTP qua email. Vui lòng thử lại sau.");
+      }
+    } else {
+      if (!user.phone) {
+        throw new HttpError(400, "OTP_PHONE_REQUIRED", "Tài khoản này chưa có số điện thoại nên không nhận được mã OTP. Vui lòng liên hệ bộ phận hỗ trợ.");
+      }
+      await deliverAuthOtp(asString(user.phone), otpCode, "forgot_password");
     }
-
-    authOtpLimiter.consume(asString(user.phone), checkoutClientIp(req.headers, req.socket?.remoteAddress));
-    await deliverAuthOtp(asString(user.phone), otpCode, "forgot_password");
 
     // Chỉ lưu mã sau khi tin đã gửi được, để không còn mã rác chưa ai nhận.
     await updateRows("users", { user_id: `eq.${user.user_id}` }, {

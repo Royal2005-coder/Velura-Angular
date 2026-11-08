@@ -164,6 +164,10 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
 
     if (!profile) return buildGuestContext();
 
+    // Đăng xuất tăng users.token_epoch, nên token phát trước đó (claim `tv` cũ, hoặc token cũ
+    // chưa từng có `tv`) không còn là phiên hợp lệ — không cần bảng thu hồi theo từng token.
+    if (Number(decoded.tv ?? 0) !== Number(profile.token_epoch ?? 0)) return buildGuestContext(ipAddress);
+
     const roleCode = roleCodeOf(profile);
     const access = accessForRole(roleCode);
     return {

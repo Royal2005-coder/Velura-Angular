@@ -6,8 +6,19 @@ import { rankVisualMatches } from "../../apps/api/src/visual-search/visual-searc
 import type { VisualCandidate } from "../../apps/api/src/visual-search/visual-search-types.js";
 import type { HttpRequest, AuthContext } from "../../apps/api/src/types.js";
 
-test("aiOwner: falls back to guest session when Authorization is invalid or expired", () => {
-  const req: HttpRequest = {
+test("aiOwner: accepts guest session without authorization and rejects invalid authorization", () => {
+  const guestReq: HttpRequest = {
+    method: "POST",
+    url: "/api/user/ai-search/text",
+    headers: {
+      "x-guest-session-id": "gs_12345678-1234-4123-8123-123456789abc"
+    }
+  };
+  const context: AuthContext = { authUser: null };
+  const owner = aiOwner(guestReq, context);
+  assert.equal(owner, "guest:gs_12345678-1234-4123-8123-123456789abc");
+
+  const invalidAuthReq: HttpRequest = {
     method: "POST",
     url: "/api/user/ai-search/text",
     headers: {
@@ -15,11 +26,8 @@ test("aiOwner: falls back to guest session when Authorization is invalid or expi
       "x-guest-session-id": "gs_12345678-1234-4123-8123-123456789abc"
     }
   };
-  const context: AuthContext = { authUser: null };
-  const owner = aiOwner(req, context);
-  assert.equal(owner, "guest:gs_12345678-1234-4123-8123-123456789abc");
+  assert.throws(() => aiOwner(invalidAuthReq, context), { code: "AUTH_REQUIRED" });
 });
-
 test("SHOP-01: Searching 'Váy' does not match shoes/accessories cross-referencing váy in description", () => {
   const products = [
     {

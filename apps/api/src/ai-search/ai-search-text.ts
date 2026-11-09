@@ -1,5 +1,5 @@
 import { HttpError } from "../http.js";
-import type { QueryAttributes } from "../visual-search/visual-search-types.js";
+import { ACCESSORY_CATEGORY_SLUGS, COLOR_FAMILIES, COLOR_FAMILY_LABELS, GARMENT_CATEGORY_SLUGS, matchesAnySynonym, type QueryAttributes } from "../visual-search/visual-search-types.js";
 /** One bounded customer utterance; the worker additionally caps encoded text at 500 characters. */
 export const MAX_QUERY_CHARS = 200;
 /** Reject non-text, control characters and punctuation-only queries before any inference. */
@@ -67,33 +67,80 @@ export function fashionQuery(text: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-/** Extract explicit fashion attributes (category, color, sleeve style) from text query. */
+/** Query words mapped to the catalog's English style_tags vocabulary for ranking. */
+const STYLE_MAP: Array<[string, string]> = [
+  ["thanh lich|sang trong|elegant|luxury", "Elegant"],
+  ["toi gian|minimalist", "Minimalist"],
+  ["co dien|classic", "Classic"],
+  ["hien dai|modern", "Modern"],
+  ["lang man|romantic|nu tinh", "Romantic"],
+  ["nang dong|sporty|the thao", "Sporty"],
+  ["ca tinh|street|edgy", "Street"],
+  ["vintage", "Vintage"],
+  ["hoc duong|preppy", "Preppy"],
+  ["boho", "Boho"],
+  ["dao pho|casual", "Casual"],
+];
+/** Query words mapped to the catalog's English occasions vocabulary for ranking. */
+const OCCASION_MAP: Array<[string, string]> = [
+  ["di tiec|du tiec|party", "Party"],
+  ["cong so|di lam|office", "Office"],
+  ["di choi|dao pho|casual|di dao", "Casual"],
+  ["di bien|beach|du lich|travel", "Travel"],
+  ["di hoc|school", "School"],
+  ["the thao|sport|gym", "Sport"],
+  ["hen ho|date", "Date"],
+  ["dam cuoi|wedding", "Wedding"],
+  ["sinh nhat|birthday", "Birthday"],
+  ["brunch", "Brunch"],
+  ["cuoi tuan|weekend", "Weekend"],
+  ["su kien|event", "Event"],
+];
+
+/**
+ * Extract explicit fashion attributes from a query or modifier. Category is the
+ * first retrieval constraint: a specific garment/accessory word narrows to its
+ * catalog section, "quần áo"/"đồ" narrows to clothing only (never accessories),
+ * and an occasion-only query ("đi tiệc", "đi chơi") leaves every category open.
+ */
 export function extractQueryAttributes(text: string): QueryAttributes {
   const norm = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
+  const has = (pattern: string) => new RegExp(`\\b(?:${pattern})\\b`).test(norm);
+  const lower = text.toLowerCase().replace(/[-_/]+/g, " ").replace(/\s+/g, " ");
   const attrs: QueryAttributes = {};
 
-  if (/\b(dam|vay|chan vay)\b/.test(norm)) attrs.category = "dam-vay";
-  else if (/\b(ao khoac|blazer|vest|hoodie|cardigan)\b/.test(norm)) attrs.category = "ao-khoac";
-  else if (/\b(ao|so mi|thun|croptop|blouse|len)\b/.test(norm)) attrs.category = "ao";
-  else if (/\b(quan|jean|jeans|quan tay|short|kaki)\b/.test(norm)) attrs.category = "quan";
-  else if (/\b(set do|bo do)\b/.test(norm)) attrs.category = "set-do";
-  else if (/\b(giay|dep|sandal)\b/.test(norm)) attrs.category = "giay-dep";
-  else if (/\b(tui|tui xach|khan|that lung)\b/.test(norm)) attrs.category = "phu-kien";
+  if (has("set do|bo do|do bo|matching set")) { attrs.category = "set-do"; attrs.allowedCategories = ["set-do"]; }
+  else if (has("ao khoac|blazer|vest|hoodie|cardigan|bomber|jacket|khoac")) { attrs.category = "ao-khoac"; attrs.allowedCategories = ["ao-khoac"]; }
+  else if (has("dam|vay|chan vay|dress|skirt|gown")) { attrs.category = "dam-vay"; attrs.allowedCategories = ["dam-vay"]; }
+  else if (has("quan ao|trang phuc|clothing|clothes|outfit")) { attrs.allowedCategories = GARMENT_CATEGORY_SLUGS; }
+  else if (has("quan|jeans?|shorts?|kaki|trousers?|pants?|culottes|leggings?")) { attrs.category = "quan"; attrs.allowedCategories = ["quan"]; }
+  else if (has("so mi|thun|croptop|crop top|blouse|ao len|ao kieu|ao crop|crop|polo|shirt|t shirt|sweater|top")) { attrs.category = "ao"; attrs.allowedCategories = ["ao"]; }
+  else if (has("ao")) { attrs.category = "ao"; attrs.allowedCategories = ["ao", "ao-khoac"]; }
+  else if (has("giay|dep|sandal|shoes?|heels?|sneakers?|boots?")) { attrs.category = "giay-dep"; attrs.allowedCategories = ["giay-dep"]; }
+  else if (has("phu kien|accessor\\w*")) { attrs.allowedCategories = ACCESSORY_CATEGORY_SLUGS; }
+  else if (has("tui|khan|that lung|non|mu|kinh|hat|bag|scarf|belt|glasses?")) { attrs.category = "phu-kien"; attrs.allowedCategories = ["phu-kien"]; }
+  else if (/(?<!\p{L})đồ(?!\p{L})/u.test(lower)) { attrs.allowedCategories = GARMENT_CATEGORY_SLUGS; }
 
-  if (/(?<!\p{L})đỏ(?!\p{L})/iu.test(text) || /\b(red|mau do|sac do)\b/i.test(norm)) attrs.color = "đỏ";
-  else if (/\b(den|black)\b/.test(norm)) attrs.color = "đen";
-  else if (/\b(trang|white)\b/.test(norm)) attrs.color = "trắng";
-  else if (/\b(xanh duong|blue|navy)\b/.test(norm)) attrs.color = "xanh dương";
-  else if (/\b(xanh la|green)\b/.test(norm)) attrs.color = "xanh lá";
-  else if (/\b(vang|yellow)\b/.test(norm)) attrs.color = "vàng";
-  else if (/\b(hong|pink)\b/.test(norm)) attrs.color = "hồng";
-  else if (/\b(be|kem|beige|cream)\b/.test(norm)) attrs.color = "be";
-  else if (/\b(nau|brown)\b/.test(norm)) attrs.color = "nâu";
-  else if (/\b(xam|gray|grey)\b/.test(norm)) attrs.color = "xám";
+  // Colour: the longest matching synonym wins, so "xanh lá" is green, not blue.
+  let best: { family: string; length: number } | null = null;
+  for (const [family, synonyms] of Object.entries(COLOR_FAMILIES)) {
+    for (const synonym of synonyms) {
+      if (synonym.length > (best?.length ?? 0) && matchesAnySynonym([synonym], lower)) best = { family, length: synonym.length };
+    }
+  }
+  if (best) { attrs.colorFamily = best.family; attrs.color = COLOR_FAMILY_LABELS[best.family]; }
 
-  if (/\b(tay dai|dai tay|long sleeve)\b/.test(norm)) attrs.sleeve = "tay dài";
-  else if (/\b(tay ngan|ngan tay|short sleeve)\b/.test(norm)) attrs.sleeve = "tay ngắn";
-  else if (/\b(khong tay|sat nach|sleeveless)\b/.test(norm)) attrs.sleeve = "không tay";
+  if (has("tay dai|dai tay|long sleeve")) attrs.sleeve = "tay dài";
+  else if (has("tay ngan|ngan tay|short sleeve")) attrs.sleeve = "tay ngắn";
+  else if (has("khong tay|sat nach|sleeveless")) attrs.sleeve = "không tay";
+
+  if (has("om|fitted|bodycon|slim")) attrs.fit = "ôm";
+  else if (has("rong|oversized?|loose")) attrs.fit = "rộng";
+  else if (has("xoe|flared?")) attrs.fit = "xòe";
+  else if (has("suong|straight")) attrs.fit = "suông";
+
+  for (const [pattern, style] of STYLE_MAP) if (has(pattern)) { attrs.style = style; break; }
+  for (const [pattern, occasion] of OCCASION_MAP) if (has(pattern)) { attrs.occasion = occasion; break; }
 
   return attrs;
 }

@@ -6,9 +6,11 @@ import type { AddressInfo } from "node:net";
 import { HttpError } from "../../apps/api/src/http.js";
 import { AiSearchService, aiSearchProviders, type AiSearchProviders } from "../../apps/api/src/ai-search/ai-search-service.js";
 import type { AiSearchRepository } from "../../apps/api/src/ai-search/ai-search-types.js";
-import { fashionQuery, validateSearchText, MAX_QUERY_CHARS } from "../../apps/api/src/ai-search/ai-search-text.js";
+import { fashionQuery, validateSearchText, extractQueryAttributes, MAX_QUERY_CHARS } from "../../apps/api/src/ai-search/ai-search-text.js";
 import { composedQueryVector } from "../../apps/api/src/ai/image-vector-repository.js";
-import type { VisualCandidate } from "../../apps/api/src/visual-search/visual-search-types.js";
+import { matchesColorFamily, GARMENT_CATEGORY_SLUGS, ACCESSORY_CATEGORY_SLUGS, type VisualCandidate } from "../../apps/api/src/visual-search/visual-search-types.js";
+import { satisfiesQueryConstraints } from "../../apps/api/src/visual-search/visual-search-repository.js";
+import { rankVisualMatches } from "../../apps/api/src/visual-search/visual-search-service.js";
 
 const clipVector = Array.from({ length: 512 }, (_, i) => i === 0 ? 1 : 0);
 function neighbor(product_id: string, similarity: number, category_slug?: string, scores?: { em_score: number; is_score: number }): VisualCandidate {
@@ -16,13 +18,13 @@ function neighbor(product_id: string, similarity: number, category_slug?: string
 }
 function fixture(overrides: Partial<AiSearchProviders> = {}, profile: Record<string, unknown> | null = null, timeout = 15000) {
   let embedTextCalls = 0, embedImageCalls = 0, searchCalls = 0, composedCalls = 0;
-  let lastFilters: unknown, lastText = "";
+  let lastFilters: unknown, lastText = "", lastConstraints: unknown;
   let neighbors: VisualCandidate[] = [neighbor("match", 0.32, "dam-vay")];
   let featured: VisualCandidate[] = [];
   const repo: AiSearchRepository = {
     async profile() { return profile; },
-    async imageSearch(_vector, filters) { searchCalls++; lastFilters = filters; return { neighbors, featured, catalog_version: "1" }; },
-    async composedSearch(_reference, _modifier, filters) { composedCalls++; lastFilters = filters; return { neighbors, featured, catalog_version: "1" }; },
+    async imageSearch(_vector, filters, constraints) { searchCalls++; lastFilters = filters; lastConstraints = constraints; return { neighbors, featured, catalog_version: "1" }; },
+    async composedSearch(_reference, _modifier, filters, constraints) { composedCalls++; lastFilters = filters; lastConstraints = constraints; return { neighbors, featured, catalog_version: "1" }; },
   };
   const providers: AiSearchProviders = {
     async decode(bytes) { return { bytes: Buffer.from(bytes), mime: "image/png" }; },
@@ -31,7 +33,7 @@ function fixture(overrides: Partial<AiSearchProviders> = {}, profile: Record<str
     ...overrides,
   };
   const service = new AiSearchService(repo, providers, timeout);
-  return { service, setNeighbors(rows: VisualCandidate[]) { neighbors = rows; }, setFeatured(rows: VisualCandidate[]) { featured = rows; }, counters: () => ({ embedTextCalls, embedImageCalls, searchCalls, composedCalls, lastFilters, lastText }) };
+  return { service, setNeighbors(rows: VisualCandidate[]) { neighbors = rows; }, setFeatured(rows: VisualCandidate[]) { featured = rows; }, counters: () => ({ embedTextCalls, embedImageCalls, searchCalls, composedCalls, lastFilters, lastText, lastConstraints }) };
 }
 
 test("Search text validation bounds one utterance and rejects control/punctuation-only input", () => {
@@ -213,4 +215,99 @@ test("A worker image without the text task fails closed on the first response", 
       else process.env[name] = value;
     }
   }
+});
+
+test("Category is the first constraint: clothing queries block accessories, occasion queries stay broad", () => {
+  const clothing = extractQueryAttributes("quần áo đi tiệc");
+  assert.deepEqual(clothing.allowedCategories, GARMENT_CATEGORY_SLUGS);
+  assert.equal(clothing.category, undefined);
+  assert.equal(clothing.occasion, "Party");
+  assert.ok(!clothing.allowedCategories!.includes("phu-kien") && !clothing.allowedCategories!.includes("giay-dep"));
+
+  const occasion = extractQueryAttributes("đi chơi");
+  assert.equal(occasion.allowedCategories, undefined);
+  assert.equal(occasion.category, undefined);
+  assert.equal(occasion.occasion, "Casual");
+
+  assert.deepEqual(extractQueryAttributes("đầm đỏ dáng xòe").allowedCategories, ["dam-vay"]);
+  assert.equal(extractQueryAttributes("đầm đỏ dáng xòe").colorFamily, "red");
+  assert.equal(extractQueryAttributes("đầm đỏ dáng xòe").fit, "xòe");
+  assert.deepEqual(extractQueryAttributes("áo thun đen").allowedCategories, ["ao"]);
+  assert.deepEqual(extractQueryAttributes("áo khoác").allowedCategories, ["ao-khoac"]);
+  assert.deepEqual(extractQueryAttributes("áo").allowedCategories, ["ao", "ao-khoac"]);
+  assert.deepEqual(extractQueryAttributes("giày cao gót").allowedCategories, ["giay-dep"]);
+  assert.deepEqual(extractQueryAttributes("phụ kiện").allowedCategories, ACCESSORY_CATEGORY_SLUGS);
+  assert.deepEqual(extractQueryAttributes("set đồ").allowedCategories, ["set-do"]);
+  assert.deepEqual(extractQueryAttributes("đồ công sở").allowedCategories, GARMENT_CATEGORY_SLUGS);
+  assert.equal(extractQueryAttributes("màu xanh lá").colorFamily, "green");
+  assert.equal(extractQueryAttributes("xanh dương").colorFamily, "blue");
+});
+
+test("Colour families match whole catalog words without diacritic-fold collisions", () => {
+  assert.ok(matchesColorFamily("red", "Đỏ Ruby"));
+  assert.ok(matchesColorFamily("red", ["Burgundy", "Ivory-Navy-Burgundy"]));
+  assert.ok(matchesColorFamily("blue", "Deep Indigo Denim"));
+  assert.ok(!matchesColorFamily("black", "Deep Indigo Denim"), "denim must not read as đen");
+  assert.ok(matchesColorFamily("beige", "Camel"));
+  assert.ok(!matchesColorFamily("orange", "Camel"), "camel must not read as cam");
+  assert.ok(!matchesColorFamily("red", "Set Đồ Urban"), "đồ must not read as đỏ");
+  assert.ok(matchesColorFamily("white", "Off-White"));
+  assert.ok(matchesColorFamily("green", "Sage Green"));
+  assert.ok(matchesColorFamily("yellow", "Black Gold"));
+  assert.ok(!matchesColorFamily("red", "Sage Green"));
+});
+
+test("Hydration constraints block other categories and off-family colours on the live row", () => {
+  const dress = neighbor("dress", 0.5, "dam-vay"); dress.name = "Đầm Đỏ Ruby";
+  const bag = neighbor("bag", 0.9, "phu-kien"); bag.name = "Túi Xanh";
+  const blackDress = neighbor("black", 0.8, "dam-vay"); blackDress.name = "Đầm Đen";
+  const constraints = { categorySlugs: ["dam-vay"], colorFamily: "red" };
+  assert.ok(satisfiesQueryConstraints(dress, constraints, ["Đỏ Ruby"]));
+  assert.ok(!satisfiesQueryConstraints(bag, constraints, ["Đỏ"]), "accessory blocked even with a red variant");
+  assert.ok(!satisfiesQueryConstraints(blackDress, constraints, ["Đen"]), "off-family colour blocked");
+  assert.ok(satisfiesQueryConstraints(bag, undefined), "no constraints admits every row");
+  assert.ok(satisfiesQueryConstraints(dress, { colorFamily: "red" }, []), "product name alone can carry the colour");
+});
+
+test("Text search forwards category and colour constraints to retrieval before ranking", async () => {
+  const f = fixture();
+  await f.service.textSearch("guest:a", randomUUID(), "đầm đỏ", {});
+  assert.deepEqual(f.counters().lastConstraints, { categorySlugs: ["dam-vay"], colorFamily: "red" });
+  await f.service.textSearch("guest:a", randomUUID(), "đi tiệc", {});
+  assert.equal(f.counters().lastConstraints, undefined, "occasion query carries no category block");
+  await f.service.textSearch("guest:a", randomUUID(), "quần áo đi chơi", {});
+  assert.deepEqual(f.counters().lastConstraints, { categorySlugs: GARMENT_CATEGORY_SLUGS, colorFamily: undefined });
+});
+
+test("A clothing query never ranks an accessory even when the photo neighbour scores higher", async () => {
+  const f = fixture();
+  f.setNeighbors([neighbor("bag", 0.40, "phu-kien"), neighbor("dress", 0.30, "dam-vay"), neighbor("top", 0.28, "ao")]);
+  const result = await f.service.textSearch("guest:a", randomUUID(), "quần áo đi tiệc", {});
+  assert.deepEqual(result.matches.map(row => row.product_id), ["dress", "top"]);
+});
+
+test("An occasion query ranks across every category and boosts the matching occasion tag", async () => {
+  const f = fixture();
+  const party = neighbor("party-dress", 0.30, "dam-vay"); party.occasions = ["Party"];
+  const casual = neighbor("casual-bag", 0.31, "phu-kien"); casual.occasions = ["Casual"];
+  f.setNeighbors([casual, party]);
+  const result = await f.service.textSearch("guest:a", randomUUID(), "đi tiệc", {});
+  assert.deepEqual(result.matches.map(row => row.product_id), ["party-dress", "casual-bag"], "Party tag outranks a slightly higher casual cosine");
+  assert.equal(result.matches.length, 2, "accessories stay eligible for a generic occasion query");
+});
+
+test("Composed search applies the modifier colour as a retrieval constraint", async () => {
+  const f = fixture();
+  f.setNeighbors([neighbor("a", 0.6, "dam-vay", { em_score: 0.3, is_score: 0.8 })]);
+  await f.service.composedSearch("guest:a", randomUUID(), Buffer.from("source"), "image/png", "màu đỏ", {});
+  assert.deepEqual(f.counters().lastConstraints, { categorySlugs: undefined, colorFamily: "red" });
+});
+
+test("Ranking honours the explicit allow-list and the fit bonus", () => {
+  const flared = neighbor("flared", 0.30, "dam-vay"); flared.name = "Đầm Xòe Thắt Nơ";
+  const straight = neighbor("straight", 0.31, "dam-vay"); straight.name = "Đầm Suông";
+  const rows = rankVisualMatches([straight, flared], null, 0.22, 0.30, { allowedCategories: ["dam-vay"], fit: "xòe" });
+  assert.equal(rows[0]!.product_id, "flared", "fit match outranks a slightly higher cosine");
+  const blocked = rankVisualMatches([neighbor("bag", 0.5, "phu-kien")], null, 0.22, 0.30, { allowedCategories: ["dam-vay"] });
+  assert.deepEqual(blocked, []);
 });

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { HttpError } from "../http.js";
 import type { JsonObject } from "../types.js";
 import { decodeSearchImage, rankVisualMatches, visualProviders, type DecodedImage, type VisualProviders } from "../visual-search/visual-search-service.js";
-import { categoryLabel, dominantCategory, dominantTone, toneLabel, validateFilters, type SearchFilters, type VisualCandidate, type QueryAttributes } from "../visual-search/visual-search-types.js";
+import { categoryLabel, dominantCategory, dominantTone, toneLabel, validateFilters, type SearchFilters, type VisualCandidate, type QueryAttributes, type QueryConstraints } from "../visual-search/visual-search-types.js";
 import type { AiSearchRepository, AiSearchResult } from "./ai-search-types.js";
 import { fashionQuery, extractQueryAttributes } from "./ai-search-text.js";
 
@@ -118,15 +118,16 @@ export class AiSearchService {
     return this.operation(owner, requestId, async (signal, retry) => {
       const filters = validateFilters(rawFilters);
       const text = this.queryText(query);
+      const attrs = extractQueryAttributes(query);
+      const constraints = this.constraints(attrs);
       await this.repo.assertReady?.();
       const vector = await retry(remaining => this.provider.embedText(text, signal, remaining)) as number[];
       assertVector(vector);
       const profile = await this.repo.profile(owner, memberUserId);
       this.assertBodyFilter(filters, profile, memberUserId);
       if (signal.aborted) throw signal.reason;
-      const catalog = await this.repo.imageSearch(vector, filters);
+      const catalog = await this.repo.imageSearch(vector, filters, constraints);
       if (signal.aborted) throw signal.reason;
-      const attrs = extractQueryAttributes(query);
       return this.finish("text", text, catalog, profile, this.textSimilar, this.textStrong, attrs);
     });
   }
@@ -141,6 +142,8 @@ export class AiSearchService {
       return await this.operation(owner, requestId, async (signal, retry) => {
         const filters = validateFilters(rawFilters);
         const text = this.queryText(modifier);
+        const attrs = extractQueryAttributes(modifier);
+        const constraints = this.constraints(attrs);
         await this.repo.assertReady?.();
         decoded = await this.provider.decode(bytes, mime);
         const reference = await retry(remaining => this.provider.embedImage(decoded!.bytes, decoded!.mime, signal, remaining)) as number[];
@@ -150,11 +153,10 @@ export class AiSearchService {
         const profile = await this.repo.profile(owner, memberUserId);
         this.assertBodyFilter(filters, profile, memberUserId);
         if (signal.aborted) throw signal.reason;
-        const catalog = await this.repo.composedSearch(reference, modifierVector, filters);
+        const catalog = await this.repo.composedSearch(reference, modifierVector, filters, constraints);
         if (signal.aborted) throw signal.reason;
         const bestReference = catalog.neighbors.reduce((highest, row) => Math.max(highest, row.is_score ?? row.similarity), -Infinity);
         if (catalog.neighbors.length && bestReference < this.garmentFloor) throw new HttpError(422, "NOT_A_GARMENT", "Không tìm thấy trang phục nào trong ảnh. Chọn ảnh có trang phục rõ ràng hơn.");
-        const attrs = extractQueryAttributes(modifier);
         return this.finish("composed", text, catalog, profile, this.composedSimilar, this.composedStrong, attrs);
       });
     } finally { bytes.fill(0); decoded?.bytes.fill(0); }
@@ -163,6 +165,12 @@ export class AiSearchService {
     const text = fashionQuery(raw);
     if (!text) throw new HttpError(422, "AI_SEARCH_TEXT_INVALID", "Từ khóa chưa rõ nghĩa. Hãy mô tả trang phục, ví dụ: đầm đỏ dáng xòe.");
     return text;
+  }
+  /** Server-derived retrieval constraints; a generic occasion query carries none and stays broad. */
+  private constraints(attrs: QueryAttributes): QueryConstraints | undefined {
+    const categorySlugs = attrs.allowedCategories?.length ? attrs.allowedCategories : undefined;
+    const colorFamily = attrs.colorFamily || undefined;
+    return categorySlugs || colorFamily ? { categorySlugs, colorFamily } : undefined;
   }
   private assertBodyFilter(filters: SearchFilters, profile: JsonObject | null, memberUserId?: string): void {
     if (filters.body_shape && !memberUserId) throw new HttpError(401, "BODY_FILTER_MEMBER_REQUIRED", "Đăng nhập để lọc theo dáng người.");
@@ -178,21 +186,19 @@ export class AiSearchService {
     explicitAttrs?: QueryAttributes
   ): AiSearchResult {
     const dominantCat = dominantCategory(catalog.neighbors);
-    const targetCat = explicitAttrs?.category || dominantCat;
+    const explicitCat = explicitAttrs?.category || null;
+    // A generic text query (occasion/style) competes across every category; a composed
+    // query keeps the reference photo's voted category as its anchor.
+    const rankCat = explicitCat || (mode === "composed" ? dominantCat : null);
     const tone = dominantTone(catalog.neighbors);
-    const targetAttrs: QueryAttributes = {
-      category: targetCat,
-      color: explicitAttrs?.color || tone,
-      sleeve: explicitAttrs?.sleeve,
-      style: explicitAttrs?.style
-    };
+    const targetAttrs: QueryAttributes = { ...explicitAttrs, category: rankCat, color: explicitAttrs?.color || tone };
     const matches = rankVisualMatches(catalog.neighbors, profile, similar, strong, targetAttrs);
-    const category = targetCat;
+    const category = explicitCat || dominantCat;
     const featured = matches.length ? [] : catalog.featured;
     return {
       mode,
       query_text: text,
-      attributes: { category, color: targetAttrs.color || null, fit: null, material: null, style: targetAttrs.style || null },
+      attributes: { category, color: targetAttrs.color || null, fit: explicitAttrs?.fit || null, material: null, style: explicitAttrs?.style || null },
       matches,
       featured,
       catalog_version: catalog.catalog_version,

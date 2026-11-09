@@ -14,9 +14,30 @@ export interface GarmentAttributes {
 
 export interface QueryAttributes {
   category?: string | null;
+  /**
+   * Hard category allow-list resolved from the query before retrieval.
+   * Null/absent means the query is generic (occasion, style) and every category competes.
+   */
+  allowedCategories?: string[] | null;
   color?: string | null;
+  /** Canonical colour family key; catalog variant colours are English, queries are Vietnamese. */
+  colorFamily?: string | null;
   sleeve?: string | null;
+  /** Canonical fit key (ôm, rộng, xòe, suông) matched against product names and tags. */
+  fit?: string | null;
   style?: string | null;
+  /** Catalog occasion vocabulary value (Party, Office, …); a ranking signal, never a hard filter. */
+  occasion?: string | null;
+}
+
+/**
+ * Retrieval constraints derived server-side from the query, never accepted from
+ * the client. Category is the first blocking layer: a clothing query can never
+ * surface accessories, while a generic occasion query carries no category list.
+ */
+export interface QueryConstraints {
+  categorySlugs?: string[];
+  colorFamily?: string;
 }
 
 export const GARMENT_CATEGORIES: Record<string, true> = {
@@ -31,6 +52,62 @@ export const ACCESSORY_CATEGORIES: Record<string, true> = {
   "giay-dep": true,
   "phu-kien": true,
 };
+
+export const GARMENT_CATEGORY_SLUGS: string[] = Object.keys(GARMENT_CATEGORIES);
+export const ACCESSORY_CATEGORY_SLUGS: string[] = Object.keys(ACCESSORY_CATEGORIES);
+
+/**
+ * Colour families covering the live catalog's variant colours (mostly English:
+ * "Burgundy", "Sage Green", "Ivory") and Vietnamese query words. Synonyms match
+ * as whole words without diacritic folding, so "đen" never matches "denim" and
+ * "đỏ" never matches "đồ" — folding would merge those distinct catalog tokens.
+ */
+export const COLOR_FAMILIES: Record<string, string[]> = {
+  red: ["đỏ", "red", "ruby", "burgundy", "bordeaux", "maroon", "wine", "crimson", "scarlet"],
+  pink: ["hồng", "pink", "blush", "rose", "sakura", "blossom"],
+  black: ["đen", "black", "onyx"],
+  white: ["trắng", "white", "ivory", "pearl"],
+  blue: ["xanh dương", "xanh navy", "xanh", "blue", "navy", "indigo", "sapphire", "denim", "sky"],
+  green: ["xanh lá", "xanh ngọc", "green", "mint", "sage", "olive", "pistachio", "teal", "emerald"],
+  yellow: ["vàng", "yellow", "amber", "butter", "gold", "mustard"],
+  beige: ["be", "kem", "beige", "cream", "sand", "oat", "oatmeal", "camel", "nude", "tan", "taupe", "canvas", "linen", "champagne", "buttercream", "milk tea"],
+  brown: ["nâu", "brown", "mocha", "cocoa", "coffee", "espresso", "caramel", "chestnut", "cinnamon", "cognac", "chocolate"],
+  gray: ["xám", "gray", "grey", "ash", "silver", "pewter", "slate", "charcoal", "sterling", "heather"],
+  purple: ["tím", "purple", "violet", "lavender", "lilac", "mauve", "plum"],
+  orange: ["cam", "orange", "rust", "copper", "terracotta"],
+};
+
+/** Customer-facing Vietnamese colour label per family, reused by result attributes. */
+export const COLOR_FAMILY_LABELS: Record<string, string> = {
+  red: "đỏ", pink: "hồng", black: "đen", white: "trắng", blue: "xanh dương",
+  green: "xanh lá", yellow: "vàng", beige: "be", brown: "nâu", gray: "xám",
+  purple: "tím", orange: "cam",
+};
+
+/** Fit synonyms matched against product names ("Dáng Rộng", "Xòe Thắt Nơ") and tags. */
+export const FIT_SYNONYMS: Record<string, string[]> = {
+  "ôm": ["ôm", "fitted", "bodycon", "slim"],
+  "rộng": ["rộng", "loose", "oversized", "oversize"],
+  "xòe": ["xòe", "flared", "flare"],
+  "suông": ["suông", "straight"],
+};
+
+/** Whole-word synonym match over strings or string arrays; hyphens count as word breaks. */
+export function matchesAnySynonym(synonyms: string[], ...sources: unknown[]): boolean {
+  const texts = sources.flatMap(source => Array.isArray(source) ? source : [source])
+    .filter((value): value is string => typeof value === "string")
+    .map(value => value.toLowerCase().replace(/[-_/]+/g, " ").replace(/\s+/g, " ").trim());
+  return synonyms.some(synonym => {
+    const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${synonym.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "u");
+    return texts.some(text => pattern.test(text));
+  });
+}
+
+/** True when any catalog colour source (variant colour, product name, tag) belongs to the family. */
+export function matchesColorFamily(family: string, ...sources: unknown[]): boolean {
+  const synonyms = COLOR_FAMILIES[family];
+  return synonyms ? matchesAnySynonym(synonyms, ...sources) : false;
+}
 
 export function areCategoriesDisjoint(catA: string | null | undefined, catB: string | null | undefined): boolean {
   if (!catA || !catB) return false;

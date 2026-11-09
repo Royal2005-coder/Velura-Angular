@@ -20,6 +20,8 @@ export interface VisualSearchFilters {
   /** Restrict ranking to the existing catalog filter result before selecting the top visual matches. */
   product_ids?: string[];
   category_id?: string;
+  /** Category-first blocking layer: only these catalog sections compete (server-derived, never client-set). */
+  category_ids?: string[];
   style_tags?: string[];
   color_tone?: string;
   occasions?: string[];
@@ -175,6 +177,8 @@ export class LocalImageVectorRepository {
         (filters.product_ids === undefined ||
           filters.product_ids.includes(row.product_id)) &&
         (!filters.category_id || row.category_id === filters.category_id) &&
+        (!filters.category_ids?.length ||
+          (row.category_id !== undefined && filters.category_ids.includes(row.category_id))) &&
         (!filters.color_tone || row.color_tone === filters.color_tone) &&
         (["style_tags", "occasions", "suitable_body_shapes"] as const).every(
           (key) =>

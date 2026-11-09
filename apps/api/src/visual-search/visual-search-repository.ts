@@ -3,7 +3,7 @@ import { selectOne, selectRows } from "../supabase.js";
 import { asJsonObject, type JsonObject } from "../types.js";
 import { guestStyleProfiles } from "../user/quiz.js";
 import { LocalImageVectorRepository, composedQueryVector, normalizedImageVector } from "../ai/image-vector-repository.js";
-import { dominantCategory, dominantTone, type SearchFilters, type VisualCandidate } from "./visual-search-types.js";
+import { dominantCategory, dominantTone, matchesColorFamily, type QueryConstraints, type SearchFilters, type VisualCandidate } from "./visual-search-types.js";
 
 /** Retrieval/profile boundary keeps provider orchestration independent of the database. */
 export interface VisualSearchRepository {
@@ -11,7 +11,7 @@ export interface VisualSearchRepository {
   /** Check persisted index independently from filters and before sending a query image for inference. */
   assertReady?(): Promise<void>;
   /** Nearest catalog photos for one CLIP vector, hydrated with live rows, ready to rank. */
-  imageSearch(vector: number[], filters: SearchFilters): Promise<{ neighbors: VisualCandidate[]; featured: VisualCandidate[]; catalog_version: string }>;
+  imageSearch(vector: number[], filters: SearchFilters, constraints?: QueryConstraints): Promise<{ neighbors: VisualCandidate[]; featured: VisualCandidate[]; catalog_version: string }>;
 }
 /** Compare two catalog strings the same way the quiz profile stores them. */
 const normalized = (value: unknown) => typeof value === "string" ? value.toLowerCase().replace(/_/g, " ") : "";
@@ -22,6 +22,17 @@ function matchesFilters(row: VisualCandidate, filters: SearchFilters): boolean {
   if (filters.min_price !== undefined && price < filters.min_price) return false;
   if (filters.max_price !== undefined && price > filters.max_price) return false;
   if (filters.body_shape && !values(row.suitable_body_shapes).includes(normalized(filters.body_shape))) return false;
+  return true;
+}
+/**
+ * Hard query constraints evaluated on the live catalog row: the category allow-list
+ * is the first blocking layer (a clothing query never surfaces accessories), and an
+ * explicit colour must exist on a variant, the product name or a tag. Pure so the
+ * blocking rules are unit-testable without a database.
+ */
+export function satisfiesQueryConstraints(row: VisualCandidate, constraints: QueryConstraints | undefined, variantColors: string[] = []): boolean {
+  if (constraints?.categorySlugs?.length && !constraints.categorySlugs.includes(row.category_slug || "")) return false;
+  if (constraints?.colorFamily && !matchesColorFamily(constraints.colorFamily, variantColors, row.name, row.style_tags)) return false;
   return true;
 }
 /** Embeddings live in the private AI index; product facts always come from the live catalog. */
@@ -40,46 +51,60 @@ export class ShopVisualSearchRepository implements VisualSearchRepository {
     return guestStyleProfiles.get(owner.replace(/^guest:/, "")) || null;
   }
   /** CLIP ranks first, then the catalog drops rows the current filters or availability exclude. */
-  async imageSearch(vector: number[], filters: SearchFilters) {
+  async imageSearch(vector: number[], filters: SearchFilters, constraints?: QueryConstraints) {
+    const categoryIds = await this.categoryIds(constraints?.categorySlugs);
     const [candidates, catalog_version] = await Promise.all([
       this.vectors.search(vector, {
         ...(filters.product_ids ? { product_ids: filters.product_ids } : {}),
         ...(filters.category_id ? { category_id: filters.category_id } : {}),
+        ...(categoryIds ? { category_ids: categoryIds } : {}),
       }),
       this.vectors.version(),
     ]);
-    const neighbors = await this.hydrate(candidates, filters);
-    return { neighbors, featured: await this.categoryFallback(dominantCategory(neighbors) || "", dominantTone(neighbors)), catalog_version };
+    const neighbors = await this.hydrate(candidates, filters, constraints);
+    return { neighbors, featured: await this.categoryFallback(dominantCategory(neighbors) || this.soleCategory(constraints), dominantTone(neighbors)), catalog_version };
   }
   /**
    * Composed retrieval ranks by normalize(reference+modifier) and keeps the EM/IS
    * components (CLARTEMIS, arXiv:2203.08101) so the service can gate on the photo
    * signal alone; hydration and fallback stay identical to photo-only search.
    */
-  async composedSearch(reference: number[], modifier: number[], filters: SearchFilters) {
+  async composedSearch(reference: number[], modifier: number[], filters: SearchFilters, constraints?: QueryConstraints) {
     const imageVector = normalizedImageVector(reference);
     const textVector = normalizedImageVector(modifier);
+    const categoryIds = await this.categoryIds(constraints?.categorySlugs);
     const [candidates, catalog_version] = await Promise.all([
       this.vectors.searchWithVectors(composedQueryVector(imageVector, textVector), {
         ...(filters.product_ids ? { product_ids: filters.product_ids } : {}),
         ...(filters.category_id ? { category_id: filters.category_id } : {}),
+        ...(categoryIds ? { category_ids: categoryIds } : {}),
       }),
       this.vectors.version(),
     ]);
-    const neighbors = await this.hydrate(candidates, filters);
+    const neighbors = await this.hydrate(candidates, filters, constraints);
     const embeddings = new Map(candidates.map(candidate => [candidate.product_id, candidate.embedding]));
     for (const row of neighbors) {
       const target = embeddings.get(row.product_id)!;
       row.em_score = textVector.reduce((sum, value, i) => sum + value * target[i], 0);
       row.is_score = imageVector.reduce((sum, value, i) => sum + value * target[i], 0);
     }
-    return { neighbors, featured: await this.categoryFallback(dominantCategory(neighbors) || "", dominantTone(neighbors)), catalog_version };
+    return { neighbors, featured: await this.categoryFallback(dominantCategory(neighbors) || this.soleCategory(constraints), dominantTone(neighbors)), catalog_version };
+  }
+  /** Resolve the query's category slugs to live UUIDs so the index blocks other sections before ranking. */
+  private async categoryIds(slugs: string[] | undefined): Promise<string[] | undefined> {
+    if (!slugs?.length) return undefined;
+    const { rows } = await selectRows("category", { slug: `in.(${slugs.join(",")})`, select: "category_id", limit: "20" }, { count: "none", silentError: true });
+    return rows.map(row => String(row.category_id));
+  }
+  /** A single explicit category still labels the fallback rail when no neighbour survives the filters. */
+  private soleCategory(constraints?: QueryConstraints): string {
+    return constraints?.categorySlugs?.length === 1 ? constraints.categorySlugs[0]! : "";
   }
   /** Hydration keeps CLIP order, so score ties never reorder the neighbour vote. */
-  private async hydrate(candidates: Array<{ product_id: string; score: number }>, filters: SearchFilters): Promise<VisualCandidate[]> {
+  private async hydrate(candidates: Array<{ product_id: string; score: number }>, filters: SearchFilters, constraints?: QueryConstraints): Promise<VisualCandidate[]> {
     if (!candidates.length) return [];
     const ids = candidates.map(candidate => candidate.product_id).join(",");
-    const wantsVariants = Boolean(filters.color || filters.size);
+    const wantsVariants = Boolean(filters.color || filters.size || constraints?.colorFamily);
     const [products, variants] = await Promise.all([
       selectRows("product", {
         product_id: `in.(${ids})`,
@@ -121,6 +146,7 @@ export class ShopVisualSearchRepository implements VisualSearchRepository {
       };
       if (!matchesFilters(built, filters)) return [];
       const variantsForProduct = stock.get(candidate.product_id);
+      if (!satisfiesQueryConstraints(built, constraints, variantsForProduct?.colors || [])) return [];
       if (filters.color && !values(built.color_tone).includes(normalized(filters.color)) && !variantsForProduct?.colors.includes(normalized(filters.color))) return [];
       if (filters.size && !variantsForProduct?.sizes.includes(normalized(filters.size))) return [];
       return [built];

@@ -3,7 +3,7 @@ import sharp from "sharp";
 import { HttpError } from "../http.js";
 import type { JsonObject } from "../types.js";
 import type { VisualSearchRepository } from "./visual-search-repository.js";
-import { dominantCategory, dominantTone, categoryLabel, toneLabel, validateFilters, areCategoriesDisjoint, type GarmentAttributes, type SearchFilters, type VisualCandidate, type VisualSearchResult, type QueryAttributes } from "./visual-search-types.js";
+import { dominantCategory, dominantTone, categoryLabel, toneLabel, validateFilters, areCategoriesDisjoint, matchesAnySynonym, FIT_SYNONYMS, type GarmentAttributes, type SearchFilters, type VisualCandidate, type VisualSearchResult, type QueryAttributes } from "./visual-search-types.js";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const CLIP_DIMENSIONS = 512;
@@ -116,15 +116,19 @@ export function rankVisualMatches(
   const overlap = (a: unknown, b: unknown) => values(a).some(value => values(b).includes(value));
 
   const targetCat = attributes?.category;
-  const targetColor = attributes?.color ? normalized(attributes.color) : null;
+  const allowedCategories = attributes?.allowedCategories;
   const targetSleeve = attributes?.sleeve ? normalized(attributes.sleeve) : null;
+  const targetFit = attributes?.fit || null;
+  const targetStyle = attributes?.style ? normalized(attributes.style) : null;
+  const targetOccasion = attributes?.occasion ? normalized(attributes.occasion) : null;
 
   return rows
     .filter(row => Number.isFinite(row.similarity) && row.similarity >= threshold && row.status === "on_sale")
     .filter(row => {
-      if (targetCat && areCategoriesDisjoint(targetCat, row.category_slug)) {
-        return false;
-      }
+      // Category is the first blocking layer: an explicit allow-list (from the query)
+      // admits only its sections, so a clothing query never surfaces accessories.
+      if (allowedCategories?.length) return !!row.category_slug && allowedCategories.includes(row.category_slug);
+      if (targetCat && areCategoriesDisjoint(targetCat, row.category_slug)) return false;
       return true;
     })
     .map(row => {
@@ -139,14 +143,9 @@ export function rankVisualMatches(
         if ((budget === "under_300k" && price < 300000) || (budget === "300k_700k" && price >= 300000 && price <= 700000) || (budget === "700k_1.5m" && price > 700000 && price <= 1500000) || (budget === "above_1.5m" && price > 1500000)) bonus += 0.03;
       }
       let attributeBonus = 0;
-      if (targetColor) {
-        const rowTone = normalized(row.color_tone);
-        if (rowTone.includes(targetColor) || targetColor.includes(rowTone)) {
-          attributeBonus += 0.035;
-        } else if (values(row.style_tags).some(tag => tag.includes(targetColor))) {
-          attributeBonus += 0.025;
-        }
-      }
+      if (targetOccasion && values(row.occasions).includes(targetOccasion)) attributeBonus += 0.03;
+      if (targetStyle && values(row.style_tags).includes(targetStyle)) attributeBonus += 0.02;
+      if (targetFit && matchesAnySynonym(FIT_SYNONYMS[targetFit] || [targetFit], row.name, row.style_tags)) attributeBonus += 0.02;
       if (targetSleeve) {
         const rowName = normalized(row.name);
         if (rowName.includes(targetSleeve) || values(row.style_tags).some(tag => tag.includes(targetSleeve))) {

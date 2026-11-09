@@ -1,5 +1,5 @@
 import type { VisualSearchRepository } from "../visual-search/visual-search-repository.js";
-import type { SearchFilters, VisualCandidate, VisualSearchResult } from "../visual-search/visual-search-types.js";
+import type { QueryConstraints, SearchFilters, VisualCandidate, VisualSearchResult } from "../visual-search/visual-search-types.js";
 
 /** Text-only semantic search, or photo + text-feedback composition (CLARTEMIS lineage). */
 export type AiSearchMode = "text" | "composed";
@@ -15,5 +15,5 @@ export interface AiSearchResult extends VisualSearchResult {
 /** Retrieval boundary for composed search; photo-only retrieval stays on the visual contract. */
 export interface AiSearchRepository extends VisualSearchRepository {
   /** Nearest catalog photos for normalize(reference+modifier), with EM/IS components attached. */
-  composedSearch(reference: number[], modifier: number[], filters: SearchFilters): Promise<{ neighbors: VisualCandidate[]; featured: VisualCandidate[]; catalog_version: string }>;
+  composedSearch(reference: number[], modifier: number[], filters: SearchFilters, constraints?: QueryConstraints): Promise<{ neighbors: VisualCandidate[]; featured: VisualCandidate[]; catalog_version: string }>;
 }

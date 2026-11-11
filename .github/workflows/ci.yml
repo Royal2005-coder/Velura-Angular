@@ -257,7 +257,7 @@ jobs:
           from pathlib import Path
           from pglast import ast, parse_sql
           migrations = Path('database/migrations')
-          for number in ('054', '056', '057', '058'):
+          for number in ('054', '056', '057', '058', '059', '119'):
               files = list(migrations.glob(f'{number}_*.sql'))
               if len(files) != 1: raise SystemExit(f'Missing or ambiguous prerequisite migration {number}')
               for raw in parse_sql(files[0].read_text(encoding='utf-8')):
@@ -268,6 +268,9 @@ jobs:
           reports = next(migrations.glob('058_*.sql')).read_text(encoding='utf-8')
           if 'public.chat_schema_readiness()' not in reports:
               raise SystemExit('Chatbot release requires read-only installed-schema readiness RPC')
+          atomic = next(migrations.glob('119_*.sql')).read_text(encoding='utf-8')
+          if 'atomic059' not in atomic or 'public.chat_schema_readiness()' not in atomic:
+              raise SystemExit('Chatbot release requires atomic readiness evidence for migration 059')
           PY
   note-pr:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository

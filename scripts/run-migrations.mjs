@@ -127,17 +127,21 @@ select
   to_regclass('public.chat_support_offer_claim') is not null
     and to_regprocedure('public.chat_list_eligible_support_offers(uuid)') is not null
     and to_regprocedure('public.chat_confirm_support_offer(uuid,uuid,uuid)') is not null as promotions057,
-  to_regprocedure('public.chat_schema_readiness()') is not null as readiness_rpc;
+  to_regprocedure('public.chat_schema_readiness()') is not null as readiness_rpc,
+  exists(select 1 from pg_trigger t join pg_proc p on p.oid=t.tgfoid
+    where t.tgrelid=to_regclass('public.chat_message') and t.tgname='chat_sequence_message'
+      and t.tgenabled in ('O','A') and p.prosecdef
+      and position('pending_original_text' in pg_get_functiondef(p.oid))>0) as atomic059;
 `;
 
 /** Fail closed on an incomplete installed contract without invoking any mutation RPC. */
 async function requireChatbotSchema(client) {
   const metadata = (await client.query(CHECK_SQL)).rows[0];
-  if (!metadata.readiness_rpc) throw new Error("Chatbot schema is not ready: install prerequisites 054, 056, 057 and 058.");
+  if (!metadata.readiness_rpc) throw new Error("Chatbot schema is not ready: install prerequisites 054, 056, 057, 058 and 059.");
   const state = (await client.query("select public.chat_schema_readiness() as schema")).rows[0].schema;
   console.log("Chatbot schema:", JSON.stringify(state));
   if (state?.contract !== "chatbot-3.1.7" || state.ready !== true ||
-      !["governance054", "session056", "promotions057", "reports058"].every(key => state.checks?.[key] === true)) {
+      !["governance054", "session056", "promotions057", "reports058", "atomic059"].every(key => state.checks?.[key] === true)) {
     throw new Error("Chatbot schema readiness failed; do not deploy this release.");
   }
 }
@@ -217,11 +221,13 @@ async function main() {
     }
 
     for (const prefix of prefixes) {
-      if (["056", "057", "058"].includes(prefix)) {
+      if (["056", "057", "058", "059", "119"].includes(prefix)) {
         const installed = (await client.query(CHECK_SQL)).rows[0];
         if (!installed.governance054) throw new Error(`${prefix} requires installed migration 054; no repository fallback is acceptable.`);
         if (prefix !== "056" && !installed.session056) throw new Error(`${prefix} requires installed migration 056.`);
         if (prefix === "058" && !installed.promotions057) throw new Error("058 requires installed migration 057.");
+        if (prefix === "059" && !installed.promotions057) throw new Error("059 requires installed migration 057.");
+        if (prefix === "119" && !installed.atomic059) throw new Error("119 requires installed migration 059.");
       }
       const file = findMigration(prefix);
       const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");

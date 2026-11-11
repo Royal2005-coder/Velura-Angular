@@ -28,6 +28,8 @@ export interface ChatModelTrace {
   latencyMs: number;
   outcome: "ok" | "rejected" | "unavailable" | "invalid";
   streamed: boolean;
+  /** Audit marker for a decision the transport fields cannot express (e.g. local check fallback). */
+  note?: string;
 }
 
 /** Parsed model classification; issueKey correlates the same unresolved problem across paraphrases, and risk never changes account access. */

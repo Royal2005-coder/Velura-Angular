@@ -40,6 +40,17 @@ export function createLLMService(): ChatModel {
         if (!verdict.safe) result.trace.outcome = "rejected";
         return { ...verdict, trace };
       } catch (error) {
+        // CHAT-15 keeps L0/L2/L3 fail-closed. L1 catalog/styling advice may proceed on the
+        // deterministic check alone, but the skipped online review must stay auditable (CHAT-29).
+        if (analysis.level === "L1" && analysis.moderation === "none" && local.safe) {
+          console.warn("[LLM-REVIEW] Online review unavailable, proceeding with verified local risk check for L1 catalog styling");
+          const fallbackTrace = modelFailure(error, trace).trace;
+          const note = "CHAT-15 local risk check passed; online response review unavailable";
+          const last = fallbackTrace[fallbackTrace.length - 1];
+          if (last) last.note = note;
+          else fallbackTrace.push({ operation: "response_review", provider: "gemini", transport: "gateway", requestedModel: config.geminiModel, model: null, latencyMs: 0, outcome: "unavailable", streamed: false, note });
+          return { safe: true, reasons: [], trace: fallbackTrace };
+        }
         return { safe: false, reasons: ["RESPONSE_REVIEW_UNAVAILABLE"], trace: modelFailure(error, trace).trace };
       }
     }

@@ -46,7 +46,8 @@ async function attemptChatJson(provider: "mistral" | "gemini", model: string, op
   const gateway = Boolean(process.env.LITELLM_ENDPOINT || process.env.LITELLM_API_KEY);
   const trace: ChatModelTrace = { provider, operation, transport: gateway ? "gateway" : "direct", requestedModel: model, model: null, latencyMs: 0, outcome: "unavailable", streamed: gateway || provider === "mistral" };
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30000);
+  const timeoutMs = operation === "response_review" ? 45000 : 40000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const endpoint = process.env.LITELLM_ENDPOINT?.trim();
     const key = gateway ? process.env.LITELLM_API_KEY?.trim() : provider === "mistral" ? config.mistralApiKey : config.geminiApiKey;

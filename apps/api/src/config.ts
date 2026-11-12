@@ -15,6 +15,17 @@ export const config = {
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     "",
+  supabaseFallbackUrl: stripTrailingSlash(
+    process.env.VELURA_SUPABASE_FALLBACK_URL || process.env.SUPABASE_FALLBACK_URL || "http://kong.database.svc:8000"
+  ),
+  supabaseFallbackAnonKey:
+    process.env.VELURA_SUPABASE_FALLBACK_ANON_KEY ||
+    process.env.SUPABASE_FALLBACK_ANON_KEY ||
+    "",
+  supabaseFallbackServiceRoleKey:
+    process.env.VELURA_SUPABASE_FALLBACK_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_FALLBACK_SERVICE_ROLE_KEY ||
+    "",
   requestTimeoutMs: Number(process.env.API_REQUEST_TIMEOUT_MS || 15000),
   maxBodyBytes: Number(process.env.API_MAX_BODY_BYTES || 15728640),
   adminMutationLimitPerMinute: Number(process.env.ADMIN_MUTATION_LIMIT_PER_MINUTE || 60),

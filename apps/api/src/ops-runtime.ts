@@ -106,7 +106,8 @@ async function chatbotSchemaReadiness(url: string, key: string): Promise<boolean
       "session056" in checks && checks.session056 === true &&
       "promotions057" in checks && checks.promotions057 === true &&
       "reports058" in checks && checks.reports058 === true &&
-      "atomic059" in checks && checks.atomic059 === true;
+      "atomic059" in checks && checks.atomic059 === true &&
+      "ticketPriority120" in checks && checks.ticketPriority120 === true;
   } catch { return false; }
 }
 

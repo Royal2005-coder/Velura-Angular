@@ -1340,9 +1340,14 @@ select.profile-form__input {
     border-radius: 4px;
   }
 
+  /* KAN-66: in this horizontal rail the links are flex children of a scrolling row. Without
+     flex-shrink:0 they compressed to fit the viewport, so every label wrapped mid-word and the
+     icons overlapped their text. The rail is meant to scroll, not to squeeze. */
   .account-sidebar__link {
     padding: 10px 16px;
     display: inline-flex;
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   .product-grid {

@@ -48,7 +48,7 @@ function prepareVercelOutput(appDir, distSubDir, projectName, projectId, orgId) 
       },
       {
         src: "/supabase/(.*)",
-        dest: "https://gtyuajboeffmfskofoyh.supabase.co/$1"
+        dest: "https://unzffihtqdqgqbgnwokj.supabase.co/$1"
       },
       {
         handle: "filesystem"

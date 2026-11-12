@@ -32,25 +32,54 @@ export interface SupabaseResponse {
   status: number;
 }
 
+let circuitState: "CLOSED" | "OPEN" = "CLOSED";
+let failureCount = 0;
+let fallbackUntil = 0;
+const FALLBACK_COOLDOWN_MS = 60_000;
+
+/** Resolve the active PostgREST/Auth base URL and its matching credential pair. */
+export function getActiveSupabaseEndpoint(useAnonKey?: boolean) {
+  const isFallback = (circuitState === "OPEN" && Date.now() < fallbackUntil) || !config.supabaseUrl;
+
+  if (isFallback && config.supabaseFallbackUrl) {
+    return {
+      url: config.supabaseFallbackUrl,
+      key: useAnonKey ? config.supabaseFallbackAnonKey : config.supabaseFallbackServiceRoleKey,
+      isFallback: true,
+    };
+  }
+
+  return {
+    url: config.supabaseUrl,
+    key: useAnonKey ? config.supabaseAnonKey : getSupabaseServiceKey(),
+    isFallback: false,
+  };
+}
+
 /**
- * Call Supabase Auth or PostgREST. Maps network failures to HttpError.
+ * Call Supabase Auth or PostgREST. Maps network failures to HttpError with automatic in-cluster fallback.
  */
 export async function supabaseRequest(
   path: string,
   options: SupabaseRequestOptions = {}
 ): Promise<SupabaseResponse> {
+  const endpoint = getActiveSupabaseEndpoint(options.useAnonKey);
+  let resolvedPath = path;
+  if (endpoint.url.includes("postgrest") && endpoint.url.includes(".svc") && resolvedPath.startsWith("/rest/v1")) {
+    resolvedPath = resolvedPath.replace(/^\/rest\/v1/, "") || "/";
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
-  const url = new URL(path, config.supabaseUrl);
+  const url = new URL(resolvedPath, endpoint.url);
 
   Object.entries(options.query || {}).forEach(([key, value]) => {
     if (value === undefined || value === null || value === "") return;
     url.searchParams.set(key, String(value));
   });
 
-  let key = options.useAnonKey ? config.supabaseAnonKey : getSupabaseServiceKey();
+  let key = endpoint.key;
   if (!key && options.useAnonKey !== false) {
-    key = config.supabaseAnonKey;
+    key = endpoint.isFallback ? config.supabaseFallbackAnonKey : config.supabaseAnonKey;
   }
   if (!key) {
     throw new HttpError(503, "SERVICE_ROLE_REQUIRED", "Supabase service role is not configured");
@@ -84,6 +113,16 @@ export async function supabaseRequest(
     const data = text ? parseJson(text) : null;
 
     if (!response.ok) {
+      // 402 is a hard quota lockout, not a transient blip: retry on standby immediately.
+      if ((response.status === 402 || response.status >= 502) && !endpoint.isFallback && config.supabaseFallbackUrl) {
+        failureCount = response.status === 402 ? 2 : failureCount + 1;
+        if (failureCount >= 2) {
+          circuitState = "OPEN";
+          fallbackUntil = Date.now() + FALLBACK_COOLDOWN_MS;
+          console.warn(`[CIRCUIT_BREAKER] Cloud Supabase returned ${response.status}. Latching circuit OPEN -> Falling back to in-cluster stack (${config.supabaseFallbackUrl})`);
+          return supabaseRequest(path, { ...options, silentError: true });
+        }
+      }
       if (!options.silentError) {
         console.error("[SUPABASE_ERROR_LOG]", response.status, url.toString(), "Response data:", data);
       }
@@ -95,16 +134,33 @@ export async function supabaseRequest(
       );
     }
 
+    // Request succeeded on primary
+    if (!endpoint.isFallback) {
+      failureCount = 0;
+      circuitState = "CLOSED";
+    }
+
     return {
       data,
       count: parseCount(response.headers.get("content-range")),
       status: response.status
     };
   } catch (error) {
+    // An answered HTTP denial (4xx/RPC error) is not an outage: retrying it on the
+    // fallback would replay a rejected RPC, and counting it would open the circuit.
+    if (error instanceof HttpError) throw error;
+    if (!endpoint.isFallback && config.supabaseFallbackUrl) {
+      failureCount++;
+      if (failureCount >= 2) {
+        circuitState = "OPEN";
+        fallbackUntil = Date.now() + FALLBACK_COOLDOWN_MS;
+        console.warn(`[CIRCUIT_BREAKER] Network error connecting to Cloud Supabase. Falling back to in-cluster stack (${config.supabaseFallbackUrl})`);
+        return supabaseRequest(path, { ...options, silentError: true });
+      }
+    }
     if (error instanceof Error && error.name === "AbortError") {
       throw new HttpError(504, "SUPABASE_TIMEOUT", "Supabase request timed out");
     }
-    if (error instanceof HttpError) throw error;
     throw new HttpError(502, "SUPABASE_NETWORK_ERROR", "Cannot reach Supabase", {
       message: error instanceof Error ? error.message : String(error)
     });

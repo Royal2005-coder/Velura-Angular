@@ -5,6 +5,16 @@ resources:
 - ../../secrets/production
 patches:
   - path: release-revision.yaml
+  # Append last so duplicate keys win over velura-api-secrets during the Supabase cutover.
+  - target:
+      kind: Deployment
+      name: velura-api
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom/-
+        value:
+          secretRef:
+            name: velura-api-supabase
 images:
 - name: ghcr.io/royal2005-coder/velura-api
   newName: ghcr.io/royal2005-coder/velura-api

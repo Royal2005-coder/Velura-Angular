@@ -333,8 +333,9 @@ begin
 end; $$;
 
 -- Extend the real tracking flow with an exact order scope and atomic five-minute expiry.
-drop function public.velura_issue_guest_tracking_otp(text,text,uuid,text);
-create function public.velura_issue_guest_tracking_otp(p_phone text,p_ip text,p_nonce uuid,p_hash text,p_order uuid default null)
+drop function if exists public.velura_issue_guest_tracking_otp(text,text,uuid,text);
+drop function if exists public.velura_issue_guest_tracking_otp(text,text,uuid,text,uuid);
+create or replace function public.velura_issue_guest_tracking_otp(p_phone text,p_ip text,p_nonce uuid,p_hash text,p_order uuid default null)
 returns void language plpgsql security definer set search_path=pg_catalog,public as $$
 begin
   perform pg_advisory_xact_lock(hashtextextended('tracking-phone:'||p_phone,0));

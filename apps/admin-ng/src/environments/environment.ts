@@ -2,7 +2,7 @@ export const environment = {
   production: false,
   apiUrl: 'http://localhost:8787',
   adminErpUrl: 'http://localhost:4003',
-  supabaseUrl: 'https://gtyuajboeffmfskofoyh.supabase.co',
+  supabaseUrl: 'https://unzffihtqdqgqbgnwokj.supabase.co',
   supabaseAuthUrl: '/supabase',
-  supabaseAnonKey: 'sb_publishable_boQ_U1tSUZLbI7_0-NQvcg_3s_TEjfm',
+  supabaseAnonKey: 'sb_publishable_upIRuwn0FmpzkHX3YQ5ncg_jeLlpyIr',
 };

@@ -197,7 +197,7 @@ claimed, and the checked-in project is not evidence of running automation.
 
 ## Existing Supabase and OAuth settings
 
-Existing Supabase project: `https://gtyuajboeffmfskofoyh.supabase.co`.
+Existing Supabase project: `https://unzffihtqdqgqbgnwokj.supabase.co`.
 This DNS root does not provision a replacement project or claim management of
 Supabase Auth settings. Preserve the existing Auth allowlist until ownership and
 an API-supported Terraform/provider contract are reviewed separately; do not
@@ -207,7 +207,7 @@ The expected storefront Site URL remains `https://velura.royalai.dev`.
 Known application callback URLs include `https://admin.royalai.dev/auth/callback`,
 `https://admin-erp.royalai.dev/auth/callback`, `http://localhost:4001/auth/callback`,
 `http://localhost:4003/auth/callback`, and
-`https://gtyuajboeffmfskofoyh.supabase.co/auth/v1/callback` for Google OAuth.
+`https://unzffihtqdqgqbgnwokj.supabase.co/auth/v1/callback` for Google OAuth.
 Retain only routes actually required by the active authentication integration;
 the historical VM and `admin.velura.royalai.dev` are not new infrastructure
 requirements. Public API/browser CORS is owned by application configuration,

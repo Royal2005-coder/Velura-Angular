@@ -137,11 +137,11 @@ select
 /** Fail closed on an incomplete installed contract without invoking any mutation RPC. */
 async function requireChatbotSchema(client) {
   const metadata = (await client.query(CHECK_SQL)).rows[0];
-  if (!metadata.readiness_rpc) throw new Error("Chatbot schema is not ready: install prerequisites 054, 056, 057, 058 and 059.");
+  if (!metadata.readiness_rpc) throw new Error("Chatbot schema is not ready: install prerequisites 054, 056, 057, 058, 059, 119, 120 and 121.");
   const state = (await client.query("select public.chat_schema_readiness() as schema")).rows[0].schema;
   console.log("Chatbot schema:", JSON.stringify(state));
   if (state?.contract !== "chatbot-3.1.7" || state.ready !== true ||
-      !["governance054", "session056", "promotions057", "reports058", "atomic059"].every(key => state.checks?.[key] === true)) {
+      !["governance054", "session056", "promotions057", "reports058", "atomic059", "ticketPriority120"].every(key => state.checks?.[key] === true)) {
     throw new Error("Chatbot schema readiness failed; do not deploy this release.");
   }
 }

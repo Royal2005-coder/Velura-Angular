@@ -10,7 +10,7 @@ test("full, lite, cached and detail catalog reads cannot replay a pre-rename HTT
   const saved = { ...config };
   const id = "30000000-0000-4000-8000-000000000001";
   let name = "UAT-Khai Áo Thun Basic";
-  Object.assign(config, { supabaseUrl: "https://catalog.test", supabaseAnonKey: "fixture" });
+  Object.assign(config, { supabaseUrl: "https://catalog.test", supabaseAnonKey: "fixture", supabaseServiceRoleKey: "server-fixture" });
   globalThis.fetch = async input => {
     const rows = new URL(String(input)).pathname.endsWith("/product")
       ? [{ product_id: id, name, slug: "uat-khai", is_combo: false, category: { slug: "ao", name: "Áo" }, variants: [] }]

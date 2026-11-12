@@ -8,7 +8,7 @@ import { handleRuntimeRoute, runtimeReadiness } from "../../apps/api/src/ops-run
 
 const installed = {
   contract: "chatbot-3.1.7", ready: true,
-  checks: { governance054: true, session056: true, promotions057: true, reports058: true, atomic059: true },
+  checks: { governance054: true, session056: true, promotions057: true, reports058: true, atomic059: true, ticketPriority120: true },
 };
 
 for (const scenario of [
@@ -19,6 +19,8 @@ for (const scenario of [
   { name: "missing approved promotions 057", payload: { ...installed, checks: { ...installed.checks, promotions057: false } }, status: 200, expected: false },
   { name: "missing durable reports 058", payload: { ...installed, checks: { ...installed.checks, reports058: false } }, status: 200, expected: false },
   { name: "missing atomic quarantine 059", payload: { ...installed, checks: { ...installed.checks, atomic059: false } }, status: 200, expected: false },
+  { name: "missing escalation enum 120", payload: { ...installed, checks: { ...installed.checks, ticketPriority120: false } }, status: 200, expected: false },
+  { name: "old readiness RPC cannot certify escalation enum", payload: { ...installed, checks: { ...installed.checks, ticketPriority120: undefined } }, status: 200, expected: false },
   { name: "unversioned success is insufficient", payload: { ready: true }, status: 200, expected: false },
   { name: "unexpected contract version", payload: { ...installed, contract: "unknown" }, status: 200, expected: false },
 ]) {

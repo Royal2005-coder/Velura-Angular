@@ -1,6 +1,6 @@
 -- KAN-32: quarantine originals before any shared read; publish neutral context under session locks.
 begin;
-alter table public.chat_session add column context_revision bigint not null default 0;
+alter table public.chat_session add column if not exists context_revision bigint not null default 0;
 alter table public.chat_message drop constraint chat_message_moderation_status_check;
 alter table public.chat_message add constraint chat_message_moderation_status_check check(moderation_status in ('pending','visible','restricted'));
 create table public.chat_issue_state (

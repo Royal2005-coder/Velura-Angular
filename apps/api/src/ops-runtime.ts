@@ -84,10 +84,15 @@ export function runtimeMetrics(): string {
   return lines.join("\n") + "\n";
 }
 
+/** PostgREST lives under /rest/v1 behind Kong; a direct postgrest service already serves the root path. */
+function postgrestUrl(base: string, path: string): string {
+  return `${base}${base.includes("postgrest") ? path.replace(/^\/rest\/v1/, "") : `/rest/v1${path}`}`;
+}
+
 /** Verify the installed governance contract through a metadata-only, service-role RPC; never call mutation RPCs. */
 async function chatbotSchemaReadiness(url: string, key: string): Promise<boolean> {
   try {
-    const response = await fetch(`${url}/rest/v1/rpc/chat_schema_readiness`, {
+    const response = await fetch(postgrestUrl(url, "/rpc/chat_schema_readiness"), {
       method: "GET", headers: { apikey: key, authorization: `Bearer ${key}` },
       redirect: "error", signal: AbortSignal.timeout(3000),
     });
@@ -100,7 +105,8 @@ async function chatbotSchemaReadiness(url: string, key: string): Promise<boolean
       "governance054" in checks && checks.governance054 === true &&
       "session056" in checks && checks.session056 === true &&
       "promotions057" in checks && checks.promotions057 === true &&
-      "reports058" in checks && checks.reports058 === true;
+      "reports058" in checks && checks.reports058 === true &&
+      "atomic059" in checks && checks.atomic059 === true;
   } catch { return false; }
 }
 
@@ -109,12 +115,24 @@ export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { da
   async function check(url: string, headers: Record<string, string>): Promise<boolean> {
     try { const response = await fetch(url, { headers, redirect: "error", signal: AbortSignal.timeout(3000) }); await response.body?.cancel(); return response.ok; } catch { return false; }
   }
+  const productPath = "/product?select=product_id,image_colors,variants:variant(sku)&limit=0";
   const databaseKey = config.supabaseServiceRoleKey || config.supabaseAnonKey;
+  const fallbackDatabaseKey = config.supabaseFallbackServiceRoleKey || config.supabaseFallbackAnonKey;
+  async function databaseReachable(): Promise<boolean> {
+    if (config.supabaseUrl && databaseKey && await check(postgrestUrl(config.supabaseUrl, productPath), { apikey: databaseKey, authorization: `Bearer ${databaseKey}` })) return true;
+    return !!(config.supabaseFallbackUrl && fallbackDatabaseKey &&
+      await check(postgrestUrl(config.supabaseFallbackUrl, productPath), { apikey: fallbackDatabaseKey, authorization: `Bearer ${fallbackDatabaseKey}` }));
+  }
+  async function chatbotSchemaReady(): Promise<boolean> {
+    if (config.supabaseUrl && config.supabaseServiceRoleKey && await chatbotSchemaReadiness(config.supabaseUrl, config.supabaseServiceRoleKey)) return true;
+    return !!(config.supabaseFallbackUrl && config.supabaseFallbackServiceRoleKey &&
+      await chatbotSchemaReadiness(config.supabaseFallbackUrl, config.supabaseFallbackServiceRoleKey));
+  }
   const endpoint = process.env.LITELLM_ENDPOINT?.replace(/\/v1\/?$/, "").replace(/\/$/, "");
   const [database, gateway, chatbotSchema] = await Promise.all([
-    config.supabaseUrl && databaseKey ? check(`${config.supabaseUrl}/rest/v1/product?select=product_id,image_colors,variants:variant(sku)&limit=0`, { apikey: databaseKey, authorization: `Bearer ${databaseKey}` }) : false,
+    databaseReachable(),
     endpoint && process.env.LITELLM_API_KEY ? check(`${endpoint}/health/readiness`, { authorization: `Bearer ${process.env.LITELLM_API_KEY}` }) : false,
-    config.supabaseUrl && config.supabaseServiceRoleKey ? chatbotSchemaReadiness(config.supabaseUrl, config.supabaseServiceRoleKey) : false,
+    chatbotSchemaReady(),
   ]);
   return { ready: database && gateway && chatbotSchema, checks: { database, gateway, chatbotSchema } };
 }

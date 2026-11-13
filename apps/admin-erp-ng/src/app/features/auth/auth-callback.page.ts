@@ -9,8 +9,24 @@ import { AuthFrame } from './auth-frame';
 const PKCE_STORAGE_KEY = 'velura-admin-erp-oauth-pkce';
 const STATE_STORAGE_KEY = 'velura-admin-erp-oauth-state';
 
+function extractAuthCallbackParams(): Map<string, string> {
+  const map = new Map<string, string>();
+  const search = window.location.search.replace(/^\?/, '');
+  if (search) {
+    new URLSearchParams(search).forEach((v, k) => map.set(k, v));
+  }
+  const hash = window.location.hash.replace(/^#/, '');
+  if (hash) {
+    const hashQuery = hash.includes('?') ? hash.split('?')[1] : hash;
+    new URLSearchParams(hashQuery).forEach((v, k) => {
+      if (!map.has(k)) map.set(k, v);
+    });
+  }
+  return map;
+}
+
 /**
- * Exchanges the Google PKCE code and hydrates the ERP session.
+ * Exchanges the Google PKCE code or applies direct access token, and hydrates the ERP session.
  */
 @Component({
   selector: 'app-auth-callback-page',
@@ -85,43 +101,74 @@ export class AuthCallbackPage {
 
   constructor() {
     useBodyClass('erp-auth');
-    const params = new URL(window.location.href).searchParams;
+    const params = extractAuthCallbackParams();
+    const providerError = params.get('error_description') || params.get('error');
+    if (providerError) {
+      this.fail(this.describeProviderError(providerError, params.get('error') || ''));
+      return;
+    }
+
+    const accessToken = params.get('access_token');
     const code = params.get('code');
     const verifier = sessionStorage.getItem(PKCE_STORAGE_KEY) || localStorage.getItem(PKCE_STORAGE_KEY);
     const state = params.get('state');
     const expectedState = sessionStorage.getItem(STATE_STORAGE_KEY) || localStorage.getItem(STATE_STORAGE_KEY);
-    if (!code || !verifier) {
-      this.fail('Không tìm thấy mã xác thực hợp lệ trong URL.');
-      return;
-    }
-    // PKCE verifier is the hard requirement. Supabase may omit the echoed state on
-    // some provider round-trips; verify it only when both sides actually exist.
+
+    // PKCE verifier / state check. If an echoed state is returned, it must match.
     if (state && expectedState && state !== expectedState) {
+      sessionStorage.removeItem(PKCE_STORAGE_KEY);
+      sessionStorage.removeItem(STATE_STORAGE_KEY);
+      localStorage.removeItem(PKCE_STORAGE_KEY);
+      localStorage.removeItem(STATE_STORAGE_KEY);
       this.fail('Phiên xác thực không khớp. Vui lòng đăng nhập lại.');
       return;
     }
-    const redirectUri = `${window.location.origin}/auth/callback`;
-    this.api.exchangePkce(code, verifier, redirectUri).subscribe({
-      next: (payload) => {
-        if (!payload.token) {
-          this.fail('Phản hồi xác thực thiếu access token.');
-          return;
-        }
-        sessionStorage.removeItem(PKCE_STORAGE_KEY);
-        sessionStorage.removeItem(STATE_STORAGE_KEY);
-        localStorage.removeItem(PKCE_STORAGE_KEY);
-        localStorage.removeItem(STATE_STORAGE_KEY);
-        this.session.setToken(payload.token);
-        this.api.me().subscribe({
-          next: (context) => {
-            const session = this.session.applyAuthContext(context);
-            void this.router.navigateByUrl(this.session.firstRoute(session));
-          },
-          error: (error: unknown) => this.fail(adminErrorMessage(error, 'Không thể xác minh quyền quản trị.')),
-        });
-      },
-      error: (error: unknown) => this.fail(adminErrorMessage(error, 'Xác thực thất bại.')),
-    });
+
+    // Direct token flow (implicit grant or OAuth redirect fragment)
+    if (accessToken) {
+      sessionStorage.removeItem(PKCE_STORAGE_KEY);
+      sessionStorage.removeItem(STATE_STORAGE_KEY);
+      localStorage.removeItem(PKCE_STORAGE_KEY);
+      localStorage.removeItem(STATE_STORAGE_KEY);
+      this.session.setToken(accessToken);
+      this.api.me().subscribe({
+        next: (context) => {
+          const session = this.session.applyAuthContext(context);
+          void this.router.navigateByUrl(this.session.firstRoute(session));
+        },
+        error: (error: unknown) => this.fail(adminErrorMessage(error, 'Không thể xác minh quyền quản trị.')),
+      });
+      return;
+    }
+
+    // PKCE authorization code exchange
+    if (code && verifier) {
+      const redirectUri = `${window.location.origin}/auth/callback`;
+      this.api.exchangePkce(code, verifier, redirectUri).subscribe({
+        next: (payload) => {
+          if (!payload.token) {
+            this.fail('Phản hồi xác thực thiếu access token.');
+            return;
+          }
+          sessionStorage.removeItem(PKCE_STORAGE_KEY);
+          sessionStorage.removeItem(STATE_STORAGE_KEY);
+          localStorage.removeItem(PKCE_STORAGE_KEY);
+          localStorage.removeItem(STATE_STORAGE_KEY);
+          this.session.setToken(payload.token);
+          this.api.me().subscribe({
+            next: (context) => {
+              const session = this.session.applyAuthContext(context);
+              void this.router.navigateByUrl(this.session.firstRoute(session));
+            },
+            error: (error: unknown) => this.fail(adminErrorMessage(error, 'Không thể xác minh quyền quản trị.')),
+          });
+        },
+        error: (error: unknown) => this.fail(adminErrorMessage(error, 'Xác thực thất bại.')),
+      });
+      return;
+    }
+
+    this.fail('Không tìm thấy mã xác thực hợp lệ trong URL.');
   }
 
   private fail(message: string): void {
@@ -129,5 +176,16 @@ export class AuthCallbackPage {
     this.title.set('Xác thực thất bại');
     this.detail.set('Bạn có thể quay lại trang đăng nhập và thử lại.');
     this.errorMessage.set(message);
+  }
+
+  private describeProviderError(description: string, code: string): string {
+    const text = `${code} ${description}`.toLowerCase();
+    if (text.includes('provider is not enabled') || text.includes('unsupported provider')) {
+      return 'Đăng nhập Google SSO chưa được bật trên hệ thống. Vui lòng đăng nhập bằng tài khoản quản trị.';
+    }
+    if (text.includes('access_denied') || text.includes('denied access')) {
+      return 'Bạn đã huỷ đăng nhập Google. Vui lòng thử lại nếu muốn tiếp tục.';
+    }
+    return 'Không thể xác thực với Google. Vui lòng đăng nhập bằng email và mật khẩu quản trị.';
   }
 }

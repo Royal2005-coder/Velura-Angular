@@ -187,5 +187,16 @@ describe('SiteHeader', () => {
       expect(header.searchQuery()).toBe('');
       if (input) expect(input.value).toBe('');
     });
+
+    it('clears search state and closes navigation when clicking navigation tabs', async () => {
+      const header = await createStorefrontPage(SiteHeader, {}, { routes });
+      header.searchQuery.set('dam-da-tiec');
+      header.navOpen.set(true);
+
+      header.onNavClick();
+
+      expect(header.searchQuery()).toBe('');
+      expect(header.navOpen()).toBe(false);
+    });
   });
 });

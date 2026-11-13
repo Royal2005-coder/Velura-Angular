@@ -195,7 +195,9 @@ export function createChatbotService({ repository, model = createLLMService(), i
       }
       const state = await repository.recordAnalysis(sessionId, asString(userMessage.message_id), issueKey, analysis as unknown as JsonObject, false);
       session = asJsonObject(state.session);
-      await enqueueChatReport(sessionId, analysis.risk === "red" || analysis.risk === "orange" ? "warning" : "important_update");
+      if (session.handoff_status !== "ai" || analysis.risk === "red" || analysis.risk === "orange") {
+        await enqueueChatReport(sessionId, analysis.risk === "red" || analysis.risk === "orange" ? "warning" : "important_update");
+      }
       if (session.handoff_status !== "ai") {
         if (session.handoff_status === "requested" && !explicitHuman) {
           await repository.commitQueuedTurn(sessionId, asNumber(turn.epoch), asNumber(userMessage.sequence), { kind: analysis.sentiment === "negative" ? "distress" : "received", trace: analysis.trace || [] });

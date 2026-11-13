@@ -66,3 +66,21 @@
   - `npm run typecheck:api`: **Passed (0 errors)**.
   - `npm run build:user`: **Passed (Bundle generation complete)**.
 - [x] **TASK-5.3**: Compiled clear step-by-step instructions for Supabase Cloud Dashboard Google Provider activation.
+
+---
+
+## Phase 6: OAuth Error Diagnostics & CSRF Hardening (EGM & Harness² Full-Cycle)
+- [x] **TASK-6.1**: Fix State Bypass Vulnerability & Implement Multi-Tier OAuth Error Parser in `user-ng`
+  - Enforce strict `state` validation (`if (storedState && (!returnedState || returnedState !== storedState))`).
+  - Upgrade `describeOAuthError` handling: map `redirect_uri_not_allowed`, `identity_already_exists`, `database_error`, `server_error`, `invalid_grant`, `access_denied`, etc.
+  - Expose `technicalCode` and `errorHint` signals to UI with copy button and one-click Google retry.
+  - Unit test `auth-callback.page.spec.ts`: **8/8 tests passed**.
+- [x] **TASK-6.2**: Synchronize OAuth Error Diagnostics & CSRF Hardening across `admin-erp-ng` and `admin-ng`
+  - Port multi-tier error parser, state validation, and diagnostic badges to `apps/admin-erp-ng/src/app/features/auth/auth-callback.page.ts` and `apps/admin-ng/src/app/features/login/admin-auth-callback.page.ts`.
+- [x] **TASK-6.3**: Harden API `/api/auth/google` and `/api/auth/pkce` error reporting in `apps/api/src/server.ts`
+  - Ensure clear JSON error payload and allow storefront origins in `validatedOAuthRedirect`.
+  - Redirect directly to callback with `?error=invalid_request` instead of throwing raw JSON on GET browser navigations.
+- [x] **TASK-6.4**: Unit Tests & Regression Verification
+  - API typecheck: `npm run typecheck:api` -> **Passed (0 errors)**.
+  - API tests: `npm run test:api` -> **863/863 passed**.
+  - User app build: `npm run build:user` -> **Application bundle generation complete**.

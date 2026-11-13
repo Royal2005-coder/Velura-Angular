@@ -161,7 +161,7 @@ export class SiteHeader {
     this.syncNativeInputs(query);
   }
 
-  private clearSearchState(): void {
+  clearSearchState(): void {
     this.searchQuery.set('');
     this.syncNativeInputs('');
   }
@@ -200,6 +200,14 @@ export class SiteHeader {
    */
   closeNav(): void {
     this.navOpen.set(false);
+  }
+
+  /**
+   * Closes the mobile navigation drawer and resets search keyword when navigating between tabs.
+   */
+  onNavClick(): void {
+    this.closeNav();
+    this.clearSearchState();
   }
 
   /**

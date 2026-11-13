@@ -66,7 +66,7 @@ CREATE TYPE condition_check AS ENUM ('passed', 'minor_damage', 'major_damage');
 
 CREATE TYPE review_status AS ENUM ('pending', 'approved', 'rejected');
 
-CREATE TYPE ticket_priority AS ENUM ('low', 'medium', 'high');
+CREATE TYPE ticket_priority AS ENUM ('low', 'medium', 'high', 'urgent');
 
 CREATE TYPE ticket_status AS ENUM ('open', 'processing', 'resolved', 'closed');
 

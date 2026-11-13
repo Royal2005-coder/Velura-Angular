@@ -180,12 +180,13 @@ export async function handleProductsRoute(
 
         const category = product.category || (product.category_id ? await selectOne("category", { category_id: `eq.${product.category_id}` }, { count: "none", useAnonKey: true }) : null);
 
-        // Fetch approved reviews for this product
+        // Private reviews require a server read and an approved-only public DTO.
         const { rows: dbReviews } = await selectRows("review", {
+          select: "review_id,product_id,user_id,order_id,rating,comment,images,review_tags,submitted_at,status,admin_reply",
           product_id: `eq.${product.product_id}`,
           status: "eq.approved",
           order: "submitted_at.desc"
-        }, { count: "none", useAnonKey: true });
+        }, { count: "none", useAnonKey: false });
 
         let reviews: JsonObject[] = [];
         if (dbReviews && dbReviews.length > 0) {
@@ -238,17 +239,19 @@ export async function handleProductsRoute(
           reviews = dbReviews.map((r, idx) => {
             const matchedVar = orderVariantMap.get(r.order_id) || (variants.length > 0 ? variants[idx % variants.length] : null);
             let cleanReply: string | null = typeof r.admin_reply === "string" ? r.admin_reply : null;
-            if (cleanReply && cleanReply.trim().startsWith("[")) {
+            if (cleanReply && /^[\[{]/.test(cleanReply.trim())) {
+              const structuredReply = cleanReply;
+              cleanReply = null;
               try {
-                const parsed: unknown = JSON.parse(cleanReply);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  const adminEntry = parsed.find((item: unknown) => typeof item === "object" && item !== null && "role" in item && item.role === "admin") || parsed[0];
+                const parsed: unknown = JSON.parse(structuredReply);
+                if (Array.isArray(parsed)) {
+                  const adminEntry = parsed.find((item: unknown) => typeof item === "object" && item !== null && "role" in item && item.role === "admin");
                   if (typeof adminEntry === "object" && adminEntry !== null && "reply_text" in adminEntry && typeof adminEntry.reply_text === "string") {
                     cleanReply = adminEntry.reply_text;
                   }
                 }
               } catch {
-                // Keep original string if not JSON
+                // Structured moderation metadata must never fall back to a public raw string.
               }
             }
             const rawOrderName = orderNameMap.get(r.order_id);
@@ -259,7 +262,14 @@ export async function handleProductsRoute(
                 ? String(rawUserName).trim()
                 : fallbackNames[idx % fallbackNames.length];
             return {
-              ...r,
+              review_id: r.review_id,
+              product_id: r.product_id,
+              rating: r.rating,
+              comment: r.comment,
+              images: r.images,
+              review_tags: r.review_tags,
+              submitted_at: r.submitted_at,
+              status: r.status,
               user_full_name: resolvedName,
               verified_purchase: Boolean(r.order_id),
               variant_color: matchedVar?.color || null,
@@ -342,7 +352,7 @@ export async function handleProductsRoute(
           status: LISTED_STATUSES
         }, { count: "none" }),
         selectRows("combo_item", {}, { count: "none", useAnonKey: true }).catch(() => ({ rows: [] as JsonObject[] })),
-        selectRows("review", { select: "product_id,rating", status: "eq.approved" }, { count: "none", useAnonKey: true }).catch(() => ({ rows: [] as JsonObject[] }))
+        selectRows("review", { select: "product_id,rating", status: "eq.approved" }, { count: "none", useAnonKey: false })
       ]);
 
       const products = productResult.rows;

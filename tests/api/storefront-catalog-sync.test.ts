@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../apps/api/src/config.js";
 import { HttpError, sendError } from "../../apps/api/src/http.js";
+import { selectRows } from "../../apps/api/src/supabase.js";
 import { cartUnavailableReason } from "../../apps/api/src/user/cart-catalog.js";
 import { filterCatalogProducts, parseCatalogFilters, textMatchesAllWords } from "../../apps/api/src/user/catalog-search.js";
 import { handleProductsRoute, invalidateCatalogCache } from "../../apps/api/src/user/products.js";
@@ -27,15 +28,22 @@ function productRow(id: string, name: string, extra: JsonObject = {}): JsonObjec
   };
 }
 
-/** Fake PostgREST: honors the `status=in.(…)`/`eq.` filter exactly like the database would. */
+/** Captures credentials and predicates at the private review read boundary. */
+interface ReviewRead {
+  key: string;
+  query: Record<string, string>;
+}
+
+/** Fake PostgREST: honors status/product filters and denies anonymous review reads. */
 async function withCatalog(
   products: JsonObject[],
-  run: (calls: { productKeys: string[] }) => Promise<void>
+  run: (calls: { productKeys: string[]; reviewReads: ReviewRead[] }) => Promise<void>,
+  tables: Record<string, JsonObject[]> = {}
 ): Promise<void> {
   const savedConfig = { ...config };
   const originalFetch = globalThis.fetch;
   Object.assign(config, { supabaseUrl: "https://storefront-sync.test", supabaseServiceRoleKey: "service-key", supabaseAnonKey: "anon-key" });
-  const calls = { productKeys: [] as string[] };
+  const calls = { productKeys: [] as string[], reviewReads: [] as ReviewRead[] };
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     let rows: unknown[] = [];
@@ -51,6 +59,19 @@ async function withCatalog(
       rows = products.filter((row) => id === `eq.${row.product_id}`).flatMap((row) => row.variants as JsonObject[]);
     } else if (url.pathname.endsWith("/category")) {
       rows = [{ category_id: "c1", name: "Áo thun", slug: "ao-thun" }];
+    } else if (url.pathname.endsWith("/review")) {
+      const key = new Headers(init?.headers).get("apikey") ?? "";
+      calls.reviewReads.push({ key, query: Object.fromEntries(url.searchParams) });
+      if (key !== "service-key") {
+        return new Response(JSON.stringify({ code: "42501", message: "permission denied for table review" }), { status: 401 });
+      }
+      const status = url.searchParams.get("status");
+      const id = url.searchParams.get("product_id");
+      // Return full fixtures so the public DTO allowlist is tested independently of SELECT.
+      rows = (tables.review || []).filter((row) =>
+        (!status || status === `eq.${row.status}`) && (!id || id === `eq.${row.product_id}`));
+    } else {
+      rows = tables[url.pathname.split("/").pop() ?? ""] || [];
     }
     return new Response(JSON.stringify(rows), { status: 200, headers: { "content-range": `0-${rows.length}/${rows.length}` } });
   };
@@ -195,6 +216,118 @@ test("storefront lists on_sale and out_of_stock only; discontinued opens by dire
     assert.deepEqual(names((await get("/api/user/products?lite=1&q=basic")).json), []);
     await assert.rejects(() => get(`/api/user/products/${PRODUCT_ID}`, PRODUCT_ID),
       (error: unknown) => error instanceof HttpError && error.status === 404);
+  });
+});
+
+test("catalog ratings use the server credential when private reviews deny anonymous SELECT", async () => {
+  await withCatalog([productRow(PRODUCT_ID, "Áo thun"), productRow(OTHER_ID, "Quần jeans")], async (calls) => {
+    await assert.rejects(
+      () => selectRows("review", { status: "eq.approved" }, { useAnonKey: true, silentError: true }),
+      (error: unknown) => error instanceof HttpError && error.status === 401
+    );
+    const response = await get("/api/user/products");
+    assert.equal(response.status, 200);
+    assert.deepEqual((response.json as JsonObject[]).map((row) => ({
+      product_id: row.product_id, rating_value: row.rating_value, rating_count: row.rating_count
+    })), [
+      { product_id: PRODUCT_ID, rating_value: 4, rating_count: 2 },
+      { product_id: OTHER_ID, rating_value: 2, rating_count: 1 }
+    ]);
+    assert.deepEqual(calls.reviewReads, [
+      { key: "anon-key", query: { status: "eq.approved" } },
+      { key: "service-key", query: { select: "product_id,rating", status: "eq.approved" } }
+    ]);
+  }, {
+    review: [
+      { product_id: PRODUCT_ID, rating: 5, status: "approved" },
+      { product_id: PRODUCT_ID, rating: 3, status: "approved" },
+      { product_id: PRODUCT_ID, rating: 1, status: "pending" },
+      { product_id: PRODUCT_ID, rating: 1, status: "hidden" },
+      { product_id: OTHER_ID, rating: 2, status: "approved" }
+    ]
+  });
+});
+
+test("detail reads approved product-bound reviews and returns only public review fields", async () => {
+  const target = productRow(PRODUCT_ID, "Áo thun", {
+    variants: [
+      { variant_id: "v-default", color: "Đen", size: "M" },
+      { variant_id: "v-purchased", color: "Xanh", size: "L" }
+    ]
+  });
+  const approved: JsonObject = {
+    review_id: "review-public", product_id: PRODUCT_ID, user_id: "private-user", order_id: "private-order",
+    rating: 5, comment: "Chất liệu đẹp", images: ["/assets/review.jpg"], review_tags: ["Vừa vặn"],
+    submitted_at: "2026-01-01T10:00:00Z", status: "approved",
+    admin_reply: JSON.stringify([{ role: "admin", reply_text: "Cảm ơn bạn", user_id: "private-admin" }]),
+    moderated_by: "private-moderator", rejection_reason: "private-reason", is_flagged_urgent: true,
+    moderated_at: "2026-01-02T10:00:00Z", version: 3, metadata: { internal: "private-metadata" }
+  };
+  await withCatalog([target, productRow(OTHER_ID, "Quần jeans")], async (calls) => {
+    const response = await get(`/api/user/products/${PRODUCT_ID}`, PRODUCT_ID);
+    assert.equal(response.status, 200);
+    const detail = response.json as JsonObject;
+    assert.deepEqual(detail.reviews, [{
+      review_id: "review-public", product_id: PRODUCT_ID, rating: 5, comment: "Chất liệu đẹp",
+      images: ["/assets/review.jpg"], review_tags: ["Vừa vặn"], submitted_at: "2026-01-01T10:00:00Z",
+      status: "approved", user_full_name: "Nguyễn An", verified_purchase: true,
+      variant_color: "Xanh", variant_size: "L", helpful_count: 0, admin_reply: "Cảm ơn bạn"
+    }]);
+    assert.equal(detail.rating_value, 5);
+    assert.equal(detail.rating_count, 1);
+    assert.equal(detail.review_count, 1);
+    assert.doesNotMatch(JSON.stringify(detail.reviews), /private-|user_id|order_id|moderated_by|rejection_reason|is_flagged_urgent|moderated_at|version|metadata/);
+    assert.deepEqual(calls.reviewReads, [{
+      key: "service-key",
+      query: {
+        select: "review_id,product_id,user_id,order_id,rating,comment,images,review_tags,submitted_at,status,admin_reply",
+        product_id: `eq.${PRODUCT_ID}`, status: "eq.approved", order: "submitted_at.desc"
+      }
+    }]);
+  }, {
+    review: [
+      approved,
+      { ...approved, review_id: "review-pending", status: "pending", rating: 1 },
+      { ...approved, review_id: "review-hidden", status: "hidden", rating: 1 },
+      { ...approved, review_id: "review-other-product", product_id: OTHER_ID, rating: 1 }
+    ],
+    users: [{ user_id: "private-user", full_name: "Trần Bình" }],
+    orders: [{ order_id: "private-order", shipping_name: "Nguyễn An" }],
+    order_item: [{ order_id: "private-order", variant_id: "v-purchased", quantity: 1 }]
+  });
+});
+
+test("public reviews never expose raw structured moderation replies", async () => {
+  for (const [adminReply, expected] of [
+    ["Cảm ơn bạn", "Cảm ơn bạn"],
+    ['[{"role":"customer","reply_text":"private-note","user_id":"private-user"}]', null],
+    ['[{"role":"admin","user_id":"private-admin"}]', null],
+    ['{"moderated_by":"private-moderator"}', null],
+    ['[{"user_id":"private-user"}', null],
+    ["[]", null]
+  ] as const) {
+    await withCatalog([productRow(PRODUCT_ID, "Áo thun")], async () => {
+      const response = await get(`/api/user/products/${PRODUCT_ID}`, PRODUCT_ID);
+      assert.equal(response.status, 200);
+      const reviews = (response.json as JsonObject).reviews as JsonObject[];
+      assert.equal(reviews[0].admin_reply, expected);
+      assert.doesNotMatch(JSON.stringify(reviews), /private-|moderated_by|user_id/);
+    }, {
+      review: [{ review_id: "review-public", product_id: PRODUCT_ID, rating: 5, status: "approved", admin_reply: adminReply }]
+    });
+  }
+});
+
+test("catalog review reads fail without a server credential instead of falling back to anon or empty ratings", async () => {
+  await withCatalog([productRow(PRODUCT_ID, "Áo thun")], async (calls) => {
+    config.supabaseServiceRoleKey = "";
+    for (const action of [undefined, PRODUCT_ID]) {
+      await assert.rejects(
+        () => get(action ? `/api/user/products/${action}` : "/api/user/products", action),
+        (error: unknown) => error instanceof HttpError && error.status === 503 && error.code === "SERVICE_ROLE_REQUIRED"
+      );
+    }
+    assert.deepEqual(calls.reviewReads, []);
   });
 });
 

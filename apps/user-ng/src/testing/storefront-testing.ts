@@ -1,8 +1,8 @@
 import { AiEngineService } from '../app/core/services/ai-engine.service';
-import { Type, signal } from '@angular/core';
+import { Component, Type, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { convertToParamMap, provideRouter, ActivatedRoute } from '@angular/router';
-import { of } from 'rxjs';
+import { convertToParamMap, provideRouter, ActivatedRoute, type ParamMap, type Routes } from '@angular/router';
+import { Observable, of } from 'rxjs';
 import { ApiService } from '../app/core/services/api.service';
 import { CatalogService } from '../app/core/services/catalog.service';
 import { ChatbotService, type ChatHandoffStatus } from '../app/core/services/chatbot.service';
@@ -112,7 +112,7 @@ export function stubChatbotService(): Pick<
   };
 }
 
-export function stubActivatedRoute(params: Record<string, string> = { id: 'p1', slug: 'heritage' }): ActivatedRoute {
+export function stubActivatedRoute(params: Record<string, string> = { id: 'p1', slug: 'heritage' }, paramMap?: Observable<ParamMap>): ActivatedRoute {
   const map = convertToParamMap(params);
   return {
     snapshot: {
@@ -121,7 +121,7 @@ export function stubActivatedRoute(params: Record<string, string> = { id: 'p1', 
       queryParams: {},
       data: { title: 'Velura', subtitle: 'test' },
     },
-    paramMap: of(map),
+    paramMap: paramMap ?? of(map),
     queryParamMap: of(convertToParamMap({})),
     queryParams: of({}),
     data: of({ title: 'Velura', subtitle: 'test' }),
@@ -174,11 +174,25 @@ export function stubVisualSearchModel(): Pick<VisualSearchModel, 'validate' | 'c
   };
 }
 
+/** Empty routed component so specs can drive real router navigation without booting a page. */
+@Component({ selector: 'app-test-route-target', template: '' })
+class TestRouteTarget {}
+
+/** Extra wiring a spec needs: real routes for navigation, or a controllable param stream. */
+export interface StorefrontPageOptions {
+  routes?: Routes;
+  paramMap?: Observable<ParamMap>;
+}
+
 /**
  * Boots a storefront page ViewModel with Model stubs (lecture: HTTP lives in services).
  * `apiOverrides` thay từng hàm của ApiService giả cho ca test cần dữ liệu riêng.
  */
-export async function createStorefrontPage<T>(page: Type<T>, apiOverrides: Partial<Record<'get' | 'post' | 'patch' | 'delete', unknown>> = {}): Promise<T> {
+export async function createStorefrontPage<T>(
+  page: Type<T>,
+  apiOverrides: Partial<Record<'get' | 'post' | 'patch' | 'delete', unknown>> = {},
+  options: StorefrontPageOptions = {},
+): Promise<T> {
   lastFixture?.destroy();
   lastFixture = undefined;
   try { sessionStorage?.clear(); } catch {}
@@ -196,11 +210,11 @@ export async function createStorefrontPage<T>(page: Type<T>, apiOverrides: Parti
         saveQuiz: () => of(undefined), loadQuiz: () => of(null),
         loadRecommendations: () => of({ quiz: null, combos: [], categories: [] }),
       } },
-      provideRouter([]),
+      provideRouter(options.routes ?? []),
       { provide: ApiService, useValue: { ...stubApiService(), ...apiOverrides } },
       { provide: CatalogService, useValue: stubCatalogService() },
       { provide: ChatbotService, useValue: stubChatbotService() },
-      { provide: ActivatedRoute, useValue: stubActivatedRoute() },
+      { provide: ActivatedRoute, useValue: stubActivatedRoute(undefined, options.paramMap) },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(page);
@@ -215,4 +229,4 @@ export function lastStorefrontFixture(): ComponentFixture<unknown> {
   return lastFixture;
 }
 
-export { sampleProduct };
+export { sampleProduct, TestRouteTarget };

@@ -157,6 +157,12 @@ export class AuthCallbackPage {
     if (text.includes('access_denied') || text.includes('denied access')) {
       return 'Bạn đã huỷ đăng nhập Google. Vui lòng thử lại nếu muốn tiếp tục.';
     }
+    if (text.includes('redirect_uri_mismatch')) {
+      return 'URL chuyển hướng OAuth không khớp cấu hình Google Cloud. Vui lòng kiểm tra lại Authorized redirect URIs.';
+    }
+    if (text.includes('invalid_client')) {
+      return 'Thông tin xác thực Google Client không hợp lệ. Vui lòng kiểm tra lại Client ID hoặc Secret trong Supabase.';
+    }
     return 'Không thể xác thực với Google. Vui lòng đăng nhập bằng email hoặc số điện thoại.';
   }
 }

@@ -88,13 +88,13 @@
               (input)="onSearchInput($event)"
               (keydown)="onSearch($event)"
             />
-            @if (searchOpen()) {
+            @if (searchOpen() || searchQuery().trim()) {
               <button
                 type="button"
                 class="site-header__search-close-btn"
-                (click)="closeSearch(); $event.stopPropagation()"
-                title="Đóng tìm kiếm"
-                aria-label="Đóng tìm kiếm"
+                (click)="clearSearchState(); closeSearch(); $event.stopPropagation()"
+                title="Xóa tìm kiếm"
+                aria-label="Xóa tìm kiếm"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
@@ -442,13 +442,13 @@
       </button>
     </div>
     <nav class="center-row center-row--bottom site-header__nav" aria-label="Chính" [class.is-open]="navOpen()">
-      <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{exact: true}" class="nav-link" (click)="closeNav()">Trang chủ</a>
-      <a routerLink="/products" routerLinkActive="is-active" class="nav-link" (click)="closeNav()">Sản phẩm</a>
-      <a routerLink="/collections" routerLinkActive="is-active" class="nav-link" (click)="closeNav()">Bộ sưu tập</a>
-      <a routerLink="/ai/suggestions" routerLinkActive="is-active" class="nav-link nav-link--highlight" (click)="closeNav()">Gợi ý AI</a>
-      <a routerLink="/chatbot" routerLinkActive="is-active" class="nav-link" (click)="closeNav()">Chatbot</a>
-      <a routerLink="/blog" routerLinkActive="is-active" class="nav-link" (click)="closeNav()">Blog</a>
-      <a routerLink="/about" routerLinkActive="is-active" class="nav-link" (click)="closeNav()">Về chúng tôi</a>
+      <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{exact: true}" class="nav-link" (click)="onNavClick()">Trang chủ</a>
+      <a routerLink="/products" routerLinkActive="is-active" class="nav-link" (click)="onNavClick()">Sản phẩm</a>
+      <a routerLink="/collections" routerLinkActive="is-active" class="nav-link" (click)="onNavClick()">Bộ sưu tập</a>
+      <a routerLink="/ai/suggestions" routerLinkActive="is-active" class="nav-link nav-link--highlight" (click)="onNavClick()">Gợi ý AI</a>
+      <a routerLink="/chatbot" routerLinkActive="is-active" class="nav-link" (click)="onNavClick()">Chatbot</a>
+      <a routerLink="/blog" routerLinkActive="is-active" class="nav-link" (click)="onNavClick()">Blog</a>
+      <a routerLink="/about" routerLinkActive="is-active" class="nav-link" (click)="onNavClick()">Về chúng tôi</a>
     </nav>
   </div>
 </header>

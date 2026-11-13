@@ -25,25 +25,6 @@ data:
         }
     }
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: supabase-secrets
-  namespace: database
-type: Opaque
-stringData:
-  jwt-secret: "super-secret-jwt-token-velura-production-32-chars-long-hs256"
-  anon-key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTg3MjAwLCJleHAiOjE5MzkzNDcyMDB9.incluster-anon-key-signature"
-  service-role-key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjE3ODE1ODcyMDAsImV4cCI6MTkzOTM0NzIwMH0.incluster-service-key-signature"
-  authenticator-password: "authenticator_incluster_secret"
-  # KAN-66: Google SSO. GoTrue only advertises a provider it has credentials for, so a project
-  # without these returns {"error_code":"validation_failed","msg":"Unsupported provider: provider
-  # is not enabled"} on /auth/v1/authorize. `google-enabled` stays "false" until real credentials
-  # are supplied, so an unconfigured cluster still boots and the storefront keeps its email/OTP path.
-  google-enabled: "false"
-  google-client-id: ""
-  google-client-secret: ""
----
 # 1. postgres-meta: Schema introspection and SQL engine for Supabase Studio
 apiVersion: apps/v1
 kind: Deployment

@@ -177,15 +177,30 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     }
 
     if (req.method === "GET" && parts[1] === "auth" && parts[2] === "google") {
-      const redirectTo = validatedOAuthRedirect(url.searchParams.get("redirect_to") || "");
+      let redirectTo = "";
+      try {
+        redirectTo = validatedOAuthRedirect(url.searchParams.get("redirect_to") || "");
+      } catch (err: unknown) {
+        throw err instanceof HttpError ? err : new HttpError(400, "BAD_REQUEST", "Invalid OAuth redirect URL");
+      }
+
       const challenge = url.searchParams.get("code_challenge") || "";
       const state = url.searchParams.get("state") || "";
+
       if (state && !/^[A-Za-z0-9._~-]{16,128}$/.test(state)) {
-        throw new HttpError(400, "BAD_REQUEST", "Invalid OAuth state");
+        const errorRedirect = `${redirectTo}?error=invalid_request&error_description=${encodeURIComponent("Invalid OAuth state parameter")}`;
+        res.writeHead(302, { Location: errorRedirect, ...corsHeaders });
+        res.end();
+        return;
       }
+
       if (!challenge || !config.supabaseUrl) {
-        throw new HttpError(400, "BAD_REQUEST", "Missing OAuth parameters");
+        const errorRedirect = `${redirectTo}?error=invalid_request&error_description=${encodeURIComponent("Missing OAuth code challenge or Supabase configuration")}`;
+        res.writeHead(302, { Location: errorRedirect, ...corsHeaders });
+        res.end();
+        return;
       }
+
       const location =
         `${config.supabaseUrl}/auth/v1/authorize?provider=google` +
         `&code_challenge=${encodeURIComponent(challenge)}` +
@@ -301,7 +316,15 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       });
       const payload = asJsonObject(await response.json().catch(() => ({})));
       if (!response.ok || !payload.access_token) {
-        throw new HttpError(401, "UNAUTHORIZED", asString(payload.error_description) || asString(payload.msg) || "Xác thực thất bại");
+        throw new HttpError(
+          401,
+          "UNAUTHORIZED",
+          asString(payload.error_description) || asString(payload.msg) || "Xác thực thất bại",
+          {
+            error_code: asString(payload.error) || "PKCE_EXCHANGE_FAILED",
+            error_description: asString(payload.error_description) || asString(payload.msg) || null,
+          }
+        );
       }
       return sendJson(res, 200, { token: payload.access_token }, corsHeaders);
     }
@@ -535,8 +558,22 @@ function validatedOAuthRedirect(raw: string): string {
   } catch {
     throw new HttpError(400, "BAD_REQUEST", "OAuth redirect must be an absolute URL");
   }
-  if (!config.corsOrigins.includes(target.origin) || target.pathname !== "/auth/callback") {
-    throw new HttpError(400, "BAD_REQUEST", "OAuth redirect must point to a known admin origin");
+  const isKnownOrigin =
+    config.corsOrigins.includes(target.origin) ||
+    [
+      "https://velura.royalai.dev",
+      "https://admin-erp.royalai.dev",
+      "https://admin.royalai.dev",
+    ].includes(target.origin) ||
+    (config.nodeEnv !== "production" &&
+      /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(target.origin));
+
+  if (!isKnownOrigin || target.pathname !== "/auth/callback") {
+    throw new HttpError(
+      400,
+      "BAD_REQUEST",
+      `OAuth redirect origin '${target.origin}' is not allowed or path is not /auth/callback`
+    );
   }
   return target.toString();
 }

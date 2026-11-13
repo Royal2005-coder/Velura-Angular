@@ -1133,12 +1133,25 @@ input.cm-search-topbar__input:focus,
 
   .site-header__nav {
     display: none;
-    /* Toggled via JS .is-open class */
+    /* Mobile drawer: absolute dropdown anchored below sticky header with solid opaque backdrop */
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    width: 100%;
+    background: #ffffff;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+    border-top: none;
+    border-bottom: 1px solid var(--line, #E8DFD6);
     flex-direction: column;
     align-items: stretch;
-    padding: 8px 24px;
+    padding: 12px 24px 20px;
+    margin-top: 0;
     gap: 0;
-    border-top: none;
+    z-index: 1000;
+    max-height: calc(100vh - 72px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     pointer-events: auto;
   }
 

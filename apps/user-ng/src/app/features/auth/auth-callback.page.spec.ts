@@ -44,4 +44,23 @@ describe('AuthCallbackPage', () => {
     );
     expect(page.errorMessage()).not.toContain('boom');
   });
+
+  it('handles provider errors returned in hash fragment', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/auth/callback#error=server_error&error_description=Unsupported+provider%3A+provider+is+not+enabled',
+    );
+    const page = await createStorefrontPage(AuthCallbackPage);
+    expect(page.title()).toBe('Xác thực thất bại');
+    expect(page.errorMessage()).toContain('Đăng nhập Google chưa được bật');
+  });
+
+  it('accepts direct access token returned in hash fragment', async () => {
+    window.history.replaceState({}, '', '/auth/callback#access_token=mock-access-token&token_type=bearer');
+    const page = await createStorefrontPage(AuthCallbackPage);
+    expect(page).toBeTruthy();
+    // In test harness without social-login backend response, errorMessage won't be "no code in URL"
+    expect(page.errorMessage()).not.toBe('Không tìm thấy mã xác thực trong URL.');
+  });
 });

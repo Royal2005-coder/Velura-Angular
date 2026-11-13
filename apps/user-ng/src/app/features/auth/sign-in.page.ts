@@ -9,6 +9,7 @@ import { showToast } from '../../core/utils/toast';
 import { AuthOtpModal, AuthOtpResult } from '../../shared/auth-otp-modal/auth-otp-modal';
 
 const PKCE_STORAGE_KEY = 'velura-user-oauth-pkce-code-verifier';
+const STATE_STORAGE_KEY = 'velura-user-oauth-state';
 
 @Component({
   selector: 'app-sign-in-page',
@@ -111,12 +112,15 @@ export class SignInPage {
     try {
       const redirectTo = `${window.location.origin}/auth/callback`;
       const verifier = this.randomVerifier();
+      const state = this.randomVerifier();
       const challenge = await this.codeChallenge(verifier);
       localStorage.setItem(PKCE_STORAGE_KEY, verifier);
+      localStorage.setItem(STATE_STORAGE_KEY, state);
       const url =
         `${environment.apiUrl}/api/auth/google` +
         `?redirect_to=${encodeURIComponent(redirectTo)}` +
-        `&code_challenge=${encodeURIComponent(challenge)}`;
+        `&code_challenge=${encodeURIComponent(challenge)}` +
+        `&state=${encodeURIComponent(state)}`;
       window.location.href = url;
     } catch {
       this.errorMessage.set('Không thể kết nối Google. Vui lòng thử lại hoặc đăng nhập bằng email.');

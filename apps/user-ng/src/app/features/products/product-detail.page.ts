@@ -2,6 +2,7 @@ import { AiImageWorkbench } from '../../shared/ai-image-workbench/ai-image-workb
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { EMPTY, catchError, map, of, switchMap } from 'rxjs';
 import {
   ComboComponent,
   ProductColorOption,
@@ -453,63 +454,93 @@ export class ProductDetailPage {
 
   constructor() {
     useBodyClass('page-product-detail');
-    this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((params) => {
-      const id = params.get('id');
-      if (!id) {
-        return;
-      }
-      this.loading.set(true);
-      this.loadError.set(null);
-      this.catalog.getProduct(id).subscribe({
-        next: (row) => {
-          this.product.set(row);
-          if (typeof document !== 'undefined') {
-            document.title = row.seo_title || `${row.name} | Velura Atelier`;
-            const metaDesc = document.querySelector('meta[name="description"]');
-            if (metaDesc && (row.seo_description || row.description)) {
-              metaDesc.setAttribute('content', String(row.seo_description || row.description).slice(0, 160));
-            }
-          }
-          try {
-            const raw = localStorage.getItem('velura_recently_viewed');
-            const list = raw ? (JSON.parse(raw) as ProductSummary[]) : [];
-            const filtered = list.filter((p) => p.product_id !== row.product_id);
-            filtered.unshift(row);
-            localStorage.setItem('velura_recently_viewed', JSON.stringify(filtered.slice(0, 8)));
-          } catch {}
-          this.quantity.set(1);
-          this.comboExpanded.set(null);
-          this.comboPicks.set(this.buildComboPicks(row));
-          const primaryColor = row.image_colors?.[this.gallery()[0]];
-          const initialColor = (primaryColor
-            ? this.colors().find((option) => option.name.trim().toLowerCase() === primaryColor.trim().toLowerCase())?.name
-            : null)
-            || this.colors()[0]?.name || row.variants?.[0]?.color || null;
-          this.selectedColor.set(initialColor);
-          this.selectedSize.set(this.sizes()[0] || null);
-          this.activeImage.set(0);
-          this.loading.set(false);
-          this.catalog.getProducts().subscribe({
-            next: (rows) => {
-              const targetCategory = row.category_slug || null;
-              const categoryMatches = rows
-                .filter((item) => item.product_id !== row.product_id)
-                .filter((item) => !targetCategory || item.category_slug === targetCategory);
-              const related = categoryMatches.slice(0, 8);
-              this.related.set(
-                related.length
-                  ? related
-                  : rows.filter((item) => item.product_id !== row.product_id).slice(0, 8),
+    // The route is the only source of truth: a newer product id cancels the previous product and
+    // related-product requests, so a late response can never repaint the page with an older product.
+    this.route.paramMap
+      .pipe(
+        takeUntilDestroyed(),
+        switchMap((params) => {
+          const id = params.get('id');
+          this.resetForRoute();
+          if (!id) return EMPTY;
+          return this.catalog.getProduct(id).pipe(
+            switchMap((row) => {
+              this.applyProduct(row);
+              // Enrichment is optional: a failed related-product load must not hide a loaded product.
+              return this.catalog.getProducts().pipe(
+                catchError(() => of([] as ProductSummary[])),
+                map((rows) => ({ row, rows })),
               );
-            },
-          });
-        },
-        error: (error: Error) => {
-          this.loadError.set(error.message);
-          this.loading.set(false);
-        },
-      });
-    });
+            }),
+            catchError((error: Error) => {
+              this.loadError.set(error.message);
+              this.loading.set(false);
+              return EMPTY;
+            }),
+          );
+        }),
+      )
+      .subscribe(({ row, rows }) => this.applyRelated(row, rows));
+  }
+
+  /** Clears the previous route's product, enrichment and selection before the next fetch starts. */
+  private resetForRoute(): void {
+    this.product.set(null);
+    this.related.set([]);
+    this.loadError.set(null);
+    this.loading.set(true);
+    this.quantity.set(1);
+    this.activeImage.set(0);
+    this.comboExpanded.set(null);
+    this.comboPicks.set([]);
+    this.selectedColor.set(null);
+    this.selectedSize.set(null);
+  }
+
+  /** Publishes the loaded product and initializes its detail-local selection state. */
+  private applyProduct(row: ProductSummary): void {
+    this.product.set(row);
+    if (typeof document !== 'undefined') {
+      document.title = row.seo_title || `${row.name} | Velura Atelier`;
+      const metaDesc = document.querySelector('meta[name="description"]');
+      if (metaDesc && (row.seo_description || row.description)) {
+        metaDesc.setAttribute('content', String(row.seo_description || row.description).slice(0, 160));
+      }
+    }
+    try {
+      const raw = localStorage.getItem('velura_recently_viewed');
+      const list = raw ? (JSON.parse(raw) as ProductSummary[]) : [];
+      const filtered = list.filter((p) => p.product_id !== row.product_id);
+      filtered.unshift(row);
+      localStorage.setItem('velura_recently_viewed', JSON.stringify(filtered.slice(0, 8)));
+    } catch {}
+    this.quantity.set(1);
+    this.comboExpanded.set(null);
+    this.comboPicks.set(this.buildComboPicks(row));
+    const primaryColor = row.image_colors?.[this.gallery()[0]];
+    const initialColor = (primaryColor
+      ? this.colors().find((option) => option.name.trim().toLowerCase() === primaryColor.trim().toLowerCase())?.name
+      : null)
+      || this.colors()[0]?.name || row.variants?.[0]?.color || null;
+    this.selectedColor.set(initialColor);
+    this.selectedSize.set(this.sizes()[0] || null);
+    this.activeImage.set(0);
+    this.loading.set(false);
+  }
+
+  /** Fills the related-product rail for the product that is currently on screen. */
+  private applyRelated(row: ProductSummary, rows: ProductSummary[]): void {
+    if (this.product()?.product_id !== row.product_id) return;
+    const targetCategory = row.category_slug || null;
+    const categoryMatches = rows
+      .filter((item) => item.product_id !== row.product_id)
+      .filter((item) => !targetCategory || item.category_slug === targetCategory);
+    const related = categoryMatches.slice(0, 8);
+    this.related.set(
+      related.length
+        ? related
+        : rows.filter((item) => item.product_id !== row.product_id).slice(0, 8),
+    );
   }
 
   /**

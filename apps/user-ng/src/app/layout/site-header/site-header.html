@@ -78,6 +78,7 @@
               <svg class="icon icon-search u-inline-45999d0623" aria-hidden="true"><use href="#icon-search"></use></svg>
             </button>
             <input
+              #headerSearchInput
               type="text"
               class="js-search-input"
               [value]="searchQuery()"
@@ -441,13 +442,13 @@
       </button>
     </div>
     <nav class="center-row center-row--bottom site-header__nav" aria-label="Chính" [class.is-open]="navOpen()">
-      <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{exact: true}" class="nav-link">Trang chủ</a>
-      <a routerLink="/products" routerLinkActive="is-active" class="nav-link">Sản phẩm</a>
-      <a routerLink="/collections" routerLinkActive="is-active" class="nav-link">Bộ sưu tập</a>
-      <a routerLink="/ai/suggestions" routerLinkActive="is-active" class="nav-link nav-link--highlight">Gợi ý AI</a>
-      <a routerLink="/chatbot" routerLinkActive="is-active" class="nav-link">Chatbot</a>
-      <a routerLink="/blog" routerLinkActive="is-active" class="nav-link">Blog</a>
-      <a routerLink="/about" routerLinkActive="is-active" class="nav-link">Về chúng tôi</a>
+      <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{exact: true}" class="nav-link" (click)="closeNav()">Trang chủ</a>
+      <a routerLink="/products" routerLinkActive="is-active" class="nav-link" (click)="closeNav()">Sản phẩm</a>
+      <a routerLink="/collections" routerLinkActive="is-active" class="nav-link" (click)="closeNav()">Bộ sưu tập</a>
+      <a routerLink="/ai/suggestions" routerLinkActive="is-active" class="nav-link nav-link--highlight" (click)="closeNav()">Gợi ý AI</a>
+      <a routerLink="/chatbot" routerLinkActive="is-active" class="nav-link" (click)="closeNav()">Chatbot</a>
+      <a routerLink="/blog" routerLinkActive="is-active" class="nav-link" (click)="closeNav()">Blog</a>
+      <a routerLink="/about" routerLinkActive="is-active" class="nav-link" (click)="closeNav()">Về chúng tôi</a>
     </nav>
   </div>
 </header>

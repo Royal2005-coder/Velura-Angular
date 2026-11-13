@@ -140,9 +140,11 @@ async function deliver(report: JsonObject): Promise<void> {
   const errors: string[] = [];
   if (!emailSuccess) {
     const email = asString(report.recipient_email);
+    const event = asString(report.event).toLowerCase();
+    const isEscalationEvent = ["l2", "l3", "warning", "correction", "case_end"].includes(event);
     if (!email || destination.email !== email) {
       errors.push("CHAT_REPORT_EMAIL changed or is not configured; staff must retry with the configured destination");
-    } else {
+    } else if (isEscalationEvent) {
       const text = renderText(report, payload);
       emailSuccess = await sendDirectEmail(
         email,
@@ -152,6 +154,9 @@ async function deliver(report: JsonObject): Promise<void> {
         { priority: "high", messageId: `<chat-report-${asString(report.report_id)}@velura.royalai.dev>` }
       );
       if (!emailSuccess) errors.push("SMTP did not confirm recipient acceptance");
+    } else {
+      // Non-escalation events (such as routine important_update) are checkpointed without emailing staff
+      emailSuccess = true;
     }
   }
   const webhook = asString(report.webhook_url);

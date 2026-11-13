@@ -279,7 +279,7 @@ spec:
         # GoTrue silently falls back to SITE_URL for a redirect_to it does not trust, which would
         # strand the PKCE verifier on the wrong origin. List both storefront and admin callbacks.
         - name: GOTRUE_URI_ALLOW_LIST
-          value: "https://velura.royalai.dev/auth/callback,https://admin.royalai.dev/auth/callback,https://shop.royalai.dev/auth/callback"
+          value: "https://velura.royalai.dev/auth/callback,https://admin.royalai.dev/auth/callback,https://shop.royalai.dev/auth/callback,https://admin-erp.royalai.dev/auth/callback"
         resources:
           requests:
             cpu: 50m

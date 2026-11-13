@@ -1,7 +1,8 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, NavigationEnd } from '@angular/router';
+import { filter } from 'rxjs/operators';
 import type { ProductSummary } from '../../core/models/product.interface';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -133,6 +134,47 @@ export class SiteHeader {
         next: (capabilities) => this.aiTextSearchReady.set(capabilities.ai_search?.text === true),
         error: () => this.aiTextSearchReady.set(false),
       });
+    // The URL is the only committed search state. A canceled navigation never reaches NavigationEnd,
+    // so an active query survives a guard rejection; a committed route outside results clears it.
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroy),
+      )
+      .subscribe((event) => this.syncSearchToRoute(event.urlAfterRedirects));
+  }
+
+  /** Mirrors the committed route's `q` into the header, and closes suggestions/nav on every commit. */
+  private syncSearchToRoute(url: string): void {
+    this.searchOpen.set(false);
+    this.navOpen.set(false);
+    let parsed: URL;
+    try {
+      parsed = new URL(url, 'http://localhost');
+    } catch {
+      this.clearSearchState();
+      return;
+    }
+    const isResults = parsed.pathname === '/products';
+    const query = isResults ? (parsed.searchParams.get('q') || '').trim() : '';
+    this.searchQuery.set(query);
+    this.syncNativeInputs(query);
+  }
+
+  private clearSearchState(): void {
+    this.searchQuery.set('');
+    this.syncNativeInputs('');
+  }
+
+  private syncNativeInputs(query: string): void {
+    const headerEl = this.headerSearchInput()?.nativeElement;
+    if (headerEl && headerEl.value !== query) {
+      headerEl.value = query;
+    }
+    const overlayEl = this.overlayInput()?.nativeElement;
+    if (overlayEl && overlayEl.value !== query) {
+      overlayEl.value = query;
+    }
   }
 
   /** Refreshes suggestions when search opens so an admin rename does not remain cached in the header. */
@@ -151,6 +193,13 @@ export class SiteHeader {
    */
   toggleNav(): void {
     this.navOpen.update((open) => !open);
+  }
+
+  /**
+   * Closes the mobile navigation drawer.
+   */
+  closeNav(): void {
+    this.navOpen.set(false);
   }
 
   /**
@@ -192,6 +241,14 @@ export class SiteHeader {
     this.notificationOpen.set(false);
   }
 
+  /** Closes mobile navigation, search popover, and notification menu on Escape key press. */
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    this.searchOpen.set(false);
+    this.navOpen.set(false);
+    this.notificationOpen.set(false);
+  }
+
   /** Navigates to a notification target and records that it was seen. */
   openNotification(notification: import('../../core/services/notifications.service').MemberNotification): void {
     void this.notifications.markRead(notification);
@@ -200,6 +257,7 @@ export class SiteHeader {
   }
 
   readonly headerWorkbench = viewChild<VisualSearchWorkbench>('headerWorkbench');
+  readonly headerSearchInput = viewChild<ElementRef<HTMLInputElement>>('headerSearchInput');
   readonly overlayInput = viewChild<ElementRef<HTMLInputElement>>('overlaySearchInput');
 
   /**

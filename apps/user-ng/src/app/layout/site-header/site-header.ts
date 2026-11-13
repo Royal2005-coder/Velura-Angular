@@ -168,8 +168,9 @@ export class SiteHeader {
 
   private syncNativeInputs(query: string): void {
     const headerEl = this.headerSearchInput()?.nativeElement;
-    if (headerEl && headerEl.value !== query) {
-      headerEl.value = query;
+    const targetHeaderVal = this.searchOpen() ? query : '';
+    if (headerEl && headerEl.value !== targetHeaderVal) {
+      headerEl.value = targetHeaderVal;
     }
     const overlayEl = this.overlayInput()?.nativeElement;
     if (overlayEl && overlayEl.value !== query) {
@@ -311,8 +312,17 @@ export class SiteHeader {
     if (!this.searchOpen()) this.loadCatalog();
     this.searchOpen.set(true);
     this.loadRecentlyViewed();
+    const query = this.searchQuery();
+    const headerEl = this.headerSearchInput()?.nativeElement;
+    if (headerEl && headerEl.value !== query) {
+      headerEl.value = query;
+    }
     setTimeout(() => {
-      this.overlayInput()?.nativeElement.focus();
+      const overlayEl = this.overlayInput()?.nativeElement;
+      if (overlayEl) {
+        overlayEl.value = query;
+        overlayEl.focus();
+      }
     }, 10);
   }
 
@@ -339,31 +349,33 @@ export class SiteHeader {
 
   selectKeyword(keyword: string): void {
     this.searchQuery.set(keyword);
-    this.searchOpen.set(false);
+    this.closeSearch();
     void this.router.navigate(['/products'], { queryParams: { q: keyword } });
   }
 
   selectCategory(slug: string): void {
-    this.searchOpen.set(false);
+    this.closeSearch();
     void this.router.navigate(['/products'], { queryParams: { category: slug } });
   }
 
   selectProduct(slug?: string): void {
     if (!slug) return;
-    this.searchOpen.set(false);
+    this.closeSearch();
     void this.router.navigate(['/products', slug]);
   }
 
   executeSearch(query: string): void {
     const trimmed = query.trim();
-    this.searchOpen.set(false);
+    this.searchQuery.set(trimmed);
+    this.closeSearch();
     void this.router.navigate(['/products'], { queryParams: trimmed ? { q: trimmed } : {} });
   }
   /** Routes a natural-language query to the catalog's CLIP semantic search; the page owns readiness and errors. */
   executeAiSearch(query: string): void {
     const trimmed = query.trim();
     if (!trimmed) return;
-    this.searchOpen.set(false);
+    this.searchQuery.set(trimmed);
+    this.closeSearch();
     void this.router.navigate(['/products'], { queryParams: { q: trimmed, ai: '1' } });
   }
   /**
@@ -377,6 +389,10 @@ export class SiteHeader {
 
   closeSearch(): void {
     this.searchOpen.set(false);
+    const headerEl = this.headerSearchInput()?.nativeElement;
+    if (headerEl) {
+      headerEl.value = '';
+    }
   }
 
   /**

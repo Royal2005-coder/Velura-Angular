@@ -189,7 +189,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       const location =
         `${config.supabaseUrl}/auth/v1/authorize?provider=google` +
         `&code_challenge=${encodeURIComponent(challenge)}` +
-        `&code_challenge_method=s256` +
+        `&code_challenge_method=S256` +
         `&redirect_to=${encodeURIComponent(redirectTo)}` +
         (state ? `&state=${encodeURIComponent(state)}` : "");
       res.writeHead(302, { Location: location, ...corsHeaders });

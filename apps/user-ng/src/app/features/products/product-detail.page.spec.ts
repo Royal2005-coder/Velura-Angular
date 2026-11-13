@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { convertToParamMap } from '@angular/router';
+import { Subject, of, throwError } from 'rxjs';
 import { CatalogService } from '../../core/services/catalog.service';
 import { ProductSummary } from '../../core/models/product.interface';
-import { createStorefrontPage } from '../../../testing/storefront-testing';
+import { createStorefrontPage, sampleProduct } from '../../../testing/storefront-testing';
 import { ProductDetailPage } from './product-detail.page';
 
 describe('ProductDetailPage', () => {
@@ -16,6 +17,56 @@ describe('ProductDetailPage', () => {
     expect(page.loading()).toBe(false);
     expect(page.product()?.product_id).toBe('p1');
     expect(page.quantity()).toBe(1);
+  });
+
+  it('clears the previous product when the route changes to a product that fails', async () => {
+    const routeIds = new Subject<ReturnType<typeof convertToParamMap>>();
+    const page = await createStorefrontPage(ProductDetailPage, {}, { paramMap: routeIds.asObservable() });
+    const catalog = TestBed.inject(CatalogService);
+    vi.spyOn(catalog, 'getProduct').mockImplementation((id: string) =>
+      id === 'p1' ? of(sampleProduct) : throwError(() => new Error('Không tìm thấy sản phẩm')),
+    );
+
+    routeIds.next(convertToParamMap({ id: 'p1' }));
+    expect(page.product()?.product_id).toBe('p1');
+
+    routeIds.next(convertToParamMap({ id: 'missing' }));
+    expect(page.product()).toBeNull();
+    expect(page.related()).toEqual([]);
+    expect(page.loadError()).toBe('Không tìm thấy sản phẩm');
+    expect(page.loading()).toBe(false);
+  });
+
+  it('never lets an older route response overwrite the latest product', async () => {
+    const routeIds = new Subject<ReturnType<typeof convertToParamMap>>();
+    const page = await createStorefrontPage(ProductDetailPage, {}, { paramMap: routeIds.asObservable() });
+    const catalog = TestBed.inject(CatalogService);
+    const slow = new Subject<ProductSummary>();
+    const fast = new Subject<ProductSummary>();
+    vi.spyOn(catalog, 'getProduct').mockImplementation((id: string) => (id === 'slow' ? slow : fast));
+
+    routeIds.next(convertToParamMap({ id: 'slow' }));
+    routeIds.next(convertToParamMap({ id: 'fast' }));
+
+    fast.next({ ...sampleProduct, product_id: 'fast', name: 'Sản phẩm mới' });
+    slow.next({ ...sampleProduct, product_id: 'slow', name: 'Sản phẩm cũ' });
+
+    expect(page.product()?.product_id).toBe('fast');
+    expect(page.product()?.name).toBe('Sản phẩm mới');
+  });
+
+  it('keeps a loaded product usable when optional related enrichment fails', async () => {
+    const routeIds = new Subject<ReturnType<typeof convertToParamMap>>();
+    const page = await createStorefrontPage(ProductDetailPage, {}, { paramMap: routeIds.asObservable() });
+    const catalog = TestBed.inject(CatalogService);
+    vi.spyOn(catalog, 'getProducts').mockReturnValue(throwError(() => new Error('related unavailable')));
+
+    routeIds.next(convertToParamMap({ id: 'p1' }));
+
+    expect(page.product()?.product_id).toBe('p1');
+    expect(page.related()).toEqual([]);
+    expect(page.loadError()).toBeNull();
+    expect(page.loading()).toBe(false);
   });
 
   it('marks a reserved-out variant unavailable and never invents reviews', async () => {

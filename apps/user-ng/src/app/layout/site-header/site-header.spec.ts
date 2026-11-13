@@ -168,7 +168,7 @@ describe('SiteHeader', () => {
       expect(header.searchOpen()).toBe(false);
     });
 
-    it('synchronizes the native header search input element when query is cleared', async () => {
+    it('keeps header search input clean while collapsed and displays query upon search focus', async () => {
       const header = await createStorefrontPage(SiteHeader, {}, { routes });
       const router = TestBed.inject(Router);
       const fixture = lastStorefrontFixture();
@@ -179,7 +179,18 @@ describe('SiteHeader', () => {
 
       const input = fixture.nativeElement.querySelector('.js-search-input') as HTMLInputElement | null;
       expect(header.searchQuery()).toBe('dam-da-tiec');
+      // When collapsed, the header input is clean so the placeholder shows
+      if (input) expect(input.value).toBe('');
+
+      // When the user opens the search bar, the query is revealed
+      header.onSearchFocus();
+      fixture.detectChanges();
       if (input) expect(input.value).toBe('dam-da-tiec');
+
+      // Closing search clears the header input back to clean placeholder
+      header.closeSearch();
+      fixture.detectChanges();
+      if (input) expect(input.value).toBe('');
 
       await router.navigateByUrl('/about');
       fixture.detectChanges();

@@ -29,6 +29,18 @@ describe('AuthCallbackPage', () => {
     expect(page.technicalCode()).toBe('server_error');
   });
 
+  it('shows the real GoTrue description for a generic server_error instead of blaming account storage', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/auth/callback?error=server_error&error_description=Unable+to+exchange+external+code',
+    );
+    const page = await createStorefrontPage(AuthCallbackPage);
+    expect(page.errorMessage()).not.toContain('lưu trữ thông tin tài khoản');
+    expect(page.errorHint()).toContain('Unable to exchange external code');
+    expect(page.technicalCode()).toBe('server_error');
+  });
+
   it('treats a cancelled consent screen as a cancellation, not a failure to explain', async () => {
     window.history.replaceState({}, '', '/auth/callback?error=access_denied&error_description=User+denied+access');
     const page = await createStorefrontPage(AuthCallbackPage);
@@ -48,7 +60,18 @@ describe('AuthCallbackPage', () => {
     expect(page.technicalCode()).toBe('redirect_uri_not_allowed');
   });
 
-  it('enforces strict state matching against CSRF when state parameter is missing', async () => {
+  it('rejects a callback whose returned state disagrees with the stored state', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
+      if (key === 'velura-user-oauth-state') return 'expected-state-12345678';
+      if (key === 'velura-user-oauth-pkce-code-verifier') return 'verifier-123456';
+      return null;
+    });
+    window.history.replaceState({}, '', '/auth/callback?code=some-code&state=forged-state-000000');
+    const page = await createStorefrontPage(AuthCallbackPage);
+    expect(page.technicalCode()).toBe('STATE_MISMATCH');
+  });
+
+  it('does not reject a PKCE callback that carries only code because GoTrue never echoes state', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
       if (key === 'velura-user-oauth-state') return 'expected-state-12345678';
       if (key === 'velura-user-oauth-pkce-code-verifier') return 'verifier-123456';
@@ -56,8 +79,7 @@ describe('AuthCallbackPage', () => {
     });
     window.history.replaceState({}, '', '/auth/callback?code=some-code');
     const page = await createStorefrontPage(AuthCallbackPage);
-    expect(page.errorMessage()).toContain('Mã định danh bảo mật (state) không khớp hoặc bị thiếu');
-    expect(page.technicalCode()).toBe('STATE_MISMATCH');
+    expect(page.technicalCode()).not.toBe('STATE_MISMATCH');
   });
 
   it('keeps an unknown provider error generic in message while exposing technical code and hint', async () => {

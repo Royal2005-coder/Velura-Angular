@@ -102,8 +102,9 @@ export class AuthCallbackPage {
     const storedState = localStorage.getItem(STATE_STORAGE_KEY);
     const returnedState = params.get('state');
 
-    // Protect against Login CSRF: if a state challenge was dispatched, returned state must exist and match byte-for-byte.
-    if (storedState && (!returnedState || returnedState !== storedState)) {
+    // GoTrue's PKCE redirect does not echo a custom `state`; login-CSRF is prevented by the browser-held code_verifier.
+    // So only reject when a state WAS returned and disagrees with the one we stored.
+    if (storedState && returnedState && returnedState !== storedState) {
       localStorage.removeItem(PKCE_STORAGE_KEY);
       localStorage.removeItem(STATE_STORAGE_KEY);
       this.fail({
@@ -304,11 +305,20 @@ export class AuthCallbackPage {
       };
     }
 
-    if (text.includes('database error') || text.includes('server_error')) {
+    if (description.toLowerCase().includes('database error')) {
       return {
         message: 'Hệ thống xác thực Supabase gặp sự cố khi lưu trữ thông tin tài khoản.',
-        hint: 'Vui lòng thử lại sau vài phút hoặc đăng nhập bằng tài khoản email thông thường.',
+        hint: `Chi tiết từ Supabase: ${description}`,
         code: code || 'DATABASE_SERVER_ERROR',
+        retryable: true,
+      };
+    }
+
+    if (text.includes('server_error')) {
+      return {
+        message: 'Máy chủ xác thực Supabase trả về lỗi trong lúc xử lý đăng nhập Google.',
+        hint: description && description !== code ? `Chi tiết từ Supabase: ${description}` : 'Supabase không trả về mô tả chi tiết; kiểm tra Auth logs.',
+        code: code || 'SERVER_ERROR',
         retryable: true,
       };
     }

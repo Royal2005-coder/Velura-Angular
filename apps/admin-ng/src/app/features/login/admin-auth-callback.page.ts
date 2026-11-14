@@ -98,7 +98,8 @@ export class AdminAuthCallbackPage {
     const state = params.get('state');
     const expectedState = localStorage.getItem(STATE_STORAGE_KEY);
 
-    if (expectedState && (!state || state !== expectedState)) {
+    // GoTrue's PKCE redirect does not echo a custom `state`; login-CSRF is prevented by the browser-held code_verifier.
+    if (expectedState && state && state !== expectedState) {
       this.cleanStorage();
       this.fail({
         message: 'Mã bảo mật state không khớp hoặc bị thiếu.',
@@ -279,11 +280,20 @@ export class AdminAuthCallbackPage {
       };
     }
 
-    if (text.includes('database error') || text.includes('server_error')) {
+    if (description.toLowerCase().includes('database error')) {
       return {
         message: 'Hệ thống xác thực Supabase gặp sự cố khi lưu trữ thông tin tài khoản.',
-        hint: 'Vui lòng thử lại sau vài phút hoặc đăng nhập bằng tài khoản email quản trị.',
+        hint: `Chi tiết từ Supabase: ${description}`,
         code: code || 'DATABASE_SERVER_ERROR',
+        retryable: true,
+      };
+    }
+
+    if (text.includes('server_error')) {
+      return {
+        message: 'Máy chủ xác thực Supabase trả về lỗi trong lúc xử lý đăng nhập Google.',
+        hint: description && description !== code ? `Chi tiết từ Supabase: ${description}` : 'Supabase không trả về mô tả chi tiết; kiểm tra Auth logs.',
+        code: code || 'SERVER_ERROR',
         retryable: true,
       };
     }

@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: provision
-          image: ghcr.io/royal2005-coder/velura-ai-worker@sha256:837b754e4b72b7dc64f5f57d7419cbe7921f2c2129880cbd4430877cc119875a
+          image: ghcr.io/royal2005-coder/velura-ai-worker@sha256:40568e61e700192a5e5b249bae5b4e2787dafe2c7a6feb252212f0c19acde013
           command: [python, /app/bootstrap_weights.py]
           args: [--weights-dir, /weights, --accept-license-manifest, velura-worker-v3]
           securityContext:

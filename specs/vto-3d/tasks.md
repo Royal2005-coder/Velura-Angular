@@ -1,3 +1,5 @@
+> Superseded by .specify/specs/vto-studio-10-pose-preview.md (3D/360 removed).
+
 # Tasks: VTO 3D
 
 **Input:** [spec.md](./spec.md), [plan.md](./plan.md)

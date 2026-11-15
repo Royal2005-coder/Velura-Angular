@@ -248,7 +248,7 @@ export async function handleAiRoute(
       res.end(image);
       return true;
     }
-    if (parts[offset + 2] === "render3d" && parts[offset + 3] && req.method === "GET") {
+    if (parts[offset + 2] === "poses" && parts[offset + 3] && req.method === "GET") {
       const job = await service.get(owner, id);
       if (user && requiresMember(job)) requireAiMember(context);
       const name = parts[offset + 3];
@@ -257,7 +257,7 @@ export async function handleAiRoute(
         ...headers,
         "content-type": "image/png",
         "cache-control": "no-store",
-        "content-disposition": `inline; filename="${name}"`,
+        "content-disposition": `inline; filename="pose-${name}.png"`,
         "x-content-type-options": "nosniff",
       });
       res.end(bytes);

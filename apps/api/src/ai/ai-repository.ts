@@ -139,14 +139,10 @@ export class LocalAiRepository {
       }
     }
   }
-  /** Turntable frames live in the job's render3d directory; the caller publishes only names it recorded. */
-  async resultFile(job: AiJob, name: string): Promise<Buffer> {
-    const path = join(job.directory, "render3d", name);
-    const resolved = await realpath(path);
-    if (!resolved.startsWith(join(await realpath(job.directory), "render3d")))
-      throw new Error("RESULT_PATH_ESCAPE");
-    if ((await stat(resolved)).size > 24 * 1024 * 1024) throw new Error("RESULT_TOO_LARGE");
-    return readFile(resolved);
+  /** A published studio pose is the `result.png` of its own `poses/<id>` directory; the caller checks the id was recorded. */
+  async resultFile(job: AiJob, poseId: string): Promise<Buffer> {
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(poseId)) throw new Error("RESULT_PATH_ESCAPE");
+    return this.result({ ...job, directory: join(job.directory, "poses", poseId) });
   }
   /** Bound result bytes before reading an image into the HTTP process. */
   async result(job: AiJob): Promise<Buffer> {

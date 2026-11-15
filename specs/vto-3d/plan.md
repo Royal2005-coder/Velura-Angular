@@ -1,3 +1,5 @@
+> Superseded by .specify/specs/vto-studio-10-pose-preview.md (3D/360 removed).
+
 # Implementation Plan: VTO 3D
 
 **Spec:** [spec.md](./spec.md) | **Performance:** 2D path unchanged; the 360° stage is a second worker request with its own 420s budget.

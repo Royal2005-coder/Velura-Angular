@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 import { selectOne, selectRows } from "../supabase.js";
 import { HttpError } from "../http.js";
+import { colorKey, colorKeyFromImageUrl } from "../products/image-color.js";
 import { asString, asJsonObject, type JsonObject } from "../types.js";
 import type { AiCatalog } from "./ai-service.js";
 import type { CatalogImageVector } from "./image-vector-repository.js";
@@ -143,9 +144,15 @@ export class ShopAiCatalog implements AiCatalog {
       .map((img) => (typeof img === "string" ? img : asString(asJsonObject(img).url)))
       .filter(Boolean);
     const colors = asJsonObject(product.image_colors);
-    if (!color || Object.keys(colors).length === 0) return all;
-    const wanted = color.trim().toLowerCase();
-    return all.filter((url) => asString(colors[url]).trim().toLowerCase() === wanted);
+    if (!color) return all;
+    // Explicit operator mapping wins; otherwise the colour embedded in the catalog file name.
+    const tagOf = (url: string): string | null => {
+      const explicit = asString(colors[url]).trim();
+      return explicit ? colorKey(explicit) : colorKeyFromImageUrl(url);
+    };
+    if (!all.some((url) => tagOf(url))) return all;
+    const wanted = colorKey(color);
+    return all.filter((url) => tagOf(url) === wanted);
   }
   private isAllowedImage(url: string): boolean {
     try {

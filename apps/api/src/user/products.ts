@@ -1,4 +1,5 @@
 import { HttpError, sendJson } from "../http.js";
+import { withInferredImageColors } from "../products/image-color.js";
 import { selectOne, selectRows } from "../supabase.js";
 import { filterCatalogProducts, parseCatalogFilters } from "./catalog-search.js";
 import {
@@ -47,6 +48,13 @@ let cacheGeneration = 0;
  * Invalidate product catalog in-memory cache when changes occur.
  * Called by admin product mutations, order stock changes and review moderation.
  */
+/** Distinct variant colour names of a product row, used to attribute catalog images to colours. */
+function variantColorNames(variants: unknown): string[] {
+  return Array.isArray(variants)
+    ? [...new Set((variants as JsonObject[]).map((row) => String(row.color ?? "")).filter(Boolean))]
+    : [];
+}
+
 export function invalidateCatalogCache(): void {
   cacheGeneration += 1;
   categoriesCache = null;
@@ -384,7 +392,7 @@ export async function handleProductsRoute(
             base_price: p.base_price,
             sale_price: p.sale_price,
             images: p.images,
-            image_colors: p.image_colors || {},
+            image_colors: withInferredImageColors(p.images, p.image_colors, variantColorNames(p.variants)),
             is_featured: p.is_featured,
             is_combo: p.is_combo,
             status: p.status,
@@ -433,6 +441,7 @@ export async function handleProductsRoute(
         const cat = p.category as JsonObject | null | undefined;
         return {
           ...p,
+          image_colors: withInferredImageColors(p.images, p.image_colors, variantColorNames(variants)),
           variants,
           category_slug: cat ? cat.slug : null,
           category_name: cat ? cat.name : null,

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 import { selectOne, selectRows } from "../supabase.js";
 import { HttpError } from "../http.js";
-import { colorKey, colorKeyFromImageUrl } from "../products/image-color.js";
+import { colorKey, colorKeyFromImageUrl, slugMatchesColor } from "../products/image-color.js";
 import { asString, asJsonObject, type JsonObject } from "../types.js";
 import type { AiCatalog } from "./ai-service.js";
 import type { CatalogImageVector } from "./image-vector-repository.js";
@@ -150,11 +150,16 @@ export class ShopAiCatalog implements AiCatalog {
       const explicit = asString(colors[url]).trim();
       return explicit ? colorKey(explicit) : colorKeyFromImageUrl(url);
     };
+    const showsColor = (url: string): boolean => {
+      const explicit = asString(colors[url]).trim();
+      if (explicit) return colorKey(explicit) === colorKey(color);
+      const slug = colorKeyFromImageUrl(url);
+      return slug !== null && slugMatchesColor(slug, color);
+    };
     // Operator mappings are strict; file-name colours only discriminate when the photos show at least two colours.
     const hasExplicit = all.some((url) => asString(colors[url]).trim());
     if (!hasExplicit && new Set(all.map(tagOf).filter(Boolean)).size < 2) return all;
-    const wanted = colorKey(color);
-    return all.filter((url) => tagOf(url) === wanted);
+    return all.filter(showsColor);
   }
   private isAllowedImage(url: string): boolean {
     try {

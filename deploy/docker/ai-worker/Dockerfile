@@ -6,8 +6,6 @@ COPY apps/ai-worker/requirements-production.txt ./requirements-production.txt
 RUN python -m pip wheel --only-binary=:all: --wheel-dir=/wheels -r requirements-production.txt
 COPY apps/ai-worker/vendor_sources.py ./vendor_sources.py
 RUN python vendor_sources.py --destination=/vendor
-COPY apps/ai-worker/vendor_triposr.py apps/ai-worker/tsr_config.py ./
-RUN python vendor_triposr.py --destination=/vendor
 
 FROM ${PYTHON_IMAGE} AS runtime
 ARG RELEASE_REVISION
@@ -34,8 +32,6 @@ COPY --from=dependencies /vendor /opt/vendor
 WORKDIR /app
 COPY apps/ai-worker/production_*.py apps/ai-worker/maskless_vton.py \
      apps/ai-worker/image_gate.py apps/ai-worker/bootstrap_weights.py \
-     apps/ai-worker/reconstruction_3d.py apps/ai-worker/tsr_config.py \
-     apps/ai-worker/triposr_state_dict.py \
      apps/ai-worker/weights-manifest.json ./
 USER 1000:1000
 EXPOSE 8000

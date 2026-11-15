@@ -53,16 +53,6 @@
       "checksum_evidence": "https://github.com/danielgatis/rembg/blob/v2.0.67/rembg/sessions/u2net.py"
     },
     {
-      "path": "TripoSR/model.ckpt",
-      "repo": "stabilityai/TripoSR",
-      "revision": "5b521936b01fbe1890f6f9baed0254ab6351c04a",
-      "file": "model.ckpt",
-      "size": 1677246742,
-      "sha256": "429e2c6b22a0923967459de24d67f05962b235f79cde6b032aa7ed2ffcd970ee",
-      "license": "MIT",
-      "license_evidence": "https://huggingface.co/stabilityai/TripoSR"
-    },
-    {
       "path": "rembg/u2net.onnx",
       "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx",
       "file": "u2net.onnx",

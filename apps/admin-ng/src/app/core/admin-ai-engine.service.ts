@@ -26,7 +26,7 @@ export interface AiCapabilities {
   tasks: { task: AiTask; enabled: boolean; reason?: string }[];
   studio_assets?: { id: string; label: string; preview_url?: string }[];
 }
-/** Explicitly consented input; product and studio IDs are validated against server allowlists. */
+/** Explicitly consented input; product IDs are validated against server allowlists. */
 export interface AiJobInput {
   catalog_index?: boolean;
   task: AiTask;
@@ -39,7 +39,6 @@ export interface AiJobInput {
   product_id?: string;
   variant_id?: string;
   mode?: 'personal' | 'studio';
-  studio_asset_id?: string;
   consent: true;
   confirmed: true;
   idempotency_key: string;

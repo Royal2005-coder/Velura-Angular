@@ -14,9 +14,6 @@ from production_quality import CpuQuality
 
 MAX_BODY = 17 * 1024 * 1024
 DEADLINE_SECONDS = 180
-# A 24-view NeRF sweep on one 4060 is slower than the try-on that feeds it; it gets its own budget
-# instead of inflating the deadline every other task shares.
-THREE_D_DEADLINE_SECONDS = 420
 
 
 class WorkerError(Exception):
@@ -26,22 +23,10 @@ class WorkerError(Exception):
         self.code, self.status = code, status
 
 
-def three_d_ready() -> bool:
-    """Whether the optional reconstruction stage can run here; a broken vendor tree must not hide 2D."""
-    try:
-        import reconstruction_3d
-
-        return reconstruction_3d.available()
-    except Exception:
-        return False
-
-
 def capable(task: str, cpu_ready: bool, models_ready: bool) -> bool:
     """Per-task readiness, so the API only ever posts a stage this worker can serve."""
     if task == "image_quality":
         return cpu_ready
-    if task == "virtual_try_on_3d":
-        return models_ready and three_d_ready()
     return models_ready
 
 
@@ -230,12 +215,6 @@ def create_app(loader=None, key: str | None = None) -> FastAPI:
             if task == "text_embedding":
                 return None, {"status": "success", "model": "openclip-vit-b32-laion2b", "dimensions": 512,
                               "embedding": models.text_embedding(text)}
-            if task == "virtual_try_on_3d":
-                import reconstruction_3d
-
-                stage = reconstruction_3d.turntable(first)
-                sprite = stage.pop("sprite")
-                return sprite, {"status": "success", "model": "triposr-turntable", **stage}
             if task == "virtual_try_on":
                 gate = models.quality(first, True)
                 if not gate["valid"]:
@@ -255,8 +234,7 @@ def create_app(loader=None, key: str | None = None) -> FastAPI:
         try:
             # CLIP text encoding is CPU-only inference; it must not queue behind a GPU try-on lease.
             runner = quality_executor if task in ("image_quality", "text_embedding") else executor
-            budget = THREE_D_DEADLINE_SECONDS if task == "virtual_try_on_3d" else DEADLINE_SECONDS
-            payload, result = await runner.run(request, operation, budget=budget)
+            payload, result = await runner.run(request, operation)
             if payload is None:
                 return JSONResponse({**envelope, **result}, headers=headers)
             headers["X-AI-Result"] = encoded(result)

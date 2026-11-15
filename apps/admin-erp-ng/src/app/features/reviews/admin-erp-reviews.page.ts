@@ -135,47 +135,59 @@ export class AdminErpReviewsPage {
       key: 'product',
       label: 'Sản phẩm',
       value: (row) => this.productName(row as AdminReviewRow),
+      width: '180px',
       truncate: '180px',
     },
     {
       key: 'rating',
       label: 'Đánh giá',
       value: (row) => `${(row as AdminReviewRow).rating || 5} ★`,
+      width: '120px',
       stars: (row) => (row as AdminReviewRow).rating || 5,
     },
     {
       key: 'review',
       label: 'Nội dung',
       value: (row) => this.commentOf(row as AdminReviewRow),
-      truncate: '320px',
+      width: '280px',
+      truncate: '280px',
       lineClamp: 2,
     },
     {
       key: 'media',
       label: 'Ảnh đính kèm',
       value: (row) => ((row as AdminReviewRow).images?.length ? `${(row as AdminReviewRow).images!.length} ảnh` : '—'),
+      width: '130px',
       images: (row) => (row as AdminReviewRow).images || [],
     },
     {
       key: 'customer',
       label: 'Khách hàng',
       value: (row) => this.customerLabel(row as AdminReviewRow),
-      truncate: '150px',
+      width: '140px',
+      truncate: '140px',
     },
     {
       key: 'status',
       label: 'Trạng thái',
       value: (row) => this.statusLabel((row as AdminReviewRow).status),
+      width: '110px',
       badge: (row) => ({ label: this.statusLabel((row as AdminReviewRow).status), tone: this.statusTone((row as AdminReviewRow).status) }),
     },
     {
       key: 'urgent',
       label: 'Ưu tiên',
       value: (row) => ((row as AdminReviewRow).is_flagged_urgent ? 'Gấp' : '—'),
+      width: '80px',
       badge: (row) =>
         (row as AdminReviewRow).is_flagged_urgent ? { label: 'Gấp', tone: 'danger' as const } : null,
     },
-    { key: 'date', label: 'Ngày tạo', value: (row) => this.date((row as AdminReviewRow).submitted_at) },
+    {
+      key: 'date',
+      label: 'Ngày tạo',
+      value: (row) => this.date((row as AdminReviewRow).submitted_at),
+      width: '120px',
+    },
   ];
 
   readonly reviewRowId = (row: unknown): string => {
@@ -213,9 +225,9 @@ export class AdminErpReviewsPage {
   }
 
   readonly logColumns: readonly AdminTableColumn[] = [
-    { key: 'time', label: 'Thời gian', value: (row) => this.date((row as AdminAuditRow).timestamp) },
-    { key: 'actor', label: 'Người thao tác', value: (row) => this.actor(row as AdminAuditRow) },
-    { key: 'action', label: 'Hành động', value: (row) => this.actionLabel(row as AdminAuditRow) },
+    { key: 'time', label: 'Thời gian', value: (row) => this.date((row as AdminAuditRow).timestamp), width: '160px' },
+    { key: 'actor', label: 'Người thao tác', value: (row) => this.actor(row as AdminAuditRow), width: '160px' },
+    { key: 'action', label: 'Hành động', value: (row) => this.actionLabel(row as AdminAuditRow), width: '140px' },
     { key: 'target', label: 'Đối tượng', value: (row) => this.target(row as AdminAuditRow) },
   ];
 

@@ -442,9 +442,9 @@ describe('AiImageWorkbench', () => {
     // Thumbnail labels ("Dáng 3", "Dáng 4") concatenate in textContent, so exclude that false match.
     const legacyViewer = new RegExp(['\\u0033\\u0036\\u0030', '\\u0033D(?!áng)'].join('|'), 'i');
     const thumbs = (f: ComponentFixture<AiImageWorkbench>) =>
-      Array.from<HTMLButtonElement>(f.nativeElement.querySelectorAll('.pose-thumb'));
-    const stageSrc = (f: ComponentFixture<AiImageWorkbench>) =>
-      (f.nativeElement.querySelector('.pose-stage__img') as HTMLImageElement | null)?.getAttribute('src');
+      Array.from<HTMLElement>(f.nativeElement.querySelectorAll('.pose-card'));
+    const cardSrc = (f: ComponentFixture<AiImageWorkbench>, index: number) =>
+      thumbs(f)[index].querySelector('img')?.getAttribute('src') ?? undefined;
 
     it('loads the preview of the first studio pose as the standing model', async () => {
       const p = page();
@@ -487,13 +487,13 @@ describe('AiImageWorkbench', () => {
       expect(model.pose).toHaveBeenCalledTimes(10);
       expect(model.pose).toHaveBeenCalledWith('studio-job', 'female-front-relaxed-v1');
       expect(thumbs(fixture)).toHaveLength(10);
-      expect(fixture.nativeElement.querySelectorAll('.pose-thumb__skeleton')).toHaveLength(0);
+      expect(fixture.nativeElement.querySelectorAll('.pose-card__skeleton')).toHaveLength(0);
       expect(p.poseProgress()).toBe('10/10 dáng');
-      expect(p.currentDisplayImage()).toBe('blob:female-front-relaxed-v1');
+      expect(cardSrc(fixture, 0)).toBe('blob:female-front-relaxed-v1');
       expect(fixture.nativeElement.textContent).toContain('Dáng 10');
     });
 
-    it('switching a thumbnail changes only the previewed image', async () => {
+    it('each finished pose downloads its own image from the grid', async () => {
       const fixture = pageFixture();
       const p = fixture.componentInstance;
       await studioReady(p);
@@ -501,17 +501,14 @@ describe('AiImageWorkbench', () => {
       await p.generate();
       await flush();
       fixture.detectChanges();
-      expect(stageSrc(fixture)).toBe('blob:female-front-relaxed-v1');
-      thumbs(fixture)[3].click();
-      fixture.detectChanges();
-      expect(stageSrc(fixture)).toBe('blob:pose-3');
-      expect(p.previewedPose()?.id).toBe('pose-3');
+      expect(cardSrc(fixture, 0)).toBe('blob:female-front-relaxed-v1');
+      expect(cardSrc(fixture, 3)).toBe('blob:pose-3');
       expect(model.create).toHaveBeenCalledTimes(1);
       const hrefs: string[] = [];
       vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
         hrefs.push(this.href);
       });
-      p.downloadResult();
+      (fixture.nativeElement.querySelectorAll('.pose-card__download')[3] as HTMLButtonElement).click();
       expect(hrefs).toEqual(['blob:pose-3']);
     });
 
@@ -529,20 +526,20 @@ describe('AiImageWorkbench', () => {
         await vi.advanceTimersByTimeAsync(0);
         fixture.detectChanges();
         expect(thumbs(fixture)).toHaveLength(10);
-        expect(fixture.nativeElement.querySelectorAll('.pose-thumb__skeleton')).toHaveLength(9);
-        expect(thumbs(fixture)[1].disabled).toBe(true);
+        expect(fixture.nativeElement.querySelectorAll('.pose-card__skeleton')).toHaveLength(9);
+        expect(cardSrc(fixture, 1)).toBeUndefined();
         expect(p.poseProgress()).toBe('Đã xong 1/10 dáng');
-        expect(stageSrc(fixture)).toBe('blob:female-front-relaxed-v1');
+        expect(cardSrc(fixture, 0)).toBe('blob:female-front-relaxed-v1');
 
         await vi.advanceTimersByTimeAsync(1500);
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelectorAll('.pose-thumb__skeleton')).toHaveLength(7);
+        expect(fixture.nativeElement.querySelectorAll('.pose-card__skeleton')).toHaveLength(7);
         expect(p.poseProgress()).toBe('Đã xong 3/10 dáng');
         expect(model.pose).toHaveBeenCalledTimes(3);
 
         await vi.advanceTimersByTimeAsync(1500);
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelectorAll('.pose-thumb__skeleton')).toHaveLength(0);
+        expect(fixture.nativeElement.querySelectorAll('.pose-card__skeleton')).toHaveLength(0);
         expect(p.poseProgress()).toBe('10/10 dáng');
         expect(p.busy()).toBe(false);
         expect(model.pose).toHaveBeenCalledTimes(10);

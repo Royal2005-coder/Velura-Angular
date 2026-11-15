@@ -40,7 +40,7 @@
   border: 1px solid var(--vto-border);
   border-radius: 22px;
   padding: 0;
-  max-width: 680px;
+  max-width: 900px;
   width: 94vw;
   max-height: 92vh;
   background: #fff;
@@ -394,27 +394,23 @@
   font: 700 .68rem var(--velura-font-ui, "Inter", sans-serif);
 }
 .pose-progress { margin: 0; color: var(--vto-maroon); font: 700 .78rem var(--velura-font-ui, "Inter", sans-serif); }
-.pose-strip {
+.pose-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: .5rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: .6rem;
 }
-.pose-thumb {
+.pose-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: .3rem;
+  gap: .35rem;
+  margin: 0;
   padding: .3rem;
   border: 1px solid var(--vto-border);
   border-radius: 12px;
   background: #fff;
-  cursor: pointer;
-  transition: border-color .2s ease, box-shadow .2s ease;
 }
-.pose-thumb:hover:not(:disabled) { border-color: var(--vto-rose); }
-.pose-thumb:disabled { cursor: default; }
-.pose-thumb--selected { border-color: var(--vto-maroon); box-shadow: 0 0 0 1px var(--vto-maroon); background: var(--vto-blush); }
-.pose-thumb__img, .pose-thumb__skeleton {
+.pose-card__img, .pose-card__skeleton {
   display: block;
   width: 100%;
   aspect-ratio: 3 / 4;
@@ -422,21 +418,43 @@
   object-fit: cover;
   background: var(--vto-blush);
 }
-.pose-thumb__skeleton {
+.pose-card__skeleton {
   background: linear-gradient(100deg, var(--vto-blush) 30%, #fff 50%, var(--vto-blush) 70%) 0 0 / 200% 100%;
   animation: pose-shimmer 1.4s linear infinite;
 }
-.pose-thumb__label {
+.pose-card__download {
+  position: absolute;
+  top: .6rem;
+  right: .6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--vto-border);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .92);
+  color: var(--vto-maroon);
+  cursor: pointer;
+}
+.pose-card__download:hover { border-color: var(--vto-maroon); }
+.pose-card__label {
   overflow: hidden;
   color: var(--vto-muted);
-  font: 600 .68rem var(--velura-font-ui, "Inter", sans-serif);
+  font: 600 .72rem var(--velura-font-ui, "Inter", sans-serif);
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 @keyframes pose-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .pose-thumb__skeleton { animation: none; }
+  .pose-card__skeleton { animation: none; }
+}
+@media (max-width: 900px) {
+  .pose-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .pose-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .result-disclaimer { margin: 0; color: var(--vto-muted); font-size: .7rem; text-align: center; }
 

@@ -21,47 +21,16 @@ import {
   AiEngineService,
   AiJob,
   AiTask,
-  StudioAsset,
 } from '../../core/services/ai-engine.service';
-export interface VtoScenario {
+
+/** One of the studio poses in display order; `src` stays empty until its image has been downloaded. */
+export interface PoseSlot {
   id: string;
   label: string;
-  icon: string;
-  badge: string;
-  description: string;
-  theme: 'light' | 'dark' | 'warm' | 'cool';
-  backgroundGradient: string;
-  lightingTone: string;
-  vignetteStyle: string;
-  podiumStyle: string;
-  floorTexture: string;
-  wallBackTexture: string;
-  wallSideTexture: string;
-  ceilingTexture: string;
-  spotlightBeam: string;
+  src: string;
 }
 
-export const VTO_SCENARIOS: VtoScenario[] = [
-  {
-    id: 'basic',
-    label: 'Studio Chuẩn',
-    icon: 'studio',
-    badge: 'Atelier',
-    description: 'Phông nền Trắng ngà Studio Atelier tối giản cao cấp',
-    theme: 'light',
-    backgroundGradient: 'radial-gradient(circle at 50% 30%, #FFFFFF 0%, #FAF6F0 50%, #ECE4DB 100%)',
-    lightingTone: 'rgba(255, 255, 255, 0.4)',
-    vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(122, 40, 60, 0.06) 100%)',
-    podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(200, 185, 175, 0.45) 0%, rgba(200, 185, 175, 0.15) 50%, transparent 70%)',
-    floorTexture: 'linear-gradient(45deg, #E6DDD4 25%, transparent 25%), linear-gradient(-45deg, #E6DDD4 25%, transparent 25%), #F4EDE6',
-    wallBackTexture: 'radial-gradient(circle at 50% 45%, #FFFFFF 0%, #FAF6F0 55%, #ECE4DB 100%)',
-    wallSideTexture: 'linear-gradient(to right, #ECE4DB, #F5EFE8)',
-    ceilingTexture: 'radial-gradient(circle at 50% 50%, #FFFFFF, #E2D9CE)',
-    spotlightBeam: 'radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.45) 0%, transparent 75%)',
-  },
-];
-
-/** Consent-first image workflow with interactive 3D 360 perspective, rich studio scenes, and female-only models. */
+/** Consent-first image workflow: personal-photo try-on or one studio job that tries the garment on every studio pose. */
 @Component({
   selector: 'app-ai-image-workbench',
   standalone: true,
@@ -99,53 +68,69 @@ export class AiImageWorkbench {
   readonly error = signal('');
   readonly consent = signal(false);
   readonly mode = signal<'personal' | 'studio'>('personal');
-  readonly studio = signal('');
+  /** Preview (object URL) of the standing studio model, the fixed input of every studio try-on. */
   readonly studioImage = signal('');
   readonly studioLoading = signal(false);
   private studioGeneration = 0;
   readonly preview = signal('');
   readonly result = signal('');
-  /** Studio 3D: blob URLs of the turntable frames, indexed by orbit angle. */
-  readonly frames3d = signal<string[]>([]);
-  readonly has3d = computed(() => this.frames3d().length >= 12);
-  /** Set when published frames could not be downloaded/decoded; the 2D try-on stays usable. */
-  readonly frames3dFailed = signal(false);
-  readonly frameSrc = computed(() => {
-    const frames = this.frames3d();
-    if (!frames.length) return this.result();
-    const index = Math.round((((this.orbitAngle() % 360) + 360) % 360) / (360 / frames.length)) % frames.length;
-    return frames[index];
-  });
   readonly busy = signal(false);
   readonly job = signal<AiJob | null>(null);
   readonly qualityPassed = signal(false);
   readonly qualityWarning = signal<string | null>(null);
   readonly crop = signal({ x: 0, y: 0, width: 100, height: 100 });
 
-  // --- STUDIO PRESETS & FILTERS (LOCKED EXCLUSIVELY TO FEMALE MODELS) ---
-  readonly selectedGender = signal<'female'>('female');
-  /** One fixed studio backdrop; scene/season presets were retired in favour of one model in many poses. */
-  readonly activeScenario: VtoScenario = VTO_SCENARIOS[0];
+  /** Licensed studio poses in server order; the first one is the standing model. */
+  readonly studioAssets = computed(() => this.capabilities()?.studio_assets ?? []);
+  /** Id of the standing model shown as the studio input preview. */
+  readonly standingAssetId = computed(() => this.studioAssets()[0]?.id ?? '');
 
-  readonly filteredStudioAssets = computed(() =>
-    (this.capabilities()?.studio_assets || []).filter((asset: StudioAsset) => asset.gender === 'female'),
+  // --- STUDIO POSES: object URLs of the published poses, keyed by pose id ---
+  readonly poseUrls = signal<Record<string, string>>({});
+  /** Pose chosen in the thumbnail strip; empty selects the standing pose. */
+  readonly selectedPose = signal('');
+  private poseEpoch = 0;
+  private poseJobId = '';
+  private readonly poseRequested = new Set<string>();
+
+  /** The poses of the job in studio order; unfinished ones have an empty `src` and render as skeletons. */
+  readonly poseSlots = computed<PoseSlot[]>(() => {
+    const urls = this.poseUrls();
+    const known = this.studioAssets().map((asset) => ({ id: asset.id, label: asset.label }));
+    const extra = (this.job()?.poses ?? []).filter((pose) => !known.some((slot) => slot.id === pose.id));
+    return [...known, ...extra].map((slot) => ({ ...slot, src: urls[slot.id] ?? '' }));
+  });
+  /** Whether the pose viewer (large preview + thumbnail strip) replaces the single-image result. */
+  readonly showPoses = computed(() => {
+    const job = this.job();
+    if (!job || job.task !== 'virtual_try_on') return false;
+    if ((job.status === 'running' || job.status === 'success') && job.poses?.length) return true;
+    return this.mode() === 'studio' && (job.status === 'queued' || job.status === 'running');
+  });
+  /** The pose currently shown in the large preview. */
+  readonly previewedPose = computed<PoseSlot | null>(() => {
+    const slots = this.poseSlots();
+    return slots.find((slot) => slot.id === this.selectedPose()) ?? slots[0] ?? null;
+  });
+  readonly poseProgress = computed(() => {
+    const job = this.job();
+    if (!job || !this.showPoses()) return '';
+    const done = job.poses?.length ?? 0;
+    const total = this.poseSlots().length || 10;
+    if (job.status === 'running') return `Đã xong ${done}/${total} dáng`;
+    return job.status === 'success' ? `${done}/${total} dáng` : '';
+  });
+  /** A finished try-on is on screen: the single result image or a successful pose set. */
+  readonly resultReady = computed(
+    () => !!this.result() || (this.job()?.status === 'success' && !!this.job()?.poses?.length),
   );
-
-  modelDisplayTitle(asset: StudioAsset): string {
-    return (
-      asset.label
-        .replace(/^(Người mẫu\s*)?(Nữ|Nam)\s*[-–]?\s*(Bối cảnh\s*)?/i, '')
-        .replace(/\s*\/\s*(Đi làm|Đi học|Đi chơi|Party|Sang trọng)/i, '')
-        .trim() || asset.label
-    );
-  }
 
   // --- LIFECYCLE (spec 3.1.8) — derived from real state, never from elapsed time ---
   readonly lifecycleSteps = ['Chọn ảnh', 'Kiểm tra ảnh', 'Xác nhận', 'Đang xử lý', 'Kết quả'] as const;
   /** 1-based current step: input → validation → preview/confirm → processing → result. */
   readonly lifecycleStep = computed(() => {
     const job = this.job();
-    if (this.result()) return 5;
+    if (this.resultReady()) return 5;
     if (job?.task === 'virtual_try_on' && (job.status === 'queued' || job.status === 'running')) return 4;
     const hasInput = this.mode() === 'studio' ? !!this.studioImage() : !!this.preview();
     if (!hasInput) return 1;
@@ -154,8 +139,6 @@ export class AiImageWorkbench {
   });
   /** Seconds since the current job started; shown against the 2-minute VTO-09 budget, not used to fake progress. */
   readonly loadingSeconds = signal<number>(0);
-  /** Studio try-on requests the 360° add-on; personal photos stay 2D. */
-  readonly expects3d = computed(() => this.task() === 'virtual_try_on' && this.mode() === 'studio');
   readonly processingTitle = computed(() =>
     this.job()?.task === 'image_quality' ? 'Đang kiểm tra ảnh' : 'AI đang thử đồ',
   );
@@ -163,159 +146,55 @@ export class AiImageWorkbench {
     const job = this.job();
     if (!job) return 'Đang tải ảnh lên an toàn...';
     if (job.status === 'queued') return 'Đang chờ đến lượt xử lý trên GPU...';
-    return job.task === 'image_quality'
-      ? 'Đang kiểm tra độ nét, ánh sáng và dáng người...'
+    if (job.task === 'image_quality') return 'Đang kiểm tra độ nét, ánh sáng và dáng người...';
+    return this.mode() === 'studio'
+      ? 'Đang thử đồ lần lượt trên 10 dáng — mỗi dáng tối đa 2 phút.'
       : 'Đang phối trang phục lên ảnh — tối đa 2 phút.';
   });
   readonly elapsedLabel = computed(() => {
     const s = this.loadingSeconds();
     const clock = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-    return this.job()?.task === 'virtual_try_on' && this.job()?.status === 'running' ? `${clock} / 2:00` : clock;
-  });
-  /** Honest note about the 360° add-on once the 2D result is on screen. */
-  readonly stage3dNote = computed<{ tone: 'info' | 'warn'; text: string } | null>(() => {
-    const job = this.job();
-    if (!this.expects3d() || !this.result() || job?.task !== 'virtual_try_on' || this.has3d()) return null;
-    if (job.stage3d === 'pending') return { tone: 'info', text: 'Đang dựng góc nhìn 360° từ ảnh thử đồ...' };
-    if (job.stage3d === 'failed' || this.frames3dFailed())
-      return { tone: 'warn', text: 'Chưa dựng được góc nhìn 360°. Ảnh thử đồ vẫn dùng được.' };
-    return null;
+    const budgeted =
+      this.job()?.task === 'virtual_try_on' && this.job()?.status === 'running' && this.mode() !== 'studio';
+    return budgeted ? `${clock} / 2:00` : clock;
   });
   private loadingTimer: number | undefined;
 
-  // --- 360° TURNTABLE VIEWER: rotation = choosing a real frame; the scene itself never rotates ---
   readonly showOriginal = signal<boolean>(false);
-  readonly orbitAngle = signal<number>(0);
-  readonly zoomLevel = signal<number>(1.0);
-  readonly autoSpin = signal<boolean>(false);
-  /** Auto-spin is not offered to users who asked the OS for reduced motion. */
-  readonly reducedMotion =
-    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  private isDragging3D = false;
-  private dragStartX = 0;
-  private dragStartAngle = 0;
-  private autoSpinFrame: number | undefined;
-  private lastAutoSpinTime = 0;
-
-  readonly normalizedAngle = computed(() => ((this.orbitAngle() % 360) + 360) % 360);
-  /** Drag/keyboard only make sense when real turntable frames are on screen. */
-  readonly spinnable = computed(() => this.has3d() && !this.showOriginal());
-  readonly roundedAngle = computed(() => Math.round(this.normalizedAngle()) % 360);
-
-  readonly angleDisplayLabel = computed(() => {
-    const a = this.roundedAngle();
-    if (a <= 25 || a >= 335) return `${a}° · Mặt trước (Chính diện)`;
-    if (a > 25 && a < 70) return `${a}° · Góc nghiêng 45° trái`;
-    if (a >= 70 && a <= 110) return `${a}° · Cạnh trái (90°)`;
-    if (a > 110 && a < 160) return `${a}° · Nghiêng sau trái (135°)`;
-    if (a >= 160 && a <= 200) return `${a}° · Mặt sau (180°)`;
-    if (a > 200 && a < 250) return `${a}° · Nghiêng sau phải (225°)`;
-    if (a >= 250 && a <= 290) return `${a}° · Cạnh phải (270°)`;
-    return `${a}° · Góc nghiêng 45° phải`;
+  /** Caption on the large preview. */
+  readonly stageTag = computed(() => {
+    if (this.showOriginal()) return 'Ảnh gốc';
+    return this.showPoses() ? (this.previewedPose()?.label ?? '') : 'Ảnh thử đồ AI';
   });
-
+  /** What the large preview shows: the original, the selected pose, or the single try-on result. */
   readonly currentDisplayImage = computed(() => {
     if (this.showOriginal()) return this.mode() === 'personal' ? this.preview() : this.studioImage();
-    // Real turntable frames replace the single render whenever the 3D stage produced them.
-    return this.has3d() ? this.frameSrc() : this.result();
+    return this.showPoses() ? (this.previewedPose()?.src ?? '') : this.result();
   });
-
-  onStagePointerDown(event: PointerEvent): void {
-    if (!this.spinnable() || this.busy()) return;
-    this.isDragging3D = true;
-    this.stopAutoSpin();
-    this.dragStartX = event.clientX;
-    this.dragStartAngle = this.orbitAngle();
-    (event.currentTarget as HTMLElement)?.setPointerCapture?.(event.pointerId);
-  }
-
-  onStagePointerMove(event: PointerEvent): void {
-    if (!this.isDragging3D || !this.spinnable()) return;
-    const deltaX = event.clientX - this.dragStartX;
-    // Same direction as auto-spin (angle grows), so dragging right continues the turn the user just watched.
-    this.orbitAngle.set(((this.dragStartAngle + deltaX * 0.65) % 360 + 360) % 360);
-  }
-
-  onStagePointerUp(event: PointerEvent): void {
-    if (!this.isDragging3D) return;
-    this.isDragging3D = false;
-    try {
-      (event.currentTarget as HTMLElement)?.releasePointerCapture?.(event.pointerId);
-    } catch {}
-  }
-
-  /** Arrow keys step exactly one published frame; Home returns to the front view. */
-  onStageKeydown(event: KeyboardEvent): void {
-    if (!this.spinnable()) return;
-    const step = 360 / this.frames3d().length;
-    if (event.key === 'ArrowLeft') this.setAnglePreset(this.orbitAngle() - step);
-    else if (event.key === 'ArrowRight') this.setAnglePreset(this.orbitAngle() + step);
-    else if (event.key === 'Home') this.setAnglePreset(0);
-    else return;
-    event.preventDefault();
-  }
-
-  setAnglePreset(angle: number): void {
-    this.stopAutoSpin();
-    this.orbitAngle.set((angle % 360 + 360) % 360);
-  }
-
-  toggleAutoSpin(): void {
-    if (this.autoSpin()) {
-      this.stopAutoSpin();
-    } else {
-      this.startAutoSpin();
-    }
-  }
-
-  private startAutoSpin(): void {
-    this.stopAutoSpin();
-    if (this.reducedMotion || !this.spinnable()) return;
-    this.autoSpin.set(true);
-    this.lastAutoSpinTime = performance.now();
-    const step = (now: number) => {
-      if (!this.autoSpin()) return;
-      const dt = Math.min(100, Math.max(1, now - this.lastAutoSpinTime));
-      this.lastAutoSpinTime = now;
-      const deltaDeg = dt * 0.036;
-      this.orbitAngle.update((a) => (a + deltaDeg) % 360);
-      this.autoSpinFrame = requestAnimationFrame(step);
-    };
-    this.autoSpinFrame = requestAnimationFrame(step);
-  }
-
-  stopAutoSpin(): void {
-    this.autoSpin.set(false);
-    if (this.autoSpinFrame) {
-      cancelAnimationFrame(this.autoSpinFrame);
-      this.autoSpinFrame = undefined;
-    }
-  }
-
-  zoomIn(): void {
-    this.zoomLevel.update((z) => Math.min(1.8, +(z + 0.2).toFixed(1)));
-  }
-
-  zoomOut(): void {
-    this.zoomLevel.update((z) => Math.max(1.0, +(z - 0.2).toFixed(1)));
-  }
-
-  reset3DView(): void {
-    this.stopAutoSpin();
-    this.orbitAngle.set(0);
-    this.zoomLevel.set(1.0);
-  }
+  /** Image the Download button saves: the previewed pose, or the single result. */
+  readonly downloadSrc = computed(() =>
+    this.showPoses() ? (this.previewedPose()?.src ?? '') : this.result(),
+  );
 
   toggleShowOriginal(): void {
     this.showOriginal.update((v) => !v);
   }
+
+  /** Switches only the large preview to an already downloaded pose. */
+  selectPose(id: string): void {
+    if (!this.poseUrls()[id]) return;
+    this.selectedPose.set(id);
+    this.showOriginal.set(false);
+  }
+
   downloadResult(): void {
-    const res = this.result();
+    const res = this.downloadSrc();
     if (!res) return;
+    const pose = this.showPoses() ? this.previewedPose()?.id : '';
     const a = document.createElement('a');
     a.href = res;
-    a.download = `velura-virtual-tryon-${Date.now()}.png`;
+    a.download = `velura-virtual-tryon-${pose ? `${pose}-` : ''}${Date.now()}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -355,7 +234,7 @@ export class AiImageWorkbench {
    );
 
   readonly title = computed(() =>
-    this.task() === 'image_embedding' ? 'Tìm sản phẩm bằng ảnh' : 'Phòng thử đồ thông minh AI 3D',
+    this.task() === 'image_embedding' ? 'Tìm sản phẩm bằng ảnh' : 'Phòng thử đồ AI',
   );
 
   /** Consent belongs to the selected photo and is never enabled by default. */
@@ -363,18 +242,15 @@ export class AiImageWorkbench {
     if (this.mode() === 'studio' && (!this.studioImage() || this.studioLoading())) return;
     this.consent.set((event.target as HTMLInputElement).checked);
   }
-  /** Studio selection must be an explicit choice from server assets. */
-  async selectStudio(idOrEvent: string | Event): Promise<void> {
-    const id = typeof idOrEvent === 'string' ? idOrEvent : (((idOrEvent as Event).target as HTMLSelectElement | null)?.value || '');
+  /** Loads the preview of the standing studio model (first licensed pose) shown before consent. */
+  async loadStudioPreview(): Promise<void> {
+    const id = this.standingAssetId();
     const epoch = ++this.studioGeneration;
     this.release(this.studioImage());
     this.studioImage.set('');
-    this.studio.set(id);
     this.consent.set(false);
     this.studioLoading.set(false);
-    this.clearResult();
-    this.job.set(null);
-    if (!id || !this.capabilities()?.studio_assets?.some((asset) => asset.id === id)) return;
+    if (!id) return;
     this.studioLoading.set(true);
     this.error.set('');
     try {
@@ -396,8 +272,8 @@ export class AiImageWorkbench {
     this.clearResult();
     this.job.set(null);
     this.qualityWarning.set(null);
-    if (mode === 'studio' && !this.studio() && this.filteredStudioAssets().length) {
-      void this.selectStudio(this.filteredStudioAssets()[0].id);
+    if (mode === 'studio' && !this.studioImage() && this.standingAssetId()) {
+      void this.loadStudioPreview();
     }
   }
 
@@ -413,26 +289,31 @@ export class AiImageWorkbench {
     this.studioGeneration++;
     this.release(this.studioImage());
     this.studioImage.set('');
-    this.studio.set('');
     this.studioLoading.set(false);
   }
 
   /** Displays job lifecycle without claiming a failed gate succeeded. */
   statusLabel(job: AiJob): string {
     if (job.status === 'queued') return 'Đang xếp hàng tính toán trên GPU';
-    if (job.status === 'running') return 'AI đang phối đồ và render theo góc chụp...';
+    if (job.status === 'running')
+      return this.mode() === 'studio'
+        ? 'AI đang thử đồ lần lượt trên từng dáng người mẫu...'
+        : 'AI đang phối đồ lên ảnh của bạn...';
     if (job.status === 'success') {
       if (job.task === 'image_quality')
         return job.gate?.valid === true
           ? 'Ảnh đạt tiêu chuẩn thử đồ.'
           : 'Ảnh có lưu ý nhỏ nhưng vẫn có thể tiếp tục thử đồ.';
-      return job.frames3d?.length ? 'Thử đồ thành công! Kéo ảnh để xoay 360°.' : 'Thử đồ thành công!';
+      return 'Thử đồ thành công!';
     }
     if (job.status === 'validation_failed')
-      return 'Ảnh chưa nhận diện được dáng người. Bạn nên chọn Người mẫu Studio bên dưới.';
+      return 'Ảnh chưa nhận diện được dáng người. Bạn nên chọn Người mẫu studio ở trên.';
     if (job.status === 'cancelled') return 'Đã hủy';
     // VTO-09 Timeout and VTO-10 Retry: the server records the deadline as AI_JOB_TIMEOUT on a failed job.
-    if (job.error === 'AI_JOB_TIMEOUT') return 'Quá 2 phút xử lý nên hệ thống đã dừng chờ. Bạn có thể thử lại.';
+    if (job.error === 'AI_JOB_TIMEOUT')
+      return this.mode() === 'studio'
+        ? 'Quá thời gian xử lý nên hệ thống đã dừng chờ. Bạn có thể thử lại.'
+        : 'Quá 2 phút xử lý nên hệ thống đã dừng chờ. Bạn có thể thử lại.';
     if (job.error === 'VTO_PRODUCT_UNAVAILABLE')
       return 'Sản phẩm hoặc biến thể không còn hỗ trợ thử đồ. Vui lòng quay lại trang sản phẩm.';
     return 'Chưa xử lý được ảnh. Vui lòng thử lại.';
@@ -445,8 +326,8 @@ export class AiImageWorkbench {
       TOO_DARK: 'Ảnh thiếu sáng. Thử chụp lại ở nơi có ánh sáng rõ hơn.',
       OVEREXPOSED: 'Ảnh có độ sáng cao. Bạn nên giảm nguồn sáng chói.',
       BLURRY: 'Ảnh hơi mờ. Giữ điện thoại cố định khi chụp.',
-      PERSON_NOT_DETECTED: 'Không nhận diện được người. Vui lòng chụp rõ phần thân hoặc chọn Người mẫu Studio.',
-      POSE_CHECK_UNAVAILABLE: 'Dáng người chưa rõ. Bạn có thể chọn Người mẫu Studio bên dưới.',
+      PERSON_NOT_DETECTED: 'Không nhận diện được người. Vui lòng chụp rõ phần thân hoặc chọn Người mẫu studio.',
+      POSE_CHECK_UNAVAILABLE: 'Dáng người chưa rõ. Bạn có thể chọn Người mẫu studio ở trên.',
       BODY_NOT_VISIBLE: 'Chưa thấy rõ cơ thể. Chọn ảnh đứng rõ phần thân người.',
       BODY_CROPPED_OR_OCCLUDED: 'Vùng cơ thể cần mặc đồ bị che. Chọn ảnh chụp rộng hơn một chút.',
       MULTIPLE_PEOPLE: 'Ảnh có nhiều người. Hãy chọn ảnh một người để AI nhận dạng đúng.',
@@ -476,7 +357,6 @@ export class AiImageWorkbench {
         }
          this.clearTimer();
          this.stopLoadingTimer();
-         this.stopAutoSpin();
          this.clearResult();
          this.preview.set('');
          this.job.set(null);
@@ -520,7 +400,6 @@ export class AiImageWorkbench {
          this.capabilities.set(null);
          this.clearTimer();
          this.stopLoadingTimer();
-         this.stopAutoSpin();
          this.clearResult();
          this.job.set(null);
          this.busy.set(false);
@@ -534,7 +413,6 @@ export class AiImageWorkbench {
       this.generation++;
       this.clearTimer();
       this.stopLoadingTimer();
-      this.stopAutoSpin();
       this.release(this.preview());
       this.clearResult();
       this.clearStudio();
@@ -551,7 +429,7 @@ export class AiImageWorkbench {
      const dialog = this.dialog()?.nativeElement;
      if (dialog && !dialog.open) dialog.showModal?.();
      // A reopen must not stack a second poll loop: while a job is in flight its own loop keeps running and nothing
-     // is resumed; otherwise any leftover (e.g. a 360° watch) is stopped and the saved job is resumed once.
+     // is resumed; otherwise the saved job is resumed once.
      const resumable = !this.busy();
      if (resumable) {
        this.clearTimer();
@@ -569,8 +447,8 @@ export class AiImageWorkbench {
        );
        if (epoch === this.generation) {
          this.capabilities.set(capabilities);
-        if (this.mode() === 'studio' && !this.studio() && this.filteredStudioAssets().length) {
-          void this.selectStudio(this.filteredStudioAssets()[0].id);
+        if (this.mode() === 'studio' && !this.studioImage() && this.standingAssetId()) {
+          void this.loadStudioPreview();
         }
         const savedId = sessionStorage.getItem(this.storageKey());
           const savedPending = sessionStorage.getItem(`${this.storageKey()}_pending`);
@@ -578,11 +456,9 @@ export class AiImageWorkbench {
             try {
               const recovered = await firstValueFrom(savedId ? this.model.job(savedId) : this.model.recover(savedPending!));
               const job = recovered.job;
-              const sameSelection = this.task() !== 'virtual_try_on' ||
-                ((!job.product_id || job.product_id === this.productId()) &&
-                  (!job.variant_id || !this.variantId() || job.variant_id === this.variantId()));
+              const sameSelection = this.task() !== 'virtual_try_on' || this.matchesSelection(job);
               if (epoch === this.generation && sameSelection) {
-                this.job.set(job);
+                this.applyJob(job);
                 if (job.status === 'queued' || job.status === 'running') {
                   this.busy.set(true);
                   this.startLoadingTimer();
@@ -604,7 +480,6 @@ export class AiImageWorkbench {
   /** Native close restores focus to the opener. Work stays resumable within the owner session. */
   close(): void {
     this.stopLoadingTimer();
-    this.stopAutoSpin();
     this.dialog()?.nativeElement.close?.();
   }
 
@@ -640,43 +515,53 @@ export class AiImageWorkbench {
     this.error.set('');
   }
 
-  /** Fetch and decode every turntable frame before showing any, so dragging never hits a half-loaded frame. */
-  private async load3dArtifacts(job: AiJob): Promise<void> {
-    this.frames3d().forEach((url) => URL.revokeObjectURL(url));
-    this.frames3d.set([]);
-    this.frames3dFailed.set(false);
-    const names = (job.frames3d ?? []).map((path) => path.split('/').pop() ?? '');
-    if (!names.length) return;
-    const epoch = this.generation;
-    let urls: string[] = [];
-    try {
-      const blobs = await Promise.all(
-        names.map((name) => firstValueFrom(this.model.resultFile(job.id, name))),
-      );
-      urls = blobs.map((b) => URL.createObjectURL(b));
-      await Promise.all(urls.map((src) => Object.assign(new Image(), { src }).decode()));
-      if (epoch !== this.generation) throw new Error('STALE');
-      this.frames3d.set(urls);
-      this.orbitAngle.set(0);
-    } catch {
-      urls.forEach((url) => URL.revokeObjectURL(url));
-      if (epoch === this.generation) this.frames3dFailed.set(true);
+  /** True when a job belongs to the product and variant currently selected on the page. */
+  private matchesSelection(job: AiJob): boolean {
+    return (
+      (!job.product_id || job.product_id === this.productId()) &&
+      (!job.variant_id || !this.variantId() || job.variant_id === this.variantId())
+    );
+  }
+
+  /** Adopts server job state and downloads any newly published studio poses. */
+  private applyJob(job: AiJob): void {
+    this.job.set(job);
+    this.syncPoses(job);
+  }
+
+  /** Downloads each published pose once; failures are retried by the next poll while the job still runs. */
+  private syncPoses(job: AiJob): void {
+    if (job.task !== 'virtual_try_on' || !job.poses?.length || !this.matchesSelection(job)) return;
+    if (this.poseJobId !== job.id) {
+      this.dropPoses();
+      this.poseJobId = job.id;
+    }
+    const epoch = this.poseEpoch;
+    for (const pose of job.poses) {
+      if (this.poseRequested.has(pose.id)) continue;
+      this.poseRequested.add(pose.id);
+      void firstValueFrom(this.model.pose(job.id, pose.id))
+        .then((blob) => {
+          if (epoch !== this.poseEpoch) return;
+          this.poseUrls.update((urls) => ({ ...urls, [pose.id]: URL.createObjectURL(blob) }));
+        })
+        .catch(() => {
+          if (epoch !== this.poseEpoch) return;
+          this.poseRequested.delete(pose.id);
+          if (this.job()?.status === 'success')
+            this.error.set('Không thể tải một số ảnh thử đồ. Vui lòng thử lại.');
+        });
     }
   }
 
-  /** VTO-08: after the try-on is shown, keep following the 360° add-on until it publishes frames or reports failure. */
-  private watchStage3d(epoch: number, id: string): void {
-    this.timer = window.setTimeout(async () => {
-      try {
-        const { job } = await firstValueFrom(this.model.job(id));
-        if (epoch !== this.generation) return;
-        this.job.set(job);
-        if (job.stage3d === 'pending') this.watchStage3d(epoch, id);
-        else await this.load3dArtifacts(job);
-      } catch {
-        if (epoch === this.generation) this.frames3dFailed.set(true);
-      }
-    }, 2000);
+  /** Revokes every pose image and forgets the selection. */
+  private dropPoses(): void {
+    this.poseEpoch++;
+    Object.values(this.poseUrls()).forEach((url) => this.release(url));
+    this.poseUrls.set({});
+    this.poseRequested.clear();
+    this.poseJobId = '';
+    this.selectedPose.set('');
   }
 
    async generate(): Promise<void> {
@@ -696,8 +581,7 @@ export class AiImageWorkbench {
      }
     if (this.task() === 'virtual_try_on' && this.mode() === 'personal' && !this.qualityPassed())
       return;
-    if (this.mode() === 'studio' && (!this.studio() || !this.studioImage() || this.studioLoading()))
-      return;
+    if (this.mode() === 'studio' && (!this.studioImage() || this.studioLoading())) return;
     if (this.mode() === 'personal' && !this.preview()) return;
     await this.start(this.task());
   }
@@ -715,7 +599,7 @@ export class AiImageWorkbench {
         await firstValueFrom(this.model.cancel(id));
         const response = await firstValueFrom(this.model.job(id));
         if (epoch !== this.generation) return;
-        this.job.set(response.job);
+        this.applyJob(response.job);
         await this.poll(epoch);
       } catch {
         if (epoch === this.generation) {
@@ -753,6 +637,7 @@ export class AiImageWorkbench {
     const epoch = ++this.generation;
     this.busy.set(true);
     this.error.set('');
+    this.dropPoses();
     this.startLoadingTimer();
     try {
       if (this.mode() === 'personal' && this.file && !this.asset) {
@@ -770,8 +655,6 @@ export class AiImageWorkbench {
         product_id: this.productId() || undefined,
         variant_id: this.variantId() || undefined,
         mode: this.mode(),
-        studio_asset_id: this.mode() === 'studio' ? this.studio() : undefined,
-        render3d: this.mode() === 'studio',
         consent: true as const,
         confirmed: true as const,
         idempotency_key: '',
@@ -785,7 +668,7 @@ export class AiImageWorkbench {
       sessionStorage.setItem(`${this.storageKey()}_pending`, this.pendingKey);
       const response = await firstValueFrom(this.model.create(body));
       if (epoch !== this.generation) return;
-      this.job.set(response.job);
+      this.applyJob(response.job);
       this.remember(response.job.id);
       await this.poll(epoch);
     } catch (err: unknown) {
@@ -815,7 +698,7 @@ export class AiImageWorkbench {
         try {
           const response = await firstValueFrom(this.model.job(current.id));
           if (epoch !== this.generation) return;
-          this.job.set(response.job);
+          this.applyJob(response.job);
           await this.poll(epoch);
         } catch {
           if (epoch === this.generation) {
@@ -850,11 +733,12 @@ export class AiImageWorkbench {
       this.matches.emit((current.matches || []).map((match) => match.product_id));
       return;
     }
-    if (
-      current.task === 'virtual_try_on' &&
-      ((current.product_id && current.product_id !== this.productId()) ||
-        (current.variant_id && this.variantId() && current.variant_id !== this.variantId()))
-    ) {
+    if (current.task === 'virtual_try_on' && !this.matchesSelection(current)) {
+      return;
+    }
+    // Studio jobs publish every pose (downloaded by applyJob); only single-image results are fetched here.
+    if (current.poses?.length) {
+      this.showOriginal.set(false);
       return;
     }
     try {
@@ -863,8 +747,6 @@ export class AiImageWorkbench {
       this.release(this.result());
       this.result.set(URL.createObjectURL(blob));
       this.showOriginal.set(false);
-      if (current.stage3d === 'pending') this.watchStage3d(epoch, current.id);
-      else await this.load3dArtifacts(current);
     } catch {
       if (epoch !== this.generation) return;
       this.clearResult();
@@ -885,14 +767,11 @@ export class AiImageWorkbench {
     this.timer = undefined;
   }
 
-  /** Drop the 2D result AND its 360° frames together, so a new selection never shows the previous one's frames. */
+  /** Drops the single result and every pose image together, so a new selection never shows the previous one's. */
   private clearResult(): void {
     this.release(this.result());
     this.result.set('');
-    this.frames3d().forEach((url) => URL.revokeObjectURL(url));
-    this.frames3d.set([]);
-    this.frames3dFailed.set(false);
-    this.orbitAngle.set(0);
+    this.dropPoses();
   }
 
    private release(url: string): void {

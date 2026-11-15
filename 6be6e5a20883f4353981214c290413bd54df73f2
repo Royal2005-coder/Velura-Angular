@@ -1,0 +1,4 @@
+KAN-65
+Chinh sua frontend gd2: UI/UX audit toan dien, chuan hoa button 8px chu nhat bo vien nhe, khac phuc visual search va checkout/order-flow.
+
+Do not add docs/KAN-n.md. Types/JSDoc = what. This note + MR = why.

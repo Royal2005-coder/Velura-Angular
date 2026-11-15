@@ -1,3 +1,5 @@
+> Superseded by .specify/specs/vto-studio-10-pose-preview.md (3D/360 removed).
+
 # Feature Specification: 3D Spatial Scenarios & Multi-Angle Female Model Viewer for Velura Virtual Try-On
 
 **Feature ID**: `FEAT-VTO-3D-SCENARIOS`  

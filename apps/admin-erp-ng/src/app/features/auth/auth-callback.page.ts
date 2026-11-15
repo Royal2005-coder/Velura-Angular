@@ -55,9 +55,9 @@ function extractAuthCallbackParams(): Map<string, string> {
             <p class="callback__hint" style="margin-top: 6px; font-size: 12px; color: var(--erp-muted);">{{ errorHint() }}</p>
           }
           @if (technicalCode()) {
-            <div class="callback__diagnostic" style="margin: 10px 0; padding: 6px 10px; background: rgba(0,0,0,0.03); border: 1px solid var(--erp-line, #e2e8f0); border-radius: var(--erp-radius-sm, 6px); font-size: 11px; display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%;">
+            <div class="callback__diagnostic" style="margin: 10px 0; padding: 6px 10px; background: var(--erp-surface-muted); border: 1px solid var(--erp-line); border-radius: var(--erp-radius-sm); font-size: 12px; display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%;">
               <span>Mã kỹ thuật: <code>{{ technicalCode() }}</code></span>
-              <button type="button" (click)="copyCode()" style="background: transparent; border: 1px solid var(--erp-line, #cbd5e1); padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+              <button type="button" (click)="copyCode()" style="background: var(--erp-surface); border: 1px solid var(--erp-input-border); color: var(--erp-accent); padding: 2px 8px; border-radius: var(--erp-radius-sm); font-size: 12px; cursor: pointer;">
                 {{ copied() ? 'Đã sao chép' : 'Sao chép' }}
               </button>
             </div>
@@ -66,7 +66,7 @@ function extractAuthCallbackParams(): Map<string, string> {
             @if (canRetry()) {
               <button type="button" class="erp-btn erp-btn--primary" (click)="retryGoogle()">Thử lại bằng Google</button>
             }
-            <a class="erp-btn erp-btn--secondary" routerLink="/login" style="text-align: center; text-decoration: none;">Quay lại đăng nhập</a>
+            <a class="erp-btn erp-btn--ghost" routerLink="/login" style="text-align: center; text-decoration: none;">Quay lại đăng nhập</a>
           </div>
         }
       </div>
@@ -91,12 +91,13 @@ function extractAuthCallbackParams(): Map<string, string> {
       }
       h2 {
         font-family: var(--erp-display);
-        font-size: 24px;
+        font-size: 22px;
+        font-weight: 600;
         color: var(--erp-ink);
       }
       p {
         color: var(--erp-muted);
-        font-size: 13px;
+        font-size: 14px;
       }
       .callback__error {
         width: 100%;
@@ -104,7 +105,7 @@ function extractAuthCallbackParams(): Map<string, string> {
         border-radius: var(--erp-radius-sm);
         background: var(--erp-danger-soft);
         color: var(--erp-danger);
-        font-size: 12px;
+        font-size: 13px;
       }
       @keyframes spin {
         to {

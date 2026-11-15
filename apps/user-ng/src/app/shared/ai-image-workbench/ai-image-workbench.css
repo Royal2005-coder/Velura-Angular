@@ -422,7 +422,9 @@
   font-size: .7rem;
 }
 
-/* --- 3D 360 SPATIAL ENVIRONMENT ROOM --- */
+/* --- RESULT STAGE ---
+   Rotation comes only from the worker's real turntable frames. The scene is static: rotating a flat photo with CSS
+   made it vanish edge-on at 90° and faked a mirrored "back", which is what read as a broken 3D view. */
 .stage-360-container {
   position: relative;
   display: flex;
@@ -433,264 +435,65 @@
   border: 1px solid var(--vto-border);
   border-radius: 20px;
   overflow: hidden;
-  perspective: 1100px;
   box-shadow: 0 20px 45px rgba(80, 24, 40, .14);
-  cursor: grab;
+  background: var(--vto-blush);
   user-select: none;
-  touch-action: none;
-  background: #11080D;
 }
-.stage-360-container:active { cursor: grabbing; }
-
-.room-3d {
+.stage-360-container--interactive { cursor: grab; touch-action: none; }
+.stage-360-container--interactive:active { cursor: grabbing; }
+.stage-360-container:focus-visible { outline: 2px solid var(--vto-rose); outline-offset: 3px; }
+.stage-360__floor { position: absolute; inset: auto 0 0; height: 34%; pointer-events: none; }
+.stage-360__figure {
   position: relative;
-  width: 100%;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform-style: preserve-3d;
-  transition: transform 0.05s ease-out;
+  padding: 28px 0 44px;
+  transition: transform .18s ease-out;
 }
-
-/* 3D Floor Plane */
-.room-3d__floor {
-  position: absolute;
-  width: 800px;
-  height: 800px;
-  transform: rotateX(90deg) translateZ(-210px);
-  border-radius: 12px;
-  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.25);
-  transform-style: preserve-3d;
-}
-.floor-grid-overlay {
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
-  background-size: 40px 40px;
-}
-.floor-center-pedestal {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 280px;
-  height: 280px;
-  margin: -140px 0 0 -140px;
-  border-radius: 50%;
-  filter: blur(4px);
-}
-
-/* 3D Spatial Walls */
-.room-3d__wall {
-  position: absolute;
-  width: 760px;
-  height: 520px;
-  backface-visibility: hidden;
-  opacity: 0.95;
-}
-.room-3d__wall--back {
-  transform: translateZ(-360px);
-}
-.room-3d__wall--left {
-  transform: rotateY(90deg) translateZ(-360px);
-}
-.room-3d__wall--right {
-  transform: rotateY(-90deg) translateZ(-360px);
-}
-.wall-ambient-glow {
-  position: absolute;
-  inset: 0;
-  mix-blend-mode: soft-light;
-}
-
-/* 3D Ceiling & Spotlight */
-.room-3d__ceiling {
-  position: absolute;
-  width: 800px;
-  height: 800px;
-  transform: rotateX(-90deg) translateZ(-260px);
-  opacity: 0.85;
-}
-.ceiling-spotlight-fixture {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 80px;
-  height: 80px;
-  margin: -40px 0 0 -40px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #fff 0%, rgba(255, 255, 255, 0.4) 60%, transparent 100%);
-  box-shadow: 0 0 40px #fff;
-}
-.room-3d__spotlight {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 320px;
-  height: 440px;
-  margin-left: -160px;
-  pointer-events: none;
-  mix-blend-mode: screen;
-  opacity: 0.7;
-}
-
-/* --- 3D VOLUMETRIC MODEL FIGURE IN CENTER --- */
-.model-3d-cluster {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 290px;
-  height: 400px;
-  transform-style: preserve-3d;
-  z-index: 10;
-}
-.model-face {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform-style: preserve-3d;
-  transition: opacity 0.15s ease;
-}
-.model-face--front {
-  transform: translateZ(14px);
-}
-.model-face--hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-.model-face--back {
-  transform: rotateY(180deg) translateZ(14px);
-  opacity: 0;
-  pointer-events: none;
-}
-.model-face--back.model-face--active {
-  opacity: 1;
-  pointer-events: auto;
-}
-.model-back-silhouette {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.perspective-card__img--back {
-  transform: scaleX(-1);
-  filter: brightness(0.96) contrast(1.02);
-}
-
-/* Side Thickness Ribs (Prevents paper-thin collapse at 90°/270°) */
-.model-depth-rib {
-  position: absolute;
-  top: 15%;
-  bottom: 20%;
-  width: 28px;
-  background: linear-gradient(to bottom, rgba(122, 40, 60, 0.4), rgba(42, 20, 28, 0.6));
-  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.3);
-}
-.model-depth-rib--left {
-  left: 20px;
-  transform: rotateY(-90deg) translateZ(14px);
-}
-.model-depth-rib--right {
-  right: 20px;
-  transform: rotateY(90deg) translateZ(14px);
-}
-
-.perspective-card__img {
+.stage-360__img {
   display: block;
   max-width: 100%;
-  max-height: 400px;
+  max-height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 16px 30px rgba(42, 20, 28, .28));
 }
-.perspective-card__tag {
+.stage-360__shadow {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  padding: .2rem .5rem;
+  bottom: 30px;
+  left: 50%;
+  width: 220px;
+  height: 26px;
+  margin-left: -110px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(42, 20, 28, .28), transparent 70%);
+  pointer-events: none;
+}
+.stage-360__tag {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  padding: .2rem .55rem;
   border-radius: 999px;
-  background: rgba(122, 40, 60, .85);
+  background: rgba(122, 40, 60, .88);
   color: #fff;
   font: 700 .68rem var(--velura-font-ui, "Inter", sans-serif);
-  transform: translateZ(20px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
-.perspective-card__tag--ai { background: linear-gradient(135deg, var(--vto-maroon), var(--vto-rose)); }
-.stage-360-glare {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: 16px;
-  mix-blend-mode: overlay;
+.stage-360__note {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .5rem .75rem;
+  border-radius: 10px;
+  border: 1px solid var(--vto-border);
+  background: #fff;
+  color: var(--vto-muted);
+  font-size: .75rem;
 }
-
-/* 3D Turntable Podium */
-.turntable-podium {
-  position: absolute;
-  bottom: -20px;
-  left: 50%;
-  width: 240px;
-  height: 80px;
-  margin-left: -120px;
-  transform-style: preserve-3d;
-  pointer-events: none;
-}
-.turntable-top {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.6) 0%, rgba(210, 190, 180, 0.4) 60%, rgba(122, 40, 60, 0.3) 100%);
-  border: 1.5px solid rgba(255, 255, 255, 0.7);
-  box-shadow: 0 0 25px rgba(255, 255, 255, 0.35);
-}
-.turntable-rim {
-  position: absolute;
-  inset: 6px;
-  border-radius: 50%;
-  border: 1px dashed rgba(122, 40, 60, 0.25);
-}
-.turntable-shadow {
-  position: absolute;
-  inset: -20px;
-  border-radius: 50%;
-  filter: blur(8px);
-  opacity: 0.8;
-}
-
-/* Tailored Back Seam Overlay */
-.tailored-back-overlay { position: absolute; inset: 0; pointer-events: none; }
-.tailored-spine-seam {
-  position: absolute;
-  top: 18%;
-  bottom: 22%;
-  left: 50%;
-  width: 1.5px;
-  background: linear-gradient(to bottom, transparent, rgba(42, 20, 28, 0.3) 20%, rgba(42, 20, 28, 0.4) 60%, transparent);
-  transform: translateX(-50%);
-}
-.tailored-waist-darts {
-  position: absolute;
-  top: 40%;
-  left: 42%;
-  right: 42%;
-  height: 25px;
-  border-bottom: 1.2px dashed rgba(42, 20, 28, 0.2);
-}
-.tailored-back-zipper {
-  position: absolute;
-  top: 20%;
-  left: 50%;
-  width: 4px;
-  height: 8px;
-  border-radius: 2px;
-  background: rgba(122, 40, 60, 0.5);
-  transform: translateX(-50%);
-}
+.stage-360__note--warn { background: #fff8f2; border-color: #f1d3b8; color: #8a5426; }
 
 /* 360 HUD */
 .stage-360-hud {
@@ -819,4 +622,9 @@
   .mode-tabs { grid-template-columns: 1fr; }
   .result-toolbar { align-items: stretch; }
   .result-toolbar__left { width: 100%; }
+  .stage-360-container { height: 380px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-360__figure { transition: none; }
 }

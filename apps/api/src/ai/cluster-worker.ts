@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { HttpError } from "../http.js";
 import type { AiTask, AiWorker, AiWorkerResult, TurntableStage } from "./ai-types.js";
 
 const VERSION = "velura-worker-v1";
@@ -184,6 +185,8 @@ export class ClusterAiWorker implements AiWorker {
         method: "POST", headers: { Authorization: `Bearer ${this.key}` }, body: form,
         signal: AbortSignal.any([signal, AbortSignal.timeout(190_000)]),
       });
+      // A busy GPU is a queue condition, not an inference failure: HttpError 429 makes the pump requeue the job.
+      if (response.status === 429) throw new HttpError(429, "AI_WORKER_BUSY", "Bộ xử lý AI đang bận.");
       if (!response.ok) throw new Error(`AI_WORKER_HTTP_${response.status}`);
       const bindingHeader = response.headers.get("x-ai-binding");
       if (bindingHeader) checkBinding(headerJson(response, "x-ai-binding"), binding);
@@ -234,6 +237,9 @@ export class ClusterAiWorker implements AiWorker {
 
   /** Reconstruct a finished try-on into one tiled 360° sheet; the job's own 2D result is the only input. */
   async turntable(directory: string, signal: AbortSignal): Promise<TurntableStage> {
+    // Readiness is only trusted for 30 s and the 2D try-on before this stage can take up to 120 s, so re-observe
+    // here (as run() does) instead of failing every slow try-on's 360° stage with AI_WORKER_UNAVAILABLE.
+    await this.refreshReadiness();
     if (!this.turntableReady()) throw new Error("AI_WORKER_UNAVAILABLE");
     const job = object(JSON.parse(await readFile(join(directory, "job.json"), "utf8")) as unknown);
     const workerConfig = job.worker ? object(job.worker) : {};
@@ -252,19 +258,30 @@ export class ClusterAiWorker implements AiWorker {
       method: "POST", headers: { Authorization: `Bearer ${this.key}` }, body: form,
       signal: AbortSignal.any([signal, AbortSignal.timeout(430_000)]),
     });
+    if (response.status === 429) throw new HttpError(429, "AI_WORKER_BUSY", "Bộ xử lý AI đang bận.");
     if (!response.ok) throw new Error(`AI_WORKER_HTTP_${response.status}`);
     if (!response.headers.get("x-ai-binding")) throw new Error("AI_WORKER_ATTESTATION_REQUIRED");
     checkBinding(headerJson(response, "x-ai-binding"), binding);
+    const data = object(headerJson(response, "x-ai-result"));
+    if (data.status !== "success" || data.model !== "triposr-turntable") throw new Error("AI_WORKER_STAGE");
+    // Counts and pixel size need separate bounds: the shipped worker tiles 24 frames at 256 px (≤ 36 frames), so the
+    // old shared "≤ 64" cap rejected every real turntable and the 360° stage silently never published a frame.
+    // Checked from the header, before downloading up to 24 MiB of sheet.
+    const bounds = { frames: [12, 36], columns: [1, 8], rows: [1, 8], tile: [64, 512] } as const;
+    const layout = (Object.keys(bounds) as Array<keyof typeof bounds>).map((key) => {
+      const value = data[key];
+      const [min, max] = bounds[key];
+      if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max)
+        throw new Error("AI_WORKER_STAGE_LAYOUT");
+      return value;
+    });
+    const [frames, columns, rows, tile] = layout as [number, number, number, number];
+    // Rows must be exactly what the frames need, and every client decodes all frames, so cap the sheet at 10 MP.
+    if (rows !== Math.ceil(frames / columns) || columns * tile * rows * tile > 10_000_000)
+      throw new Error("AI_WORKER_STAGE_LAYOUT");
     const bytes = await boundedBytes(response, 24 * 1024 * 1024);
     if (response.headers.get("content-type")?.split(";")[0] !== "image/png" || !bytes.subarray(0, 8).equals(PNG_MAGIC))
       throw new Error("AI_WORKER_IMAGE_SCHEMA");
-    const data = object(headerJson(response, "x-ai-result"));
-    if (data.status !== "success" || data.model !== "triposr-turntable") throw new Error("AI_WORKER_STAGE");
-    const layout = (["frames", "columns", "rows", "tile"] as const).map((key) => data[key]);
-    if (layout.some((value) => typeof value !== "number" || !Number.isInteger(value) || value <= 0 || value > 64))
-      throw new Error("AI_WORKER_STAGE_LAYOUT");
-    const [frames, columns, rows, tile] = layout as [number, number, number, number];
-    if (frames < 12 || frames > columns * rows || tile < 64) throw new Error("AI_WORKER_STAGE_LAYOUT");
     return { bytes, frames, columns, rows, tile };
   }
 }

@@ -15,7 +15,7 @@ import { RouterLink } from '@angular/router';
           <img src="/admin-assets/images/logo.png" alt="" />
           <span>
             <strong>Velura</strong>
-            <small>ERP Workspace</small>
+            <small>ERP</small>
           </span>
         </a>
         <div class="auth-frame__pitch">
@@ -52,10 +52,9 @@ import { RouterLink } from '@angular/router';
         gap: 40px;
         padding: clamp(28px, 5vw, 64px);
         background:
-          radial-gradient(circle at 18% 16%, rgba(244, 63, 94, 0.22), transparent 42%),
-          radial-gradient(circle at 82% 84%, rgba(190, 24, 93, 0.2), transparent 45%),
-          linear-gradient(150deg, #16070E 0%, #1F0A14 55%, #2B0D1C 100%);
-        color: #FFFFFF;
+          radial-gradient(circle at 82% 84%, rgba(201, 79, 112, 0.24), transparent 46%),
+          linear-gradient(150deg, var(--erp-sidebar) 0%, var(--erp-sidebar) 30%, var(--erp-accent) 100%);
+        color: var(--erp-sidebar-active);
       }
       .auth-brand {
         display: flex;
@@ -65,31 +64,32 @@ import { RouterLink } from '@angular/router';
       .auth-brand img {
         width: 42px;
         height: 42px;
-        border-radius: 10px;
+        padding: 3px;
+        border-radius: var(--erp-radius-md);
         object-fit: contain;
-        background: var(--erp-surface);
+        background: var(--erp-sidebar-raised);
       }
       .auth-brand span {
         display: grid;
-        line-height: 1.15;
+        line-height: 1.05;
       }
       .auth-brand strong {
-        font-family: var(--erp-font);
-        font-size: 20px;
-        font-weight: 700;
-        color: #FFFFFF;
+        font-family: var(--erp-brand);
+        font-size: 28px;
+        font-weight: 600;
+        color: var(--erp-sidebar-active);
       }
       .auth-brand small {
-        color: #FB7185;
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.14em;
+        color: var(--erp-sidebar-accent);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.18em;
         text-transform: uppercase;
       }
       .auth-frame__eyebrow {
-        color: #FB7185;
-        font-size: 11px;
-        font-weight: 700;
+        color: var(--erp-sidebar-accent);
+        font-size: 12px;
+        font-weight: 600;
         letter-spacing: 0.14em;
         text-transform: uppercase;
       }
@@ -102,13 +102,13 @@ import { RouterLink } from '@angular/router';
         font-family: var(--erp-font);
         font-size: clamp(28px, 3.4vw, 40px);
         font-weight: 700;
-        letter-spacing: -0.03em;
+        letter-spacing: -0.02em;
         line-height: 1.15;
-        color: #FFFFFF;
+        color: var(--erp-sidebar-active);
       }
       .auth-frame__pitch p {
-        color: #E2E8F0;
-        font-size: 14px;
+        color: var(--erp-sidebar-text);
+        font-size: 15px;
         line-height: 1.6;
       }
       .auth-frame__points {
@@ -117,8 +117,8 @@ import { RouterLink } from '@angular/router';
         margin: 0;
         padding: 0;
         list-style: none;
-        color: #CBD5E1;
-        font-size: 12.5px;
+        color: var(--erp-sidebar-text);
+        font-size: 14px;
       }
       .auth-frame__points li {
         display: flex;
@@ -126,7 +126,7 @@ import { RouterLink } from '@angular/router';
         gap: 10px;
       }
       .auth-frame__points span {
-        color: #FB7185;
+        color: var(--erp-sidebar-accent);
         font-size: 10px;
         font-weight: 700;
         letter-spacing: 0.08em;
@@ -143,13 +143,13 @@ import { RouterLink } from '@angular/router';
         width: min(100%, 430px);
         padding: clamp(24px, 3vw, 34px);
         border: 1px solid var(--erp-line);
-        border-radius: var(--erp-radius-lg);
+        border-radius: var(--erp-radius-xl);
         background: var(--erp-surface);
         box-shadow: var(--erp-shadow-md);
       }
       .auth-frame__foot {
         color: var(--erp-soft);
-        font-size: 11px;
+        font-size: 12px;
       }
       @media (max-width: 900px) {
         .auth-frame {

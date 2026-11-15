@@ -1,3 +1,9 @@
 :host {
   display: block;
 }
+
+.bi-greeting {
+  font-family: var(--erp-display);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}

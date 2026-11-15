@@ -25,8 +25,8 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
         justify-content: space-between;
         gap: 12px;
         padding: 14px 16px;
-        border-bottom: 1px solid var(--erp-line);
-        background: var(--erp-surface);
+        border-bottom: 1px solid var(--erp-line-subtle);
+        background: var(--erp-bg);
       }
       .filter-bar__fields {
         display: flex;

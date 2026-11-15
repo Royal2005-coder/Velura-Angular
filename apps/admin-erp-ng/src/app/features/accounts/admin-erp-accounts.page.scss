@@ -142,7 +142,7 @@
   border: 1px solid var(--erp-line);
   border-radius: var(--erp-radius-sm);
   background: var(--erp-surface-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--erp-font-mono);
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -190,7 +190,7 @@
 }
 
 .create-success__password strong {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--erp-font-mono);
   font-size: 16px;
   word-break: break-all;
 }
@@ -211,8 +211,8 @@
   gap: 8px;
   padding: 10px 14px;
   border-radius: var(--erp-radius-sm);
-  background: var(--erp-success-soft, #e8f7ee);
-  color: var(--erp-success, #1f7a45);
+  background: var(--erp-success-soft);
+  color: var(--erp-success);
   font-size: 12.5px;
   font-weight: 600;
 }

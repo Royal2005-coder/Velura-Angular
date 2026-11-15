@@ -43,12 +43,13 @@ import { AdminErpIcon } from './admin-erp-icon';
         color: var(--erp-danger);
       }
       strong {
-        color: var(--erp-text);
-        font-size: 14px;
+        color: var(--erp-ink);
+        font-size: 15px;
+        font-weight: 600;
       }
       p {
         max-width: 48ch;
-        font-size: 12px;
+        font-size: 13px;
       }
     `,
   ],

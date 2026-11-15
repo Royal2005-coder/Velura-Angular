@@ -22,6 +22,8 @@ export interface AiJob {
   matches?: { product_id: string; score: number }[];
   /** KAN-66 VTO 3D: published turntable frames for studio try-on. */
   frames3d?: string[];
+  /** 360° add-on after a Success try-on: `pending` while it is built, `failed` if it could not be; absent = done/none. */
+  stage3d?: 'pending' | 'failed';
 }
 export interface StudioAsset {
   id: string;

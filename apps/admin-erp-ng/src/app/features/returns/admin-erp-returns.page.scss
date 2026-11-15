@@ -393,8 +393,8 @@
 }
 
 .record__next--done {
-  border-color: #a7f3d0;
-  background: #ecfdf5;
+  border-color: var(--erp-success);
+  background: var(--erp-success-soft);
 }
 
 .record__next div {
@@ -424,7 +424,7 @@
 }
 
 .desk-note--danger {
-  color: var(--erp-danger-text, #b3261e);
+  color: var(--erp-danger-text);
 }
 
 .record__label {

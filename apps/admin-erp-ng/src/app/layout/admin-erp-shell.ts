@@ -22,6 +22,25 @@ type ShellNavGroup = Omit<AdminErpNavGroup, 'items'> & {
   items: AdminErpNavItem[];
 };
 
+/** localStorage key holding the desktop sidebar rail state (`'true'` = collapsed). */
+export const SIDEBAR_COLLAPSED_STORAGE_KEY = 'velura-erp-sidebar-collapsed';
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeSidebarCollapsed(collapsed: boolean): void {
+  try {
+    globalThis.localStorage?.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+  } catch {
+    // Storage blocked (private mode, quota): the rail still toggles for this session.
+  }
+}
+
 /**
  * ERPNext-inspired workspace shell: grouped sidebar, compact topbar and routable workspaces.
  */
@@ -40,7 +59,8 @@ export class AdminErpShell {
   private readonly destroyRef = inject(DestroyRef);
   readonly session = inject(AdminErpSessionService);
 
-  readonly sidebarCollapsed = signal(false);
+  /** Desktop rail state, restored from {@link SIDEBAR_COLLAPSED_STORAGE_KEY}. */
+  readonly sidebarCollapsed = signal(readSidebarCollapsed());
   readonly mobileNavOpen = signal(false);
   readonly isMobile = signal(false);
   readonly navigating = signal(false);
@@ -109,7 +129,7 @@ export class AdminErpShell {
     return ADMIN_ERP_NAV_GROUPS.find((group) => group.key === item.group)?.label || '';
   });
   readonly menuLabel = computed(() => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 920px)').matches) {
+    if (this.isMobile()) {
       return this.mobileNavOpen() ? 'Đóng menu' : 'Mở menu';
     }
     return this.sidebarCollapsed() ? 'Mở sidebar' : 'Thu gọn sidebar';
@@ -201,7 +221,7 @@ export class AdminErpShell {
   }
 
   /**
-   * Toggles the off-canvas nav on mobile and the rail on desktop.
+   * Toggles the off-canvas nav on mobile and the rail on desktop; the rail state persists.
    */
   toggleSidebar(): void {
     if (this.isMobile()) {
@@ -212,7 +232,9 @@ export class AdminErpShell {
       }
       return;
     }
-    this.sidebarCollapsed.update((collapsed) => !collapsed);
+    const collapsed = !this.sidebarCollapsed();
+    this.sidebarCollapsed.set(collapsed);
+    writeSidebarCollapsed(collapsed);
   }
 
   /**

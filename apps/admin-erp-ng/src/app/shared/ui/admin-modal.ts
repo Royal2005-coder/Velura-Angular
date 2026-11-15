@@ -39,7 +39,7 @@ import { lockBodyScroll } from '../../core/body-scroll-lock';
         display: grid;
         place-items: center;
         padding: 20px;
-        background: rgba(36, 31, 28, 0.48);
+        background: rgba(42, 20, 28, 0.45);
       }
       .modal-panel {
         display: grid;
@@ -47,9 +47,9 @@ import { lockBodyScroll } from '../../core/body-scroll-lock';
         max-height: min(86vh, 760px);
         overflow: auto;
         border: 1px solid var(--erp-line);
-        border-radius: var(--erp-radius-lg);
+        border-radius: var(--erp-radius-xl);
         background: var(--erp-surface);
-        box-shadow: 0 30px 80px -30px rgba(36, 31, 28, 0.6);
+        box-shadow: var(--erp-shadow-modal);
       }
       .modal-panel--sm {
         width: min(100%, 420px);
@@ -66,16 +66,17 @@ import { lockBodyScroll } from '../../core/body-scroll-lock';
         align-items: center;
         justify-content: space-between;
         gap: 16px;
-        padding: 18px 20px;
+        padding: 18px 24px;
         border-bottom: 1px solid var(--erp-line);
       }
       h2 {
         font-family: var(--erp-display);
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 600;
+        color: var(--erp-ink);
       }
       .modal-body {
-        padding: 20px;
+        padding: 20px 24px;
       }
       .modal-foot {
         display: flex;

@@ -71,6 +71,7 @@ export interface ModuleHealthData {
 
 export interface ModuleHealthResponse {
   success: boolean;
-  data: ModuleHealthData;
+  /** Null when the API could not read every count (rendered as an empty state, never as a guess). */
+  data: ModuleHealthData | null;
   fetched_at: string;
 }

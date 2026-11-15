@@ -121,7 +121,7 @@ const SCAN_INTERVAL_MS = 280;
       }
       .scan__error {
         margin: 0;
-        color: var(--erp-danger-text, #b3261e);
+        color: var(--erp-danger-text);
         font-size: 0.82rem;
       }
       .scan__actions {

@@ -1,7 +1,7 @@
 <app-erp-page-header
   eyebrow="Marketing"
   title="Khuyến mãi & voucher"
-  subtitle="Trung tâm quản lý chiến dịch ưu đãi, mã voucher và ngân sách khuyến mại."
+  subtitle="Chiến dịch, mã giảm giá, ngân sách và thống kê trên API hiện tại. Mọi thao tác ghi dùng expectedVersion."
 >
   <div actions>
     @if (canMutate()) {
@@ -334,7 +334,7 @@
       <div class="promo-banner-field">
         @if (campaignBannerUrl()) {
           <div class="promo-banner-thumb">
-            <img loading="lazy" decoding="async" [src]="campaignBannerUrl()" alt="Banner xem trước" />
+            <img [src]="campaignBannerUrl()" alt="Banner xem trước" />
             <button type="button" class="btn-remove-thumb" (click)="campaignBannerUrl.set('')">Gỡ ảnh</button>
           </div>
         }

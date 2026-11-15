@@ -1,3 +1,5 @@
+> Superseded by .specify/specs/vto-studio-10-pose-preview.md (3D/360 removed).
+
 # Technical Implementation Plan: SOTA Virtual Try-On Pipeline & 3D Spatial Refactor
 
 **Feature ID**: `FEAT-VTO-REFACTOR-SOTA-3D`  

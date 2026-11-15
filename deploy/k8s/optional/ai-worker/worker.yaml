@@ -27,7 +27,7 @@ metadata:
 spec:
   hard:
     # Headroom = resident worker + the one-shot weights Job (250m/256Mi req, 1/512Mi lim).
-    # At the old pods:'1' the Job pod is rejected by FailedCreate, so 3D weights can never be provisioned.
+    # At the old pods:'1' the Job pod is rejected by FailedCreate, so weights can never be provisioned.
     requests.cpu: '2250m'
     limits.cpu: '5'
     requests.memory: 5376Mi
@@ -116,8 +116,8 @@ spec:
               nvidia.com/gpu: '1'
             limits:
               cpu: '4'
-              # The resident 2D pipeline measured 3.0 GiB; TripoSR adds ~1.6 GiB of weights plus render
-              # buffers, and 6 GiB was memcg-OOM-killed on the cluster during the first stage attempt.
+              # The resident 2D pipeline measured 3.0 GiB; 6 GiB was memcg-OOM-killed on the cluster,
+              # so the limit keeps headroom for weights loading and image buffers.
               memory: 9Gi
               nvidia.com/gpu: '1'
           env:
@@ -128,10 +128,7 @@ spec:
                   key: AI_WORKER_KEY
             - name: AI_WEIGHTS_DIR
               value: /weights
-            # The patched tsr reads the DINO-ViT architecture from this directory instead of the hub; the pod has no egress.
-            - name: TRIPOSR_IMAGE_TOKENIZER_CONFIG
-              value: /weights/TripoSR/image_tokenizer
-            # 2D and 3D alternate on one 8 GiB card; segment reuse stops fragmentation turning a 384 MiB
+            # Pipeline stages alternate on one 8 GiB card; segment reuse stops fragmentation turning a 384 MiB
             # request into an OOM while gigabytes sat reserved-but-unallocated.
             - name: PYTORCH_CUDA_ALLOC_CONF
               value: expandable_segments:True

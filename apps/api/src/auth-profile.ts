@@ -1,4 +1,4 @@
-import { selectOne, selectRows, updateRows } from "./supabase.js";
+import { selectOne, selectRows, updateRows, type SupabaseRequestOptions } from "./supabase.js";
 import type { AuthUser, JsonObject, UserProfile } from "./types.js";
 
 export const AUTH_PROFILE_SELECT = [
@@ -51,17 +51,27 @@ export function preferLinkedProfile(
 /**
  * Loads public.users for a GoTrue user, attaching Auth to the admin row when duplicates exist.
  */
-export async function loadProfileForAuthUser(authUser: AuthUser): Promise<UserProfile | null> {
+export async function loadProfileForAuthUser(
+  authUser: AuthUser,
+  accessToken?: string
+): Promise<UserProfile | null> {
+  const reqOptions: SupabaseRequestOptions | undefined = accessToken
+    ? { accessToken, useAnonKey: true }
+    : undefined;
   const byAuth = asProfile(
-    await selectOne("users", {
-      select: AUTH_PROFILE_SELECT,
-      auth_user_id: `eq.${authUser.id}`
-    })
+    await selectOne(
+      "users",
+      {
+        select: AUTH_PROFILE_SELECT,
+        auth_user_id: `eq.${authUser.id}`
+      },
+      reqOptions
+    )
   );
-  const byEmail = authUser.email ? await loadProfileByEmail(authUser.email) : null;
+  const byEmail = authUser.email ? await loadProfileByEmail(authUser.email, reqOptions) : null;
   const preferred = preferLinkedProfile(byAuth, byEmail);
   if (!preferred) return null;
-  await attachAuthUser(preferred, authUser, byAuth);
+  await attachAuthUser(preferred, authUser, byAuth, reqOptions);
   return {
     ...preferred,
     auth_user_id: authUser.id,
@@ -77,14 +87,21 @@ export function asProfile(row: JsonObject | null): UserProfile | null {
   return row as UserProfile;
 }
 
-async function loadProfileByEmail(email: string): Promise<UserProfile | null> {
+async function loadProfileByEmail(
+  email: string,
+  options?: SupabaseRequestOptions
+): Promise<UserProfile | null> {
   const safe = sanitizeIlike(email);
   if (!safe) return null;
-  const { rows } = await selectRows("users", {
-    select: AUTH_PROFILE_SELECT,
-    email: `ilike.${safe}`,
-    limit: 10
-  });
+  const { rows } = await selectRows(
+    "users",
+    {
+      select: AUTH_PROFILE_SELECT,
+      email: `ilike.${safe}`,
+      limit: 10
+    },
+    options
+  );
   const profiles = rows.map((row) => asProfile(row)).filter((row): row is UserProfile => Boolean(row));
   return profiles.find((row) => row.role === "admin") || profiles[0] || null;
 }
@@ -92,7 +109,8 @@ async function loadProfileByEmail(email: string): Promise<UserProfile | null> {
 async function attachAuthUser(
   preferred: UserProfile,
   authUser: AuthUser,
-  currentlyLinked: UserProfile | null
+  currentlyLinked: UserProfile | null,
+  options?: SupabaseRequestOptions
 ): Promise<void> {
   if (preferred.auth_user_id === authUser.id && preferred.is_verified) {
     return;
@@ -102,14 +120,14 @@ async function attachAuthUser(
       "users",
       { user_id: `eq.${currentlyLinked.user_id}` },
       { auth_user_id: null },
-      { silentError: true }
+      { silentError: true, ...options }
     );
   }
   await updateRows(
     "users",
     { user_id: `eq.${preferred.user_id}` },
     { auth_user_id: authUser.id, is_verified: true },
-    { silentError: true }
+    { silentError: true, ...options }
   );
 }
 

@@ -1,7 +1,7 @@
 <app-erp-page-header
   eyebrow="Danh mục"
   title="Sản phẩm & tồn kho"
-  subtitle="Catalog theo biến thể, tồn kho có lý do, nhập CSV kiểm duyệt và nhật ký sản phẩm trong cùng workspace."
+  subtitle="Quản lý danh mục sản phẩm, biến thể kích cỡ/màu sắc và mức tồn kho."
 >
   <div actions>
     <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
@@ -176,7 +176,7 @@
   @if (selected(); as product) {
     <div class="detail">
       <div class="detail__head">
-        <img class="detail__thumb" [src]="thumbnail(product)" [alt]="product.name" />
+        <img loading="lazy" decoding="async" class="detail__thumb" [src]="thumbnail(product)" [alt]="product.name" />
         <div>
           <span class="detail__sku">{{ product.sku || '—' }}</span>
           <h3>{{ product.name }}</h3>

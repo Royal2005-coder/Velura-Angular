@@ -1,7 +1,7 @@
 <app-erp-page-header
   eyebrow="Bán hàng"
   title="Đơn hàng"
-  subtitle="Hàng đợi xác nhận, thanh toán, đóng gói và giao vận. Trạng thái và action do API state machine quyết định."
+  subtitle="Theo dõi quy trình tiếp nhận, đóng gói, giao vận và hoàn tất đơn hàng."
 >
   <div actions>
     <button class="erp-btn erp-btn--sm" type="button" (click)="exportCsv()" [disabled]="!rows().length">
@@ -232,7 +232,7 @@
                       <video class="evidence-card__media" controls [src]="item.url"></video>
                     } @else {
                       <a [href]="item.url" target="_blank" rel="noopener">
-                        <img class="evidence-card__media" [src]="item.url" alt="Bằng chứng đơn hàng" />
+                        <img loading="lazy" decoding="async" class="evidence-card__media" [src]="item.url" alt="Bằng chứng đơn hàng" />
                       </a>
                     }
                   } @else {
@@ -498,12 +498,12 @@
       />
 
       <label class="erp-field">
-        <span>Ảnh minh chứng xác nhận (bắt buộc)</span>
+        <span>Ảnh minh chứng xác nhận <span class="erp-required" aria-hidden="true">*</span></span>
         <input class="erp-input" type="file" accept="image/*" (change)="onConfirmPhoto($event)" />
         <small>{{ confirmPhoto()?.name || 'Chụp ảnh kiện hàng / phiếu đơn đã đối chiếu.' }}</small>
       </label>
       <label class="erp-field">
-        <span>Video minh chứng (không bắt buộc)</span>
+        <span>Video minh chứng</span>
         <input class="erp-input" type="file" accept="video/mp4,video/webm" (change)="onConfirmVideo($event)" />
         <small>{{ confirmVideo()?.name || 'Tối đa 50 MB, chỉ khi cần ghi lại quá trình đóng gói.' }}</small>
       </label>
@@ -514,7 +514,7 @@
         }
       </div>
       <label class="erp-field">
-        <span>Ghi chú xác nhận (không bắt buộc)</span>
+        <span>Ghi chú xác nhận</span>
         <textarea class="erp-input" rows="3" [value]="confirmNote()" (input)="onConfirmNote($event)"></textarea>
       </label>
 

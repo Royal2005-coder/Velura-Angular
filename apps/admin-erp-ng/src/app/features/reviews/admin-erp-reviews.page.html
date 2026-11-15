@@ -1,7 +1,7 @@
 <app-erp-page-header
   eyebrow="Marketing"
   title="Đánh giá khách hàng"
-  subtitle="Duyệt, ẩn và phản hồi đánh giá trên API hiện tại. AI chỉ gợi ý; người vận hành quyết định nội dung cuối."
+  subtitle="Kiểm duyệt, xếp hạng và phản hồi ý kiến đánh giá từ khách hàng."
 >
   <div actions>
     <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
@@ -69,6 +69,7 @@
       [clickable]="true"
       (retry)="reload()"
       (rowSelected)="openDetail($event)"
+      (imageClick)="openLightbox($event)"
     />
     <app-erp-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
   } @else {
@@ -254,7 +255,7 @@
           </div>
           @if (replyImageUrl()) {
             <div class="reply-image-preview">
-              <img [src]="replyImageUrl()" alt="Preview ảnh đính kèm" />
+              <img loading="lazy" decoding="async" [src]="replyImageUrl()" alt="Preview ảnh đính kèm" />
             </div>
           }
         </div>
@@ -290,7 +291,7 @@
 
 <app-erp-modal [open]="lightboxImage() !== null" title="Ảnh đánh giá" size="lg" (closed)="closeLightbox()">
   @if (lightboxImage(); as image) {
-    <img class="review-lightbox" [src]="image" alt="Ảnh đánh giá phóng to" />
+    <img loading="lazy" decoding="async" class="review-lightbox" [src]="image" alt="Ảnh đánh giá phóng to" />
   }
   <div footer><button class="erp-btn erp-btn--sm" type="button" (click)="closeLightbox()">Đóng</button></div>
 </app-erp-modal>

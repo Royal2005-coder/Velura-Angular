@@ -13,12 +13,12 @@
   @if (section() === 'info') {
     <div class="editor-grid">
       <label class="erp-field editor-span">
-        <span>Tên sản phẩm</span>
+        <span>Tên sản phẩm <span class="erp-required" aria-hidden="true">*</span></span>
         <input class="erp-input" type="text" [value]="name()" (input)="setText('name', $event)" maxlength="255" required />
       </label>
 
       <label class="erp-field">
-        <span>SKU sản phẩm</span>
+        <span>SKU sản phẩm@if (isCreate()) { <span class="erp-required" aria-hidden="true">*</span> }</span>
         <input
           class="erp-input"
           type="text"
@@ -29,7 +29,7 @@
         />
       </label>
       <label class="erp-field">
-        <span>Slug</span>
+        <span>Slug@if (isCreate()) { <span class="erp-required" aria-hidden="true">*</span> }</span>
         <input class="erp-input" type="text" [value]="slug()" (input)="setText('slug', $event)" [disabled]="!isCreate()" />
       </label>
 
@@ -44,7 +44,7 @@
       }
 
       <label class="erp-field">
-        <span>Danh mục</span>
+        <span>Danh mục <span class="erp-required" aria-hidden="true">*</span></span>
         <select class="erp-select" [value]="categoryId()" (change)="setCategory($event)" required>
           @for (option of categoryOptions(); track option.value) {
             <option [value]="option.value">{{ option.label }}</option>
@@ -62,12 +62,18 @@
 
       @if (isCreate()) {
         <label class="erp-field">
-          <span>Giá gốc</span>
-          <input class="erp-input" type="number" min="0" step="1000" [value]="basePrice()" (input)="setNumber('basePrice', $event)" />
+          <span>Giá mặc định (niêm yết) <span class="erp-required" aria-hidden="true">*</span></span>
+          <input class="erp-input" type="number" min="0" step="1000" [value]="basePrice()" (input)="setNumber('basePrice', $event)" placeholder="0 đ" />
         </label>
         <label class="erp-field">
-          <span>Giá bán</span>
-          <input class="erp-input" type="number" min="0" step="1000" [value]="salePrice()" (input)="setNumber('salePrice', $event)" />
+          <span>Giá bán cho khách hàng <span class="erp-required" aria-hidden="true">*</span></span>
+          <input class="erp-input" type="number" min="0" step="1000" [value]="salePrice()" (input)="setNumber('salePrice', $event)" placeholder="0 đ" />
+        </label>
+        <label class="erp-field">
+          <span>Mức giảm giá</span>
+          <div class="erp-input erp-input--readonly">
+            {{ discountInfo().text }}
+          </div>
         </label>
         <label class="erp-field">
           <span>Trạng thái khởi tạo</span>
@@ -78,17 +84,34 @@
           </select>
         </label>
       } @else {
-        <div class="editor-readonly">
-          <span>Giá gốc: {{ basePrice() }}</span>
-          <span>Giá bán: {{ salePrice() }}</span>
+        <div class="editor-price-card">
+          <div class="editor-price-grid">
+            <div class="editor-price-col">
+              <span class="editor-price-title">Giá mặc định (niêm yết)</span>
+              <span class="editor-price-amount">{{ formatPrice(basePrice()) }}</span>
+            </div>
+            <div class="editor-price-col">
+              <span class="editor-price-title">Giá bán cho khách hàng</span>
+              <span class="editor-price-amount editor-price-amount--brand">{{ formatPrice(salePrice()) }}</span>
+            </div>
+            <div class="editor-price-col">
+              <span class="editor-price-title">Mức giảm giá</span>
+              <span class="editor-price-discount-tag" [class.is-sale]="discountInfo().hasDiscount" [class.is-markup]="discountInfo().isHigher">
+                {{ discountInfo().text }}
+              </span>
+            </div>
+          </div>
           @if (!canChangePrice()) {
-            <span class="editor-hint">Giá do bộ phận giá điều chỉnh để giữ đúng luồng phê duyệt.</span>
+            <div class="editor-price-notice">
+              <app-admin-icon name="lock" />
+              <span>Trường giá hiển thị dạng <strong>Chỉ đọc (Readonly)</strong> · Quyền chỉnh sửa giá thuộc tài khoản <strong>Pricing Admin</strong>.</span>
+            </div>
           }
         </div>
       }
 
       @if (priceInvalid()) {
-        <p class="erp-error" role="alert">Giá bán không được lớn hơn giá gốc.</p>
+        <p class="erp-error" role="alert">Giá sản phẩm phải là số dương hợp lệ.</p>
       }
       @if (priceChanged()) {
         <p class="editor-note">Lưu sẽ tạo hai bản ghi: điều chỉnh giá (kèm lý do) rồi cập nhật thông tin.</p>

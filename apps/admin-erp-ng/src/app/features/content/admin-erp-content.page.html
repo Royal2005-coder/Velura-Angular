@@ -1,7 +1,7 @@
 <app-erp-page-header
   eyebrow="Marketing"
   title="Nội dung"
-  subtitle="Bài viết cho website: bản nháp chỉ admin thấy, công bố là lộ ra /api/content. Mỗi lần lưu đều ghi audit và tăng phiên bản."
+  subtitle="Quản lý bài viết xu hướng, cẩm nang phối đồ và tin tức thời trang Velura."
 >
   <div actions>
     @if (canCreate()) {
@@ -38,12 +38,38 @@
       <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />
     </div>
 
-    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
-      <label class="erp-field content-search">
-        <span>Tiêu đề hoặc slug</span>
-        <input class="erp-input" type="search" [value]="search()" (input)="onSearchInput($event)" placeholder="ví dụ: áo lụa" />
-      </label>
-    </app-erp-filter-bar>
+    <div class="content-toolbar">
+      <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+        <label class="erp-field content-search">
+          <span>Tiêu đề hoặc slug</span>
+          <input class="erp-input" type="search" [value]="search()" (input)="onSearchInput($event)" placeholder="ví dụ: áo lụa" />
+        </label>
+      </app-erp-filter-bar>
+      @if (tab() !== 'subscribers') {
+        <div class="content-view-switcher" role="group" aria-label="Chế độ hiển thị">
+          <button
+            type="button"
+            class="content-view-btn"
+            [class.is-active]="viewMode() === 'cards'"
+            (click)="setViewMode('cards')"
+            title="Dạng thẻ trực quan"
+          >
+            <app-erp-icon name="box" [size]="'14'" />
+            <span>Thẻ ảnh</span>
+          </button>
+          <button
+            type="button"
+            class="content-view-btn"
+            [class.is-active]="viewMode() === 'table'"
+            (click)="setViewMode('table')"
+            title="Dạng bảng dữ liệu"
+          >
+            <app-erp-icon name="dashboard" [size]="'14'" />
+            <span>Bảng</span>
+          </button>
+        </div>
+      }
+    </div>
 
     @if (loadError()) {
       <div class="content-banner" role="alert">
@@ -67,6 +93,34 @@
         [clickable]="false"
         (retry)="reload()"
       />
+    } @else if (viewMode() === 'cards') {
+      @if (rows().length === 0 && !loading()) {
+        <div class="content-empty-state">
+          <p>Chưa có bài viết nào phù hợp bộ lọc.</p>
+        </div>
+      } @else {
+        <div class="content-cards-grid">
+          @for (blog of rows(); track blog.blog_id || blog.slug) {
+            <article class="blog-card" (click)="canUpdate() && openEdit(blog)">
+              <div class="blog-card__media">
+                <img [src]="blogCover(blog)" alt="{{ blog.title }}" loading="lazy" />
+                <span class="blog-card__category">{{ categoryLabel(blog.category_slug) }}</span>
+                <span class="blog-card__status" [class.is-published]="blog.status === 'published'">
+                  {{ blog.status === 'published' ? 'Đã công bố' : 'Bản nháp' }}
+                </span>
+              </div>
+              <div class="blog-card__body">
+                <h3 class="blog-card__title" title="{{ blog.title }}">{{ blog.title }}</h3>
+                <p class="blog-card__excerpt">{{ blog.excerpt || 'Chưa có tóm tắt nội dung...' }}</p>
+                <div class="blog-card__footer">
+                  <span class="blog-card__author">{{ blog.author || 'Velura Editorial' }}</span>
+                  <time class="blog-card__date">{{ dateTime(blog.updated_at) }}</time>
+                </div>
+              </div>
+            </article>
+          }
+        </div>
+      }
     } @else {
       <app-erp-data-table
         caption="Danh sách bài viết"
@@ -81,7 +135,6 @@
       />
     }
     <app-erp-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
-    <p class="content-hint">Bản nháp không xuất hiện ở <code>/api/content/blogs</code>: RLS của bảng chỉ mở dòng <code>status = published</code>.</p>
   </section>
 }
 
@@ -100,7 +153,7 @@
 
       <div class="content-form__hero">
         <label class="erp-field">
-          <span>Tiêu đề</span>
+          <span>Tiêu đề <span class="erp-required" aria-hidden="true">*</span></span>
           <input class="erp-input erp-input--title" type="text" [value]="form.title" (input)="onField('title', $event); markDirty()" />
         </label>
         @if (errors()['title']) {
@@ -108,7 +161,7 @@
         }
         <div class="content-form__row">
           <label class="erp-field">
-            <span>Slug</span>
+            <span>Slug <span class="erp-required" aria-hidden="true">*</span></span>
             <input class="erp-input" type="text" [value]="form.slug" (input)="onField('slug', $event); markDirty()" />
           </label>
           <button class="erp-btn erp-btn--sm content-form__slug" type="button" (click)="suggestSlug(); markDirty()">Lấy từ tiêu đề</button>
@@ -120,7 +173,7 @@
 
       <div class="content-form__grid content-form__grid--meta">
         <label class="erp-field">
-          <span>Danh mục</span>
+          <span>Danh mục <span class="erp-required" aria-hidden="true">*</span></span>
           <select class="erp-select" [value]="form.categorySlug" (change)="onField('categorySlug', $event); markDirty()">
             <option value="">— Chọn danh mục —</option>
             @for (category of categoryOptions(); track category.content_category_id) {
@@ -245,7 +298,7 @@
               [hidden]="!sourceMode()"
               [value]="draft()?.contentHtml || ''"
               (input)="onSourceInput($event)"
-              placeholder="Nhập hoặc dán mã nguồn HTML đầy đủ (hỗ trợ <article>, <figure>, <img style=...>, <figcaption>)..."
+              placeholder="Nhập hoặc dán mã nguồn HTML đầy đủ (hỗ trợ article, figure, img, figcaption)..."
               spellcheck="false"
             ></textarea>
             <div class="content-editor__status">

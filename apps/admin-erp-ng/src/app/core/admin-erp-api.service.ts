@@ -1554,6 +1554,40 @@ export interface AdminInsightBoardModel {
   actions: AdminInsightAction[];
 }
 
+export interface MacroKpiItem {
+  title: string;
+  value: number;
+  formatted: string;
+  trend_value: number;
+  trend_direction: 'up' | 'down' | 'flat';
+  is_inverted_metric: boolean;
+  unit: string;
+  trend_label: string;
+}
+
+export interface MacroKpisData {
+  period: {
+    from: string;
+    to: string;
+    range: string;
+    cached_at: string;
+    cache_ttl_seconds: number;
+  };
+  kpis: {
+    net_revenue: MacroKpiItem;
+    gross_margin: MacroKpiItem;
+    aov: MacroKpiItem;
+    repeat_rate: MacroKpiItem;
+    return_rate: MacroKpiItem;
+  };
+}
+
+export interface MacroKpiResponse {
+  status: 'success' | 'error';
+  data: MacroKpisData;
+  error?: string;
+}
+
 export interface AdminDashboardSummary {
   management?: AdminManagementReport;
   operations: {
@@ -1700,6 +1734,15 @@ export class AdminErpApiService {
       `${this.baseUrl}/api/v1/admin/dashboard/refresh`,
       {}
     );
+  }
+
+  /**
+   * Loads 5 real-time CDO Macro KPIs with 10-minute caching.
+   */
+  getMacroKpis(params: Record<string, string> = {}): Observable<MacroKpiResponse> {
+    return this.http.get<MacroKpiResponse>(`${this.baseUrl}/api/v1/analytics/macro-kpis`, {
+      params: this.params(params),
+    });
   }
 
   /**

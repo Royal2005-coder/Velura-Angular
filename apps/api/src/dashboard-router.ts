@@ -15,8 +15,8 @@ export async function handleDashboardRoute({
   context,
   headers
 }: RouteArgs): Promise<boolean> {
-  // Kiểm tra route SLA Metrics
-  if (await handleDashboardSlaRoute({ req, res, parts, context, headers })) {
+  // Kiểm tra route SLA Metrics & Macro KPIs
+  if (await handleDashboardSlaRoute({ req, res, url, parts, context, headers })) {
     return true;
   }
 

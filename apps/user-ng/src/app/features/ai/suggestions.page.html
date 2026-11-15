@@ -90,7 +90,7 @@
                   <div class="combo-card__images">
                     @for (product of comboThumbs(combo); track product.product_id; let i = $index) {
                       <div class="combo-image-wrapper">
-                        <img [src]="imageUrl(product)" [alt]="product.name" />
+                        <img loading="lazy" decoding="async" [src]="imageUrl(product)" [alt]="product.name" />
                         <span class="combo-image-badge">{{ comboThumbLabel(product, i) }}</span>
                       </div>
                     }
@@ -194,7 +194,7 @@
           <div class="combo-modal-gallery">
             @for (product of combo.products; track product.product_id) {
               <div class="combo-modal-gallery-item">
-                <img [src]="imageUrl(product)" [alt]="product.name" />
+                <img loading="lazy" decoding="async" [src]="imageUrl(product)" [alt]="product.name" />
               </div>
             }
           </div>
@@ -211,7 +211,7 @@
             <div class="combo-modal-products-list">
               @for (product of combo.products; track product.product_id) {
                 <div class="combo-modal-product-item">
-                  <img [src]="imageUrl(product)" [alt]="product.name" class="combo-modal-product-img" />
+                  <img loading="lazy" decoding="async" [src]="imageUrl(product)" [alt]="product.name" class="combo-modal-product-img" />
                   <div class="combo-modal-product-info">
                     <h4>{{ product.name }}</h4>
                     <span class="combo-modal-product-category">{{ product.category_name || 'Sản phẩm' }}</span>

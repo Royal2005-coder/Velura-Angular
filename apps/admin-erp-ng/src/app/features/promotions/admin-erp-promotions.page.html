@@ -1,7 +1,7 @@
 <app-erp-page-header
   eyebrow="Marketing"
   title="Khuyến mãi & voucher"
-  subtitle="Chiến dịch, mã giảm giá, ngân sách và thống kê trên API hiện tại. Mọi thao tác ghi dùng expectedVersion."
+  subtitle="Trung tâm quản lý chiến dịch ưu đãi, mã voucher và ngân sách khuyến mại."
 >
   <div actions>
     @if (canMutate()) {
@@ -314,7 +314,7 @@
   (closed)="closeForm()"
 >
   <form id="promo-campaign-form" class="promo-form" (submit)="submitCampaign($event)" (input)="markDirty()" (change)="markDirty()">
-    <label class="erp-field"><span>Tên chiến dịch</span><input class="erp-input" name="name" type="text" [value]="campaignFormName()" required /></label>
+    <label class="erp-field"><span>Tên chiến dịch <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="name" type="text" [value]="campaignFormName()" required /></label>
     <label class="erp-field">
       <span>Loại chiến dịch</span>
       <select class="erp-select" name="type" [disabled]="editingCampaign() !== null">
@@ -325,8 +325,8 @@
       </select>
     </label>
     <div class="promo-form__row">
-      <label class="erp-field"><span>Bắt đầu</span><input class="erp-input" name="startDate" type="datetime-local" [value]="toLocalInput(editingCampaign()?.start_date)" required /></label>
-      <label class="erp-field"><span>Kết thúc</span><input class="erp-input" name="endDate" type="datetime-local" [value]="toLocalInput(editingCampaign()?.end_date)" required /></label>
+      <label class="erp-field"><span>Bắt đầu <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="startDate" type="datetime-local" [value]="toLocalInput(editingCampaign()?.start_date)" required /></label>
+      <label class="erp-field"><span>Kết thúc <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="endDate" type="datetime-local" [value]="toLocalInput(editingCampaign()?.end_date)" required /></label>
     </div>
     <label class="erp-field"><span>Ngân sách (0 = không trần)</span><input class="erp-input" name="budgetLimit" type="number" min="0" [value]="editingCampaign()?.budget_limit ?? editingCampaign()?.budget ?? 0" /><small class="erp-hint">Khi tổng số tiền giảm thực tế của các voucher trực thuộc đạt mức trần này, hệ thống sẽ tự động đóng các voucher để bảo toàn ngân sách.</small></label>
     <div class="erp-field">
@@ -334,7 +334,7 @@
       <div class="promo-banner-field">
         @if (campaignBannerUrl()) {
           <div class="promo-banner-thumb">
-            <img [src]="campaignBannerUrl()" alt="Banner xem trước" />
+            <img loading="lazy" decoding="async" [src]="campaignBannerUrl()" alt="Banner xem trước" />
             <button type="button" class="btn-remove-thumb" (click)="campaignBannerUrl.set('')">Gỡ ảnh</button>
           </div>
         }
@@ -372,7 +372,7 @@
 >
   <form id="promo-voucher-form" class="promo-form" (submit)="submitVoucher($event)" (input)="markDirty()" (change)="markDirty()">
     <div class="promo-form__row">
-      <label class="erp-field"><span>Mã</span><input class="erp-input" name="code" type="text" [value]="editingVoucher()?.code || ''" [disabled]="editingVoucher() !== null" required /></label>
+      <label class="erp-field"><span>Mã <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="code" type="text" [value]="editingVoucher()?.code || ''" [disabled]="editingVoucher() !== null" required /></label>
       <label class="erp-field"><span>Tên</span><input class="erp-input" name="name" type="text" [value]="editingVoucher()?.name || ''" /></label>
     </div>
     <div class="promo-form__row">
@@ -384,7 +384,7 @@
           <option value="free_shipping">Miễn phí giao</option>
         </select>
       </label>
-      <label class="erp-field"><span>Giá trị</span><input class="erp-input" name="value" type="number" min="0" [value]="editingVoucher()?.discount_value ?? editingVoucher()?.value ?? 0" /></label>
+      <label class="erp-field"><span>Giá trị <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="value" type="number" min="0" [value]="editingVoucher()?.discount_value ?? editingVoucher()?.value ?? 0" required /></label>
     </div>
     <div class="promo-form__row">
       <label class="erp-field"><span>Trần giảm</span><input class="erp-input" name="maxDiscount" type="number" min="0" [value]="editingVoucher()?.max_discount_amount ?? ''" /></label>
@@ -395,8 +395,8 @@
       <label class="erp-field"><span>Lượt / khách</span><input class="erp-input" name="maxPerUser" type="number" min="1" [value]="editingVoucher()?.usage_limit_per_user ?? 1" /></label>
     </div>
     <div class="promo-form__row">
-      <label class="erp-field"><span>Bắt đầu</span><input class="erp-input" name="startDate" type="datetime-local" [value]="toLocalInput(editingVoucher()?.start_date)" required /></label>
-      <label class="erp-field"><span>Kết thúc</span><input class="erp-input" name="endDate" type="datetime-local" [value]="toLocalInput(editingVoucher()?.end_date)" required /></label>
+      <label class="erp-field"><span>Bắt đầu <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="startDate" type="datetime-local" [value]="toLocalInput(editingVoucher()?.start_date)" required /></label>
+      <label class="erp-field"><span>Kết thúc <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="endDate" type="datetime-local" [value]="toLocalInput(editingVoucher()?.end_date)" required /></label>
     </div>
     <label class="erp-field">
       <span>Chiến dịch cha</span>

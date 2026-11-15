@@ -20,6 +20,11 @@ export interface AiAsset {
   expires_at: string;
   mime: string;
 }
+/** One published studio pose; `id` is the studio asset id. */
+export interface AiPoseRef {
+  id: string;
+  label: string;
+}
 /** Public job projection excludes owner, input paths and biometric images. */
 export interface AiJobView {
   id: string;
@@ -34,13 +39,8 @@ export interface AiJobView {
   attempt?: number;
   retry_of?: string;
   result_url?: string;
-  /** KAN-66 VTO 3D: strict-name turntable frames published from the job directory. */
-  frames3d?: string[];
-  /**
-   * 360° add-on progress after a Success try-on: `pending` while the turntable is being built, `failed` when it
-   * could not be built. Absent when no 360° was requested or once `frames3d` is published (ready).
-   */
-  stage3d?: "pending" | "failed";
+  /** Studio preview: poses already published, standing model first. Each is served at `/ai/jobs/:id/poses/:poseId`. */
+  poses?: AiPoseRef[];
   gate?: Record<string, unknown>;
   error?: string;
   matches?: Array<{ product_id: string; score: number }>;
@@ -86,20 +86,9 @@ export interface AiWorkerResult {
     error_code?: string;
   }>;
 }
-/** The 360° stage answers with one tiled sheet; the API slices it into numbered frames. */
-export interface TurntableStage {
-  bytes: Buffer;
-  frames: number;
-  columns: number;
-  rows: number;
-  tile: number;
-}
 /** Adapter is isolated so tests exercise ownership and queue rules without consuming GPU. */
 export interface AiWorker {
   ready(task?: AiTask): boolean;
-  /** Optional 360° stage: adapters that cannot reconstruct simply omit both members. */
-  turntableReady?(): boolean;
-  turntable?(directory: string, signal: AbortSignal): Promise<TurntableStage>;
   /** Optional search text tower: worker digests without CLIP text encoding omit it. */
   textEmbeddingReady?(): boolean;
   /** Refresh authenticated backend health before advertising or enqueuing a capability. */

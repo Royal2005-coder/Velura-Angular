@@ -164,7 +164,7 @@ export async function handleProductsRoute(
                   name: cp.name,
                   slug: cp.slug,
                   images: cp.images || [],
-                  image_colors: cp.image_colors || {},
+                  image_colors: withInferredImageColors(cp.images, cp.image_colors, variantColorNames(compVariants)),
                   base_price: cp.base_price,
                   sale_price: cp.sale_price,
                   category_name: compCatMap.get(cp.category_id) || "",
@@ -311,6 +311,7 @@ export async function handleProductsRoute(
         const catObj = category as JsonObject | null;
         return sendJson(res, 200, {
           ...product,
+          image_colors: withInferredImageColors(product.images, product.image_colors, variantColorNames(variants)),
           category_id: product.category_id || catObj?.category_id || null,
           category_slug: product.category_slug || catObj?.slug || null,
           category_name: product.category_name || catObj?.name || null,

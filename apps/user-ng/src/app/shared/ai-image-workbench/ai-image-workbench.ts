@@ -87,8 +87,6 @@ export class AiImageWorkbench {
 
   // --- STUDIO POSES: object URLs of the published poses, keyed by pose id ---
   readonly poseUrls = signal<Record<string, string>>({});
-  /** Pose chosen in the thumbnail strip; empty selects the standing pose. */
-  readonly selectedPose = signal('');
   private poseEpoch = 0;
   private poseJobId = '';
   private readonly poseRequested = new Set<string>();
@@ -100,17 +98,12 @@ export class AiImageWorkbench {
     const extra = (this.job()?.poses ?? []).filter((pose) => !known.some((slot) => slot.id === pose.id));
     return [...known, ...extra].map((slot) => ({ ...slot, src: urls[slot.id] ?? '' }));
   });
-  /** Whether the pose viewer (large preview + thumbnail strip) replaces the single-image result. */
+  /** Whether the studio pose grid replaces the single-image result. */
   readonly showPoses = computed(() => {
     const job = this.job();
     if (!job || job.task !== 'virtual_try_on') return false;
     if ((job.status === 'running' || job.status === 'success') && job.poses?.length) return true;
     return this.mode() === 'studio' && (job.status === 'queued' || job.status === 'running');
-  });
-  /** The pose currently shown in the large preview. */
-  readonly previewedPose = computed<PoseSlot | null>(() => {
-    const slots = this.poseSlots();
-    return slots.find((slot) => slot.id === this.selectedPose()) ?? slots[0] ?? null;
   });
   readonly poseProgress = computed(() => {
     const job = this.job();
@@ -162,39 +155,28 @@ export class AiImageWorkbench {
 
   readonly showOriginal = signal<boolean>(false);
 
-  /** Caption on the large preview. */
-  readonly stageTag = computed(() => {
-    if (this.showOriginal()) return 'Ảnh gốc';
-    return this.showPoses() ? (this.previewedPose()?.label ?? '') : 'Ảnh thử đồ AI';
-  });
-  /** What the large preview shows: the original, the selected pose, or the single try-on result. */
-  readonly currentDisplayImage = computed(() => {
-    if (this.showOriginal()) return this.mode() === 'personal' ? this.preview() : this.studioImage();
-    return this.showPoses() ? (this.previewedPose()?.src ?? '') : this.result();
-  });
-  /** Image the Download button saves: the previewed pose, or the single result. */
-  readonly downloadSrc = computed(() =>
-    this.showPoses() ? (this.previewedPose()?.src ?? '') : this.result(),
+  /** Caption on the single-result preview. */
+  readonly stageTag = computed(() => (this.showOriginal() ? 'Ảnh gốc' : 'Ảnh thử đồ AI'));
+  /** What the single-result preview shows: the original photo or the try-on result. */
+  readonly currentDisplayImage = computed(() =>
+    this.showOriginal()
+      ? this.mode() === 'personal'
+        ? this.preview()
+        : this.studioImage()
+      : this.result(),
   );
 
   toggleShowOriginal(): void {
     this.showOriginal.update((v) => !v);
   }
 
-  /** Switches only the large preview to an already downloaded pose. */
-  selectPose(id: string): void {
-    if (!this.poseUrls()[id]) return;
-    this.selectedPose.set(id);
-    this.showOriginal.set(false);
-  }
-
-  downloadResult(): void {
-    const res = this.downloadSrc();
+  /** Saves the single result, or one finished studio pose when `pose` is given. */
+  downloadResult(pose?: PoseSlot): void {
+    const res = pose ? pose.src : this.result();
     if (!res) return;
-    const pose = this.showPoses() ? this.previewedPose()?.id : '';
     const a = document.createElement('a');
     a.href = res;
-    a.download = `velura-virtual-tryon-${pose ? `${pose}-` : ''}${Date.now()}.png`;
+    a.download = `velura-virtual-tryon-${pose ? `${pose.id}-` : ''}${Date.now()}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -561,7 +543,6 @@ export class AiImageWorkbench {
     this.poseUrls.set({});
     this.poseRequested.clear();
     this.poseJobId = '';
-    this.selectedPose.set('');
   }
 
    async generate(): Promise<void> {

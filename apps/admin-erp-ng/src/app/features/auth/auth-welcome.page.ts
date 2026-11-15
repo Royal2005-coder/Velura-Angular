@@ -52,17 +52,18 @@ import { AuthFrame } from './auth-frame';
         border-radius: 999px;
         background: var(--erp-warning-soft);
         color: var(--erp-warning);
-        font-size: 10px;
-        font-weight: 700;
+        font-size: 12px;
+        font-weight: 600;
       }
       .welcome-head h2 {
         font-family: var(--erp-display);
-        font-size: 26px;
+        font-size: 24px;
+        font-weight: 600;
         color: var(--erp-ink);
       }
       .welcome-head p {
         color: var(--erp-muted);
-        font-size: 12.5px;
+        font-size: 14px;
         line-height: 1.6;
       }
       .welcome-profile {
@@ -70,7 +71,7 @@ import { AuthFrame } from './auth-frame';
         gap: 0;
         margin: 0 0 20px;
         border: 1px solid var(--erp-line);
-        border-radius: var(--erp-radius-sm);
+        border-radius: var(--erp-radius-md);
       }
       .welcome-profile div {
         display: flex;
@@ -78,7 +79,7 @@ import { AuthFrame } from './auth-frame';
         gap: 12px;
         padding: 9px 12px;
         border-bottom: 1px solid var(--erp-line);
-        font-size: 12px;
+        font-size: 13px;
       }
       .welcome-profile div:last-child {
         border-bottom: 0;

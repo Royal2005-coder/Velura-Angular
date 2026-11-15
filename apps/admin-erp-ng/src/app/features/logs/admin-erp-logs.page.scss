@@ -155,7 +155,7 @@
   border-radius: var(--erp-radius-sm);
   background: var(--erp-surface-muted);
   color: var(--erp-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--erp-font-mono);
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;

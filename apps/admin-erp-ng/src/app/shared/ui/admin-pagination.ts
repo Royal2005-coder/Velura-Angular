@@ -55,7 +55,7 @@ export type AdminPageItem = number | '…';
       }
       .pagination__label {
         color: var(--erp-muted);
-        font-size: 11px;
+        font-size: 12px;
       }
       .pagination__buttons {
         display: flex;
@@ -66,23 +66,31 @@ export type AdminPageItem = number | '…';
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 30px;
-        height: 30px;
+        min-width: 32px;
+        height: 32px;
         padding: 0 8px;
         border: 1px solid var(--erp-line);
-        border-radius: 5px;
+        border-radius: var(--erp-radius-sm);
         background: var(--erp-surface);
         color: var(--erp-text);
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 600;
+        font-variant-numeric: tabular-nums;
         cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
       }
       .pagination__btn:hover:not(:disabled) {
-        border-color: var(--erp-accent);
+        border-color: var(--erp-accent-border);
+        background: var(--erp-surface-muted);
+        color: var(--erp-accent);
       }
       .pagination__btn.is-active {
         border-color: var(--erp-accent);
         background: var(--erp-accent);
+        color: #fff;
+      }
+      .pagination__btn.is-active:hover:not(:disabled) {
+        background: var(--erp-accent-strong);
         color: #fff;
       }
       .pagination__btn:disabled {

@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import { sendDirectEmail } from "../email/mailer.js";
 import { insertRow, selectOne, selectRows } from "../supabase.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
+import { createNotification } from "../user/notifications.js";
 
 export interface RefundEmailOptions {
   method?: "manual" | "completed" | RefundGatewayLabel;
@@ -264,6 +265,17 @@ Trân trọng,
     console.log(`[REFUND_EMAIL] Sending refund ${status} email to ${customerEmail} for order #${orderCode}...`);
     const sent = await sendDirectEmail(customerEmail, subject, text, html);
 
+    // Kích hoạt notification lên icon chuông Storefront nếu người dùng là thành viên (user_id hợp lệ)
+    if (userId) {
+      void createNotification(
+        userId,
+        "return_refunded",
+        `Hoàn tiền thành công cho đơn hàng #${orderCode}`,
+        `Số tiền ${amountFormatted} đã được hoàn tất thủ tục hoàn về tài khoản/thẻ của bạn (${paymentMethodText}).`,
+        `/account/orders/${orderId}`
+      ).catch((err) => console.warn(`[REFUND_NOTIF] Failed to create notification: ${err}`));
+    }
+
     await insertRow("email_outbox", {
       recipient: customerEmail,
       template_code: templateCode,
@@ -360,6 +372,18 @@ Theo dõi tại: ${trackingLink}`;
         </div>
       </div>`;
     const sent = await sendDirectEmail(email, subject, text, html);
+
+    // Kích hoạt notification lên icon chuông Storefront nếu người dùng là thành viên (user_id hợp lệ)
+    if (userId) {
+      void createNotification(
+        userId,
+        "return_approved",
+        `Yêu cầu đổi/trả #${returnCode} đã được phê duyệt`,
+        `Yêu cầu cho sản phẩm ${product} (Đơn hàng #${order.order_code || returnCode}) đã được phê duyệt. Vui lòng đóng gói và bàn giao cho ĐVVC.`,
+        `/account/orders/${asString(ret.order_id)}`
+      ).catch((err) => console.warn(`[RETURN_APPROVED_NOTIF] Failed to create notification: ${err}`));
+    }
+
     await insertRow("email_outbox", {
       recipient: email, template_code: "return_approved", subject, body: text,
       status: sent ? "sent" : "pending", related_user_id: userId || null,
@@ -714,4 +738,115 @@ Trân trọng,
     return false;
   }
 }
+
+/**
+ * Gửi email xác nhận tiếp nhận yêu cầu đổi/trả và tạo notification cho khách hàng.
+ * Đảm bảo non-blocking, không bao giờ làm fail API response tạo đơn đổi trả.
+ */
+export async function sendReturnIntakeEmail(returnId: string): Promise<boolean> {
+  try {
+    const ret = await selectOne("return_exchange", {
+      select: "return_id,order_id,user_id,return_type,tracking_return_code,return_code,reason,description",
+      return_id: `eq.${returnId}`
+    });
+    if (!ret) return false;
+    const orderId = asString(ret.order_id);
+    const order = await selectOne("orders", {
+      select: "order_id,user_id,order_code,shipping_name,shipping_email,shipping_phone",
+      order_id: `eq.${orderId}`
+    });
+    if (!order) return false;
+
+    let email = asString(order.shipping_email).trim();
+    let name = asString(order.shipping_name).trim();
+    const userId = asString(ret.user_id) || asString(order.user_id);
+    if ((!email || !name) && userId) {
+      const user = await selectOne("users", { select: "email,full_name", user_id: `eq.${userId}` }).catch(() => null);
+      if (user) {
+        email = email || asString(user.email).trim();
+        name = name || asString(user.full_name).trim();
+      }
+    }
+    name = name || "Quý khách";
+    const returnCode = asString(ret.return_code) || asString(ret.tracking_return_code) || returnId.slice(0, 8).toUpperCase();
+    const orderCode = asString(order.order_code) || orderId.slice(0, 8).toUpperCase();
+
+    // 1. Kích hoạt notification lên icon chuông Storefront nếu người dùng là thành viên (user_id hợp lệ)
+    if (userId) {
+      void createNotification(
+        userId,
+        "return_requested",
+        `Đã tiếp nhận yêu cầu đổi/trả #${returnCode}`,
+        `Yêu cầu đổi/trả cho đơn hàng #${orderCode} đã được ghi nhận thành công. CSKH sẽ liên hệ và xử lý trong 24h làm việc.`,
+        `/account/orders/${orderId}?tab=returns`
+      ).catch((err) => console.warn(`[RETURN_INTAKE_NOTIF] Failed to create notification: ${err}`));
+    }
+
+    // 2. Gửi email nếu có địa chỉ email hợp lệ
+    if (!email || !email.includes("@")) return false;
+
+    const trackingLink = `https://velura.royalai.dev/account/orders/${orderId}`;
+    const subject = `[Velura] Xác nhận tiếp nhận yêu cầu đổi/trả đơn hàng #${orderCode} (Phiếu #${returnCode})`;
+    const returnTypeLabel = ret.return_type === "exchange" ? "Đổi hàng" : "Hoàn tiền";
+    const text = `Kính chào ${name},
+
+Velura đã tiếp nhận yêu cầu ${returnTypeLabel} của bạn cho đơn hàng #${orderCode}.
+- Mã phiếu: ${returnCode}
+- Loại yêu cầu: ${returnTypeLabel}
+- Trạng thái: Đang chờ CSKH kiểm tra và liên hệ
+
+Hướng dẫn chuẩn bị hàng:
+1. Đóng gói sản phẩm cẩn thận, giữ nguyên tem mác, hộp và phụ kiện đi kèm (nếu có).
+2. Dán nhãn hoặc ghi rõ mã phiếu ${returnCode} lên kiện hàng.
+3. Đội ngũ CSKH Velura sẽ liên hệ với bạn trong vòng 24 giờ làm việc để hướng dẫn chi tiết hoặc gửi đơn vị vận chuyển đến nhận hàng.
+
+Bạn có thể theo dõi tiến độ xử lý tại: ${trackingLink}
+
+Trân trọng,
+Đội ngũ Velura`;
+
+    const html = `
+      <div style="font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;border:1px solid #eaeaea;border-radius:8px;overflow:hidden;background:#fff;">
+        <div style="background:#222;padding:24px;text-align:center;"><h1 style="color:#d1b8a8;margin:0;font-size:28px;letter-spacing:4px;">VELURA</h1></div>
+        <div style="padding:32px;">
+          <h2 style="color:#111827;margin:0 0 8px;">Đã tiếp nhận yêu cầu ${returnTypeLabel}</h2>
+          <p style="color:#374151;line-height:1.6;">Kính chào <strong>${name}</strong>, Velura đã nhận được yêu cầu của bạn cho đơn hàng <strong>#${orderCode}</strong>.</p>
+          <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:20px 0;">
+            <p style="margin:4px 0;color:#4B5563;"><strong>Mã phiếu đổi/trả:</strong> <span style="font-family:monospace;color:#111827;font-weight:700;">${returnCode}</span></p>
+            <p style="margin:4px 0;color:#4B5563;"><strong>Loại yêu cầu:</strong> ${returnTypeLabel}</p>
+            <p style="margin:4px 0;color:#4B5563;"><strong>Trạng thái:</strong> Đang chờ CSKH xử lý</p>
+          </div>
+          <h3 style="color:#111827;margin:20px 0 8px;font-size:16px;">Hướng dẫn chuẩn bị sản phẩm:</h3>
+          <ol style="color:#4B5563;line-height:1.6;padding-left:20px;margin:0 0 20px;">
+            <li>Đóng gói sản phẩm cẩn thận, giữ nguyên tem mác, hộp và phụ kiện (nếu có).</li>
+            <li>Dán nhãn hoặc ghi rõ mã phiếu <strong>${returnCode}</strong> lên mặt ngoài kiện hàng.</li>
+            <li>Đội ngũ CSKH sẽ liên hệ hướng dẫn bàn giao cho đơn vị vận chuyển.</li>
+          </ol>
+          <div style="text-align:center;margin:28px 0 12px;">
+            <a href="${trackingLink}" style="display:inline-block;background:#7C5454;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;">Xem chi tiết yêu cầu</a>
+          </div>
+          <p style="color:#9CA3AF;font-size:13px;line-height:1.5;margin-top:24px;border-top:1px solid #F3F4F6;padding-top:16px;">Nếu bạn có bất kỳ thắc mắc nào, vui lòng liên hệ CSKH Velura qua email cskh@velura.com.</p>
+        </div>
+      </div>`;
+
+    const sent = await sendDirectEmail(email, subject, text, html);
+    await insertRow("email_outbox", {
+      recipient: email,
+      template_code: "return_intake",
+      subject,
+      body: text,
+      status: sent ? "sent" : "pending",
+      related_user_id: userId || null,
+      metadata: { return_id: returnId, order_id: orderId, sent_at: new Date().toISOString() }
+    }).catch((err) => {
+      console.warn("[RETURN_INTAKE_EMAIL] Failed to record in email_outbox:", err);
+    });
+
+    return sent;
+  } catch (err) {
+    console.warn(`[RETURN_INTAKE_EMAIL] Failed to send return intake email for return ${returnId}:`, err);
+    return false;
+  }
+}
+
 

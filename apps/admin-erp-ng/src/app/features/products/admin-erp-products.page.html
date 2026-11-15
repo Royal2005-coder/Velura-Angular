@@ -176,7 +176,7 @@
   @if (selected(); as product) {
     <div class="detail">
       <div class="detail__head">
-        <img class="detail__thumb" [src]="thumbnail(product)" [alt]="product.name" />
+        <img loading="lazy" decoding="async" class="detail__thumb" [src]="thumbnail(product)" [alt]="product.name" />
         <div>
           <span class="detail__sku">{{ product.sku || '—' }}</span>
           <h3>{{ product.name }}</h3>

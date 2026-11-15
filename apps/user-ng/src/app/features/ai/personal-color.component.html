@@ -213,7 +213,7 @@
       @if (previewUrl()) {
         <div class="pc-preview-wrap">
           <figure class="pc-portrait-figure">
-            <img class="pc-portrait-img" [src]="previewUrl()" alt="Ảnh xem trước phân tích cá nhân" />
+            <img loading="lazy" decoding="async" class="pc-portrait-img" [src]="previewUrl()" alt="Ảnh xem trước phân tích cá nhân" />
             <div class="pc-viewfinder">
               <span class="pc-vf-c pc-vf-tl"></span>
               <span class="pc-vf-c pc-vf-tr"></span>

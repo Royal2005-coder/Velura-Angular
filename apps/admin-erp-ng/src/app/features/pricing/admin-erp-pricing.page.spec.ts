@@ -123,7 +123,7 @@ describe('AdminErpPricingPage', () => {
     expect(page.filtered().map((row) => row.product_id)).toEqual(['p3']);
   });
 
-  it('opens the price drawer and previews a change', async () => {
+  it('opens the price drawer and targets a change', async () => {
     const { fixture } = await boot(() => of({ rows: products, count: 3 }));
     const page = fixture.componentInstance;
 
@@ -131,32 +131,22 @@ describe('AdminErpPricingPage', () => {
     expect(page.selected()?.product_id).toBe('p1');
 
     page.openChange();
-    expect(page.actionOpen()).toBe(true);
-    page.previewBase.set(1_000_000);
-    page.previewSale.set(800_000);
-    expect(page.previewPct()).toBe(20);
+    expect(page.priceTarget()?.product_id).toBe('p1');
+
+    page.closeChange();
+    expect(page.priceTarget()).toBeNull();
   });
 
-  it('submits a price change with expectedVersion', async () => {
-    const { fixture, changes } = await boot(() => of({ rows: products, count: 3 }));
+  it('updates selected product and reloads on onPriceSaved', async () => {
+    const { fixture } = await boot(() => of({ rows: products, count: 3 }));
     const page = fixture.componentInstance;
     page.openDetail(products[0]);
     page.openChange();
 
-    const form = document.createElement('form');
-    for (const [name, value] of [['basePrice', '1000000'], ['salePrice', '750000'], ['reason', 'Điều chỉnh giá theo kế hoạch tháng mười']]) {
-      const input = document.createElement('input');
-      input.name = name;
-      input.value = value;
-      form.appendChild(input);
-    }
-    const event = { preventDefault: () => undefined, target: form } as unknown as Event;
-    page.submitPrice(event);
-
-    expect(changes.length).toBe(1);
-    expect(changes[0].productId).toBe('p1');
-    expect(changes[0].body['expectedVersion']).toBe(2);
-    expect(changes[0].body['newSalePrice']).toBe(750_000);
+    page.onPriceSaved({ ...products[0], sale_price: 750_000, version: 3 });
+    expect(page.priceTarget()).toBeNull();
+    expect(page.selected()?.sale_price).toBe(750_000);
+    expect(page.selected()?.version).toBe(3);
   });
 
   it('surfaces pricing API errors', async () => {

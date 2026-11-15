@@ -1,5 +1,5 @@
 import { sendDirectEmail } from "../email/mailer.js";
-import { insertRow, selectOne } from "../supabase.js";
+import { insertRow, selectOne, selectRows } from "../supabase.js";
 import { asString } from "../types.js";
 import { createNotification } from "../user/notifications.js";
 
@@ -17,6 +17,19 @@ export async function notifyOrderDelivered(orderId: string): Promise<boolean> {
 
     const orderCode = asString(order.order_code) || orderId.slice(0, 8).toUpperCase();
     const userId = asString(order.user_id);
+
+    // Chặn gửi trùng lặp nếu đơn hàng đã được gửi thông báo giao hàng thành công trước đó
+    const existing = await selectRows("email_outbox", {
+      select: "email_id,status",
+      template_code: "eq.order_delivered",
+      "metadata->>order_id": `eq.${orderId}`,
+      status: "eq.sent",
+      limit: 1
+    }).catch(() => ({ rows: [] }));
+    if (existing.rows && existing.rows.length > 0) {
+      return true;
+    }
+
     let email = asString(order.shipping_email).trim();
     let name = asString(order.shipping_name).trim();
 

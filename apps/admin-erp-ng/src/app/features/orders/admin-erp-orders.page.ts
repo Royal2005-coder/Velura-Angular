@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, DestroyRef, Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink, type ParamMap } from '@angular/router';
-import { catchError, finalize, forkJoin, of, switchMap } from 'rxjs';
+import { ActivatedRoute, Router, RouterLink, type ParamMap } from '@angular/router';
+import { catchError, finalize, firstValueFrom, forkJoin, of, switchMap } from 'rxjs';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -24,7 +24,7 @@ import {
   returnTrace,
   type OrderTraceOrigin,
 } from '../../core/admin-erp-order-trace';
-import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
+import { choiceParam, queryMatches, textParam, watchQueryParams, writeQueryParams, type ListQuery } from '../../core/admin-erp-deep-link';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
 import {
   CARRIER_PROFILES,
@@ -45,7 +45,7 @@ import {
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { useAutoRefresh, useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import { ORDER_STATUS_LABELS, statusLabelFrom } from '../../core/admin-erp-status-labels';
-import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
+import { AdminErpDataTable, AdminTableColumn, AdminTableRowAction } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
 import { AdminErpLoadingOverlay } from '../../shared/ui/admin-loading-overlay';
 import { AdminErpFilterBar } from '../../shared/ui/admin-filter-bar';
@@ -59,6 +59,7 @@ import { AdminErpQrConfirm, QrConfirmFacts } from '../../shared/ui/admin-qr-conf
 import { AdminErpQrScan } from '../../shared/ui/admin-qr-scan';
 import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
+import { AdminErpToastService } from '../../shared/ui/admin-toast';
 
 type OrderTab = 'all' | 'attention' | 'payment' | 'cancelled' | 'logs';
 type OrderModal =
@@ -71,6 +72,13 @@ type OrderModal =
 const STALE_ORDER_CODES = new Set(['VERSION_CONFLICT', 'INVALID_ORDER_ACTION', 'ORDER_ALREADY_HANDED_OVER', 'PAYMENT_VERSION_CONFLICT']);
 
 const ORDER_TABS = ['all', 'attention', 'payment', 'cancelled', 'logs'] as const;
+/** Rows-per-page choices; the order and audit list endpoints accept `limit` up to 1000. */
+const PAGE_SIZES = [10, 20, 50] as const;
+const DEFAULT_PAGE_SIZE = 10;
+/** Rows fetched per request when exporting the whole filtered set to CSV. */
+const EXPORT_BATCH = 500;
+/** Minimum length the payment-resolve endpoint requires for its audit reason. */
+const PAYMENT_REASON_MIN = 10;
 
 const CALL_RESULTS = [
   { code: 'reached', label: 'Liên hệ được' },
@@ -132,7 +140,11 @@ export class AdminErpOrdersPage {
   private readonly api = inject(AdminErpApiService);
   private readonly session = inject(AdminErpSessionService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(AdminErpToastService);
+  /** False until the first URL read, which must always load the list. */
+  private queryApplied = false;
 
   readonly tab = signal<OrderTab>('all');
   readonly query = signal('');
@@ -146,7 +158,8 @@ export class AdminErpOrdersPage {
   readonly hasLoadedOnce = signal(false);
   readonly loadError = signal<string | null>(null);
   readonly page = signal(1);
-  readonly pageSize = 10;
+  readonly pageSize = signal<number>(DEFAULT_PAGE_SIZE);
+  readonly pageSizes = PAGE_SIZES;
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly logsCount = signal(0);
   readonly logsPage = signal(1);
@@ -157,6 +170,12 @@ export class AdminErpOrdersPage {
   readonly evidenceSaving = signal(false);
   readonly evidenceError = signal<string | null>(null);
   readonly evidenceNotice = signal<string | null>(null);
+  /** Order whose drawer is open or opening; mirrored to `?focus=` so refresh/share reopens it. */
+  readonly focusId = signal('');
+  /** The operator typed or picked something in the open action/payment form. */
+  readonly formDirty = signal(false);
+  readonly paymentDecision = signal<'mark_paid' | 'mark_failed'>('mark_paid');
+  readonly exporting = signal(false);
   readonly detailLoading = signal(false);
   readonly modal = signal<OrderModal>(null);
   readonly actionError = signal<string | null>(null);
@@ -218,16 +237,59 @@ export class AdminErpOrdersPage {
     { key: 'cancelled', label: 'Đã hủy', count: this.cancelledCount() },
     { key: 'logs', label: 'Nhật ký' },
   ]);
-  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.count() / this.pageSize)));
-  readonly rangeLabel = computed(() => adminRangeLabel(this.count(), this.page(), this.pageSize, 'đơn hàng'));
-  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
-  readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize, 'nhật ký'));
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.count() / this.pageSize())));
+  readonly rangeLabel = computed(() => adminRangeLabel(this.count(), this.page(), this.pageSize(), 'đơn hàng'));
+  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize())));
+  readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize(), 'nhật ký'));
+  /** Any filter narrowing the list, so the empty state can offer "Xoá bộ lọc". */
+  readonly hasFilters = computed(() => Boolean(this.query() || this.status() || this.paymentMethod() || this.from()));
+  /** Position of the open order in the current page, for drawer prev/next. */
+  private readonly selectedIndex = computed(() => {
+    const id = this.focusId();
+    return id ? this.rows().findIndex((row) => row.order_id === id) : -1;
+  });
+  readonly hasPrevOrder = computed(() => this.selectedIndex() > 0);
+  readonly hasNextOrder = computed(() => {
+    const index = this.selectedIndex();
+    return index >= 0 && index < this.rows().length - 1;
+  });
   readonly attentionCount = computed(() => this.summary()?.attention ?? 0);
   readonly cancelledCount = computed(() => this.summary()?.by_status.find((row) => row.status === 'cancelled')?.count ?? 0);
   readonly statusOptions = computed(() => this.summary()?.by_status ?? Object.entries(ORDER_STATUS_LABELS).map(([status, label]) => ({ status, label, count: 0 })));
   readonly callResults = CALL_RESULTS;
   readonly cancelReasons = CANCEL_REASONS;
   readonly carrierOutcomes = CARRIER_OUTCOMES;
+  /**
+   * One-click next steps on a row: the COD call for a pending COD order and the start of packing
+   * for a confirmed one. Both open the same guarded form the drawer uses, over the drawer.
+   */
+  readonly orderRowActions = (row: unknown): readonly AdminTableRowAction[] => {
+    const order = row as AdminOrderRow;
+    if (!this.canMutate()) return [];
+    const actions: AdminTableRowAction[] = [];
+    if (this.isPendingCod(order) && this.hasAction(order, 'call_confirm')) {
+      actions.push({ label: 'Gọi xác nhận', tone: 'primary', run: () => this.openRowAction(order, 'call_confirm') });
+    }
+    if (this.hasAction(order, 'start_processing')) {
+      actions.push({ label: 'Chuẩn bị hàng', tone: 'primary', run: () => this.openRowAction(order, 'start_processing') });
+    }
+    return actions;
+  };
+  readonly orderRowId = (row: unknown): string => (row as AdminOrderRow).order_id;
+  /** Destructive actions are confirmed with their own verb; dismiss keeps the order. */
+  readonly actionConfirmLabel = computed(() => {
+    const action = this.activeAction();
+    if (!action) return '';
+    return action.code === 'cancel' ? 'Hủy đơn hàng' : action.label;
+  });
+  /** Typed call note or chosen outcome would be lost by closing the COD modal. */
+  readonly codDirty = computed(() => Boolean(this.codDecision() || this.codNote().trim()));
+  /** A scan, proof file or note would be lost by closing the QR confirmation. */
+  readonly confirmDirty = computed(() =>
+    Boolean(this.confirmFacts() || this.confirmPhoto() || this.confirmVideo() || this.confirmNote().trim()),
+  );
+  /** The COD outcome cancels the order, so its save button is styled and worded as a cancel. */
+  readonly codCancels = computed(() => this.codDecision() === 'cancel' || this.codDecision() === 'invalid');
   readonly activeAction = computed(() => {
     const modal = this.modal();
     return modal?.kind === 'action' ? modal.action : null;
@@ -253,8 +315,15 @@ export class AdminErpOrdersPage {
     const stage = this.selectedStage();
     return (this.selected()?.evidence || []).filter((item) => stage === 'all' || item.stage === stage);
   });
-  /** Values the action form can already know from the order, so nothing is typed twice. */
-  readonly prefill = computed(() => actionPrefill(this.activeAction(), this.selected()));
+  /**
+   * Values the action form can already know from the order, so nothing is typed twice. A
+   * destructive action never gets a boilerplate note: its reason must be written by the operator.
+   */
+  readonly prefill = computed(() => {
+    const action = this.activeAction();
+    const values = actionPrefill(action, this.selected());
+    return action?.destructive ? { ...values, note: '' } : values;
+  });
   /** Related records reachable without leaving the drawer. */
   readonly orderLinks = computed(() => {
     const order = this.selected();
@@ -357,13 +426,9 @@ export class AdminErpOrdersPage {
   ];
 
   constructor() {
-    watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
-    this.destroyRef.onDestroy(() => {
-      if (this.copiedPhoneTimer) {
-        clearTimeout(this.copiedPhoneTimer);
-      }
-    });
-    useWorkspaceRefresh(() => (this.tab() === 'logs' ? this.loadLogs() : this.reload()));
+    watchQueryParams(this.route, this.destroyRef, (params) => this.applyQuery(params));
+    this.destroyRef.onDestroy(() => clearTimeout(this.copiedPhoneTimer ?? undefined));
+    useWorkspaceRefresh(() => this.reloadActive());
     // New orders must appear without F5; the tick stays silent and never interrupts a drawer.
     useAutoRefresh(() => this.autoReload());
   }
@@ -383,26 +448,67 @@ export class AdminErpOrdersPage {
     this.reload(true);
   }
 
+  /** Reloads whichever list the active tab shows (header refresh, table retry). */
+  reloadActive(): void {
+    if (this.tab() === 'logs') {
+      this.loadLogs();
+      return;
+    }
+    this.reload();
+  }
+
+  /** The list view as URL params: tab, filters, page and page size; defaults are left out. */
+  private listQuery(): ListQuery {
+    const tab = this.tab();
+    const page = tab === 'logs' ? this.logsPage() : this.page();
+    return {
+      tab: tab === 'all' ? '' : tab,
+      q: this.query(),
+      status: this.status(),
+      payment: this.paymentMethod(),
+      from: this.from(),
+      page: page > 1 ? page : '',
+      size: this.pageSize() !== DEFAULT_PAGE_SIZE ? this.pageSize() : '',
+    };
+  }
+
+  /** The full URL state: the list view plus the order whose drawer is open. */
+  private urlQuery(): ListQuery {
+    return { ...this.listQuery(), focus: this.focusId() };
+  }
+
+  /** Mirrors the current view into the URL so Back, refresh and a shared link reopen it. */
+  private syncUrl(): void {
+    writeQueryParams(this.router, this.route, this.urlQuery());
+  }
+
   /**
-   * Applies an inbound deep link: the queue tab, the filters another workspace knows about this
-   * order, and the order to open.
+   * Applies the URL (an inbound deep link, Back/Forward, or a link inside this workspace): the tab,
+   * filters, page and the order to open. Params this screen just wrote itself are skipped.
    */
-  private applyDeepLink(params: ParamMap): void {
-    const tab = choiceParam(params, 'tab', ORDER_TABS, this.tab()) as OrderTab;
+  private applyQuery(params: ParamMap): void {
+    if (this.queryApplied && queryMatches(params, this.urlQuery())) return;
+    const before = JSON.stringify(this.listQuery());
+    const tab = choiceParam(params, 'tab', ORDER_TABS, 'all') as OrderTab;
+    const page = positiveInt(params.get('page'), 1);
     this.tab.set(tab);
     this.query.set(textParam(params, 'q'));
     this.status.set(textParam(params, 'status'));
-    this.paymentMethod.set(textParam(params, 'payment'));
-    this.page.set(1);
-    this.logsPage.set(1);
-    if (tab === 'logs') {
-      this.loadLogs();
-    } else {
-      this.reload();
+    this.paymentMethod.set(choiceParam(params, 'payment', ['COD', 'ONLINE_PAYMENT']));
+    this.from.set(textParam(params, 'from'));
+    this.pageSize.set(sizeParam(params.get('size')));
+    this.page.set(tab === 'logs' ? 1 : page);
+    this.logsPage.set(tab === 'logs' ? page : 1);
+    if (!this.queryApplied || JSON.stringify(this.listQuery()) !== before) {
+      this.reloadActive();
     }
+    this.queryApplied = true;
     const focus = textParam(params, 'focus');
-    if (focus) {
+    if (focus && focus !== this.focusId()) {
       this.openDetail(focus);
+    } else if (!focus && this.focusId()) {
+      // A link to another view of this list (e.g. "Đơn khác của khách này") must not leave the old order on top.
+      this.resetDetail();
     }
   }
 
@@ -415,18 +521,7 @@ export class AdminErpOrdersPage {
       this.loading.set(true);
       this.loadError.set(null);
     }
-    const tab = this.tab();
-    const params: Record<string, string> = {
-      q: this.query(),
-      status: tab === 'cancelled' ? 'cancelled' : this.status(),
-      paymentMethod: this.paymentMethod(),
-      from: this.from(),
-      limit: String(this.pageSize),
-      offset: adminOffset(this.page(), this.pageSize),
-    };
-    if (tab === 'attention') params['attention'] = 'true';
-    if (tab === 'payment') params['tag'] = 'PAYMENT_ATTENTION';
-    this.api.listOrders(params).subscribe({
+    this.api.listOrders(this.listParams(this.pageSize(), adminOffset(this.page(), this.pageSize()))).subscribe({
       next: (payload) => {
         this.rows.set(adminListRows(payload));
         this.count.set(adminListCount(payload));
@@ -445,14 +540,31 @@ export class AdminErpOrdersPage {
     this.api.orderSummary().pipe(catchError(() => of(null))).subscribe((summary) => this.summary.set(summary));
   }
 
+  /** Server filters of the active tab, shared by the paged list and the CSV export. */
+  private listParams(limit: number, offset: string): Record<string, string> {
+    const tab = this.tab();
+    const params: Record<string, string> = {
+      q: this.query(),
+      status: tab === 'cancelled' ? 'cancelled' : this.status(),
+      paymentMethod: this.paymentMethod(),
+      from: this.from(),
+      limit: String(limit),
+      offset,
+    };
+    if (tab === 'attention') params['attention'] = 'true';
+    if (tab === 'payment') params['tag'] = 'PAYMENT_ATTENTION';
+    return params;
+  }
+
   /**
    * Loads order audit rows.
    */
   loadLogs(silent = false): void {
     if (!silent) {
       this.loading.set(true);
+      this.loadError.set(null);
     }
-    this.api.listAuditLogs({ module: 'orders', limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize) }).subscribe({
+    this.api.listAuditLogs({ module: 'orders', limit: String(this.pageSize()), offset: adminOffset(this.logsPage(), this.pageSize()) }).subscribe({
       next: (payload) => {
         this.logs.set(adminListRows(payload));
         this.logsCount.set(adminListCount(payload));
@@ -461,6 +573,8 @@ export class AdminErpOrdersPage {
       error: (error: unknown) => {
         if (!silent) {
           this.loadError.set(adminErrorMessage(error, 'Không tải được nhật ký đơn hàng.'));
+          this.logs.set([]);
+          this.logsCount.set(0);
         }
         this.loading.set(false);
       },
@@ -468,19 +582,17 @@ export class AdminErpOrdersPage {
   }
 
   /**
-   * Switches order tabs.
+   * Switches order tabs; both lists restart at page 1.
    */
   setTab(tab: string): void {
     if (this.loading()) return;
     if (!ORDER_TABS.includes(tab as (typeof ORDER_TABS)[number])) return;
     this.tab.set(tab as OrderTab);
     this.page.set(1);
-    this.closeDetail();
-    if (tab === 'logs') {
-      this.loadLogs();
-      return;
-    }
-    this.reload();
+    this.logsPage.set(1);
+    this.resetDetail();
+    this.reloadActive();
+    this.syncUrl();
   }
 
   /**
@@ -489,6 +601,7 @@ export class AdminErpOrdersPage {
   applyFilters(): void {
     this.page.set(1);
     this.reload();
+    this.syncUrl();
   }
 
   /**
@@ -501,6 +614,7 @@ export class AdminErpOrdersPage {
     this.from.set('');
     this.page.set(1);
     this.reload();
+    this.syncUrl();
   }
 
   /**
@@ -509,6 +623,7 @@ export class AdminErpOrdersPage {
   goPage(page: number): void {
     this.page.set(Math.max(1, page));
     this.reload();
+    this.syncUrl();
   }
 
   /**
@@ -517,18 +632,55 @@ export class AdminErpOrdersPage {
   goLogsPage(page: number): void {
     this.logsPage.set(Math.max(1, page));
     this.loadLogs();
+    this.syncUrl();
   }
 
   /**
-   * Opens an order detail or the COD call flow for pending COD orders.
+   * Changes rows per page for the order and log lists and restarts at page 1.
+   */
+  setPageSize(size: number): void {
+    this.pageSize.set(size);
+    this.page.set(1);
+    this.logsPage.set(1);
+    this.reloadActive();
+    this.syncUrl();
+  }
+
+  /**
+   * Row click always opens the order drawer; the COD call is a row action or a drawer button.
    */
   openRow(row: unknown): void {
-    const order = row as AdminOrderRow;
-    if (this.isPendingCod(order) && this.hasAction(order, 'call_confirm')) {
-      this.openCodCall(order);
-      return;
-    }
-    this.openDetail(order.order_id);
+    this.focusOrder((row as AdminOrderRow).order_id);
+  }
+
+  /**
+   * Opens one order's drawer and records it in the URL.
+   */
+  focusOrder(orderId: string, then?: (order: AdminOrderRow) => void): void {
+    this.openDetail(orderId, then);
+    this.syncUrl();
+  }
+
+  /**
+   * Drawer ‹ › / J K: moves to the neighbouring order of the current page.
+   */
+  openSibling(step: -1 | 1): void {
+    const next = this.rows()[this.selectedIndex() + step];
+    if (next) this.focusOrder(next.order_id);
+  }
+
+  /**
+   * Row action: opens the order with fresh allowed actions, then the guarded form for `code`.
+   */
+  openRowAction(row: AdminOrderRow, code: string): void {
+    this.focusOrder(row.order_id, (fresh) => {
+      const action = fresh.allowed_actions?.find((item) => item.code === code);
+      if (!action) {
+        this.toast.info('Thao tác không còn khả dụng với trạng thái mới nhất của đơn.', 'warning');
+        return;
+      }
+      this.openAction(action);
+    });
   }
 
   /**
@@ -539,10 +691,15 @@ export class AdminErpOrdersPage {
   }
 
   /**
-   * Loads a fresh order and its audit rows.
+   * Loads a fresh order and its audit rows; `then` runs once the fresh order is on screen.
    */
-  openDetail(orderId: string): void {
+  openDetail(orderId: string, then?: (order: AdminOrderRow) => void): void {
     const requestId = ++this.detailRequestId;
+    if (this.focusId() !== orderId) {
+      this.selectedStage.set('all');
+      this.resetEvidenceForm();
+    }
+    this.focusId.set(orderId);
     this.notice.set(null);
     this.detailLoading.set(true);
     this.linkedReturns.set([]);
@@ -553,30 +710,45 @@ export class AdminErpOrdersPage {
         this.detailLoading.set(false);
         this.loadOrderAudit(orderId);
         this.loadLinkedReturns(orderId);
+        then?.(order);
       },
       error: (error: unknown) => {
         if (requestId !== this.detailRequestId) return;
         this.detailLoading.set(false);
-        this.loadError.set(adminErrorMessage(error));
+        this.toast.error(adminErrorMessage(error, 'Không mở được chi tiết đơn hàng.'));
+        if (!this.selected()) {
+          this.focusId.set('');
+          this.syncUrl();
+        }
       },
     });
   }
 
   /**
-   * Closes the detail drawer and modal.
+   * Closes the detail drawer (and any modal on it) and drops `focus` from the URL.
    */
   closeDetail(): void {
+    this.resetDetail();
+    this.syncUrl();
+  }
+
+  /** Clears the drawer state without touching the URL. */
+  private resetDetail(): void {
     this.detailRequestId += 1;
+    this.focusId.set('');
     this.selected.set(null);
     this.selectedStage.set('all');
-    this.evidenceFile.set(null);
-    this.evidenceNote.set('');
-    this.evidenceError.set(null);
-    this.evidenceNotice.set(null);
+    this.resetEvidenceForm();
     this.linkedReturns.set([]);
     this.detailLoading.set(false);
     this.closeModal();
     this.notice.set(null);
+  }
+
+  private resetEvidenceForm(): void {
+    this.evidenceFile.set(null);
+    this.evidenceNote.set('');
+    this.evidenceError.set(null);
   }
 
   /**
@@ -609,7 +781,6 @@ export class AdminErpOrdersPage {
   onEvidenceFile(event: Event): void {
     this.evidenceFile.set((event.target as HTMLInputElement).files?.[0] ?? null);
     this.evidenceError.set(null);
-    this.evidenceNotice.set(null);
   }
 
   /**
@@ -634,7 +805,6 @@ export class AdminErpOrdersPage {
     }
     this.evidenceSaving.set(true);
     this.evidenceError.set(null);
-    this.evidenceNotice.set(null);
     this.api
       .uploadOrderEvidence(order.order_id, file, stage, this.evidenceNote())
       .pipe(finalize(() => this.evidenceSaving.set(false)))
@@ -646,9 +816,13 @@ export class AdminErpOrdersPage {
           this.evidenceFile.set(null);
           this.evidenceNote.set('');
           (event.target as HTMLFormElement).reset();
-          this.evidenceNotice.set(`Đã tải bằng chứng cho công đoạn ${this.stageLabel(stage)}.`);
+          this.toast.success(`Đã tải bằng chứng cho công đoạn ${this.stageLabel(stage)}.`);
         },
-        error: (error: unknown) => this.evidenceError.set(adminErrorMessage(error, 'Không tải được bằng chứng.')),
+        error: (error: unknown) => {
+          const message = adminErrorMessage(error, 'Không tải được bằng chứng.');
+          this.evidenceError.set(message);
+          this.toast.error(message);
+        },
       });
   }
 
@@ -670,6 +844,7 @@ export class AdminErpOrdersPage {
     }
     this.modal.set({ kind: 'action', action });
     this.actionError.set(null);
+    this.formDirty.set(false);
     this.scanOpen.set(false);
     this.scanError.set(null);
     this.scanNotice.set(null);
@@ -774,9 +949,7 @@ export class AdminErpOrdersPage {
       .subscribe({
         next: (result) => {
           this.applyResult(result);
-          this.notice.set(
-            `Đã quét QR ${facts.orderCode || order.order_code || ''} và xác nhận đơn ${order.order_code || order.order_id} kèm ảnh minh chứng.`,
-          );
+          this.toast.success(`Đã quét QR và xác nhận đơn ${order.order_code || order.order_id} kèm ảnh minh chứng.`);
         },
         error: (error: unknown) => this.handleActionError(order.order_id, error),
       });
@@ -788,6 +961,18 @@ export class AdminErpOrdersPage {
   openPaymentResolve(): void {
     this.modal.set({ kind: 'payment' });
     this.actionError.set(null);
+    this.formDirty.set(false);
+    this.paymentDecision.set('mark_paid');
+  }
+
+  /** Tracks the payment decision so the confirm button names (and colours) what it will do. */
+  onPaymentDecision(event: Event): void {
+    this.paymentDecision.set((event.target as HTMLSelectElement).value === 'mark_failed' ? 'mark_failed' : 'mark_paid');
+  }
+
+  /** Any edit in the action/payment form makes closing it ask before discarding. */
+  markFormDirty(): void {
+    this.formDirty.set(true);
   }
 
   /**
@@ -823,6 +1008,7 @@ export class AdminErpOrdersPage {
   closeModal(): void {
     this.modal.set(null);
     this.actionError.set(null);
+    this.formDirty.set(false);
     this.submitting.set(false);
     this.copiedPhone.set(false);
     this.scanOpen.set(false);
@@ -845,9 +1031,7 @@ export class AdminErpOrdersPage {
       .then(() => {
         this.actionError.set(null);
         this.copiedPhone.set(true);
-        if (this.copiedPhoneTimer) {
-          clearTimeout(this.copiedPhoneTimer);
-        }
+        clearTimeout(this.copiedPhoneTimer ?? undefined);
         this.copiedPhoneTimer = setTimeout(() => this.copiedPhone.set(false), 2000);
       })
       .catch(() => {
@@ -871,9 +1055,6 @@ export class AdminErpOrdersPage {
     this.actionError.set(null);
   }
 
-  /**
-   * Submits the COD call outcome.
-   */
   /**
    * Saves the call result, and — with `confirmOrder` — confirms the same COD order in one step.
    *
@@ -918,6 +1099,7 @@ export class AdminErpOrdersPage {
       return;
     }
     this.submitting.set(true);
+    const code = order.order_code || order.order_id;
     this.api.performOrderAction(order.order_id, actionCode, { ...body, expectedVersion: order.version }).subscribe({
       next: (result) => {
         const canConfirm =
@@ -927,6 +1109,13 @@ export class AdminErpOrdersPage {
           !!result.order.allowed_actions?.some((action) => action.code === 'confirm_cod');
         if (!canConfirm) {
           this.applyResult(result);
+          this.toast.success(
+            actionCode === 'cancel'
+              ? `Đã hủy đơn ${code}.`
+              : decision === 'no_answer'
+                ? `Đã ghi nhận khách không nghe máy (đơn ${code}).`
+                : `Đã lưu kết quả cuộc gọi đơn ${code}.`,
+          );
           if (confirmOrder && decision === 'confirm') {
             this.notice.set('Đã lưu kết quả cuộc gọi. Đơn không còn ở trạng thái cần xác nhận nên hệ thống không xác nhận lại.');
           }
@@ -935,6 +1124,7 @@ export class AdminErpOrdersPage {
         // Confirmation itself always goes through the parcel QR; the call only unlocks it.
         this.applyResult(result);
         this.openConfirmQr(true);
+        this.toast.success(`Đã lưu kết quả cuộc gọi đơn ${code}.`);
         this.notice.set('Đã lưu kết quả cuộc gọi. Quét QR trên phiếu đơn để xác nhận đơn kèm ảnh minh chứng.');
       },
       error: (error: unknown) => this.handleActionError(order.order_id, error),
@@ -970,6 +1160,7 @@ export class AdminErpOrdersPage {
     this.closeModal();
     this.selected.set({ ...result.order, evidence: this.selected()?.evidence ?? [] });
     this.notice.set(this.refundNotice(result.refund));
+    if (result.refund?.status === 'failed') this.toast.error(this.refundNotice(result.refund) || 'Hoàn tiền chưa thành công.');
     this.loadOrderAudit(result.order.order_id);
     this.loadLinkedReturns(result.order.order_id);
     this.reload();
@@ -989,12 +1180,16 @@ export class AdminErpOrdersPage {
         const facts = { carrier: String(body['carrier'] || ''), trackingCode: String(body['trackingCode'] || '') };
         const code = result.order.order_code || result.order.order_id.slice(0, 8);
         if (chained) {
-          this.notice.set(`Vận đơn ${facts.trackingCode} đã lưu và hàng đã bàn giao cho ${result.order.carrier || facts.carrier || 'đơn vị vận chuyển'} (đơn ${code}).`);
+          const message = `Vận đơn ${facts.trackingCode} đã lưu và hàng đã bàn giao cho ${result.order.carrier || facts.carrier || 'đơn vị vận chuyển'} (đơn ${code}).`;
+          this.notice.set(message);
+          this.toast.success(message);
           return;
         }
-        if (action.code !== 'upsert_shipment') return;
-        const followUp = handoverFollowUp(result.order, facts);
-        if (!followUp) return;
+        const followUp = action.code === 'upsert_shipment' ? handoverFollowUp(result.order, facts) : null;
+        if (!followUp) {
+          this.toast.success(`Đã thực hiện “${action.label}” cho đơn ${code}.`);
+          return;
+        }
         this.submitting.set(true);
         this.runAction(followUp, result.order, { note: handoverNote(facts.carrier, facts.trackingCode, code) }, true);
       },
@@ -1007,6 +1202,7 @@ export class AdminErpOrdersPage {
         this.notice.set(
           `Vận đơn đã lưu, nhưng bàn giao chưa thành công: ${adminErrorMessage(error)} Mã vận đơn đã được điền sẵn — bấm "Xác nhận bàn giao ĐVVC" để đi tiếp.`,
         );
+        this.toast.error(`Vận đơn đã lưu, nhưng bàn giao chưa thành công: ${adminErrorMessage(error)}`);
       },
     });
   }
@@ -1115,11 +1311,17 @@ export class AdminErpOrdersPage {
       return;
     }
     const form = event.target as HTMLFormElement;
+    const decision = this.field(form, 'decision').value;
+    const reason = this.field(form, 'reason').value.trim();
+    if (reason.length < PAYMENT_REASON_MIN) {
+      this.actionError.set(`Lý do đối soát cần tối thiểu ${PAYMENT_REASON_MIN} ký tự.`);
+      return;
+    }
     this.submitting.set(true);
     this.api
       .resolvePayment(order.order_id, payment.payment_id, {
-        decision: this.field(form, 'decision').value,
-        reason: this.field(form, 'reason').value.trim(),
+        decision,
+        reason,
         expectedOrderVersion: order.version,
         expectedPaymentVersion: payment.version ?? 1,
       })
@@ -1128,6 +1330,9 @@ export class AdminErpOrdersPage {
           this.closeModal();
           this.openDetail(order.order_id);
           this.reload();
+          this.toast.success(
+            `Đã ghi nhận ${decision === 'mark_failed' ? 'thanh toán thất bại' : 'đã thanh toán'} cho đơn ${order.order_code || order.order_id}.`,
+          );
         },
         error: (error: unknown) => this.handleActionError(order.order_id, error),
       });
@@ -1140,41 +1345,62 @@ export class AdminErpOrdersPage {
     const order = this.selected();
     if (!order || this.submitting()) return;
     this.submitting.set(true);
+    const label = CARRIER_OUTCOMES.find((item) => item.code === outcome)?.label || outcome;
     this.api.simulateCarrier(order.order_id, { outcome }).subscribe({
       next: (fresh) => {
         this.submitting.set(false);
         this.selected.set(fresh);
         this.reload();
+        this.toast.success(`Đã mô phỏng “${label}” cho đơn ${order.order_code || order.order_id}.`);
       },
       error: (error: unknown) => {
         this.submitting.set(false);
-        this.notice.set(adminErrorMessage(error));
+        this.toast.error(adminErrorMessage(error, 'Không mô phỏng được kết quả ĐVVC.'));
       },
     });
   }
 
   /**
-   * Exports the current page of orders.
+   * Exports every order matching the current tab and filters (not only the visible page), reading
+   * the existing list endpoint in batches so no extra export API is needed.
    */
-  exportCsv(): void {
-    const rows = [
-      ['order_code', 'order_date', 'status', 'payment_status', 'shipping_name', 'shipping_phone', 'total_amount'],
-      ...this.rows().map((order) => [
-        order.order_code || order.order_id,
-        order.order_date || '',
-        this.orderLabel(order),
-        order.payment_status_label || '',
-        order.shipping_name || '',
-        order.shipping_phone || '',
-        String(order.total_amount || 0),
-      ]),
-    ];
-    const csv = rows.map((row) => row.map((value) => this.csvCell(value)).join(',')).join('\r\n');
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' }));
-    link.download = `velura-orders-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+  async exportCsv(): Promise<void> {
+    if (this.exporting() || this.tab() === 'logs') return;
+    this.exporting.set(true);
+    try {
+      const orders: AdminOrderRow[] = [];
+      let total = Infinity;
+      while (orders.length < total) {
+        const payload = await firstValueFrom(this.api.listOrders(this.listParams(EXPORT_BATCH, String(orders.length))));
+        const batch = adminListRows(payload);
+        total = adminListCount(payload);
+        orders.push(...batch);
+        if (batch.length < EXPORT_BATCH) break;
+      }
+      const rows = [
+        ['order_code', 'order_date', 'status', 'payment_status', 'shipping_name', 'shipping_phone', 'total_amount'],
+        ...orders.map((order) => [
+          order.order_code || order.order_id,
+          order.order_date || '',
+          this.orderLabel(order),
+          order.payment_status_label || '',
+          order.shipping_name || '',
+          order.shipping_phone || '',
+          String(order.total_amount || 0),
+        ]),
+      ];
+      const csv = rows.map((row) => row.map((value) => this.csvCell(value)).join(',')).join('\r\n');
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' }));
+      link.download = `velura-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      this.toast.success(`Đã xuất ${orders.length.toLocaleString('vi-VN')} đơn hàng theo bộ lọc hiện tại.`);
+    } catch (error: unknown) {
+      this.toast.error(adminErrorMessage(error, 'Không xuất được CSV đơn hàng.'));
+    } finally {
+      this.exporting.set(false);
+    }
   }
 
   /**
@@ -1372,9 +1598,11 @@ export class AdminErpOrdersPage {
       this.openDetail(orderId);
       this.reload();
       this.notice.set(`${message} Màn hình đã tải lại trạng thái mới nhất.`);
+      this.toast.info(`${message} Đã tải lại trạng thái mới nhất của đơn.`, 'warning');
       return;
     }
     this.actionError.set(message);
+    this.toast.error(message);
   }
 
   private errorCode(error: unknown): string {
@@ -1443,4 +1671,16 @@ export class AdminErpOrdersPage {
       order.status === 'confirmed' ? 1 : order.status === 'processing' ? 2 : order.status === 'shipping' ? 3 : order.status === 'delivered' ? 4 : 0;
     return base.map((step, index) => ({ ...step, state: index < current ? 'done' : index === current ? 'current' : 'upcoming' }));
   }
+}
+
+/** Reads a 1-based page number from the URL; anything else falls back. */
+function positiveInt(value: string | null, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : fallback;
+}
+
+/** Reads `size` only when it is one of the offered page sizes. */
+function sizeParam(value: string | null): number {
+  const parsed = Number(value);
+  return (PAGE_SIZES as readonly number[]).includes(parsed) ? parsed : DEFAULT_PAGE_SIZE;
 }

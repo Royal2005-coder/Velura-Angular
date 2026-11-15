@@ -11,6 +11,16 @@ export type AdminPageItem = number | '…';
   template: `
     <nav class="pagination" aria-label="Phân trang">
       <span class="pagination__label">{{ label() }}</span>
+      @if (pageSizes().length) {
+        <label class="pagination__size">
+          <span>Hiển thị</span>
+          <select class="erp-select" [value]="pageSize()" (change)="onSize($event)" aria-label="Số dòng mỗi trang">
+            @for (size of pageSizes(); track size) {
+              <option [value]="size" [selected]="size === pageSize()">{{ size }}</option>
+            }
+          </select>
+        </label>
+      }
       <div class="pagination__buttons">
         <button class="pagination__btn" type="button" [disabled]="page() <= 1" (click)="go(page() - 1)" aria-label="Trang trước">
           ‹
@@ -101,6 +111,18 @@ export type AdminPageItem = number | '…';
         padding: 0 4px;
         color: var(--erp-soft);
       }
+      .pagination__size {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--erp-muted);
+      }
+      .pagination__size .erp-select {
+        width: auto;
+        min-height: 30px;
+        padding-block: 2px;
+      }
     `,
   ],
 })
@@ -109,6 +131,10 @@ export class AdminErpPagination {
   readonly pageCount = input.required<number>();
   readonly label = input('');
   readonly changed = output<number>();
+  /** Offer a rows-per-page choice (e.g. [10, 20, 50]); empty hides it. The owner reloads from page 1. */
+  readonly pageSizes = input<readonly number[]>([]);
+  readonly pageSize = input(0);
+  readonly pageSizeChanged = output<number>();
 
   readonly items = computed(() => pageWindow(this.pageCount(), this.page()));
 
@@ -120,6 +146,12 @@ export class AdminErpPagination {
     if (next !== this.page()) {
       this.changed.emit(next);
     }
+  }
+
+  /** Emits the chosen page size when it is one of the offered values. */
+  onSize(event: Event): void {
+    const size = Number((event.target as HTMLSelectElement).value);
+    if (this.pageSizes().includes(size) && size !== this.pageSize()) this.pageSizeChanged.emit(size);
   }
 }
 

@@ -1,5 +1,9 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, input, output, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, inject, input, output, viewChild } from '@angular/core';
+import { AdminErpConfirmService } from '../../core/admin-erp-confirm.service';
 import { lockBodyScroll } from '../../core/body-scroll-lock';
+import { isTopOverlay, pushOverlay } from '../../core/overlay-stack';
+
+let drawerSequence = 0;
 
 /**
  * Right-side detail drawer with backdrop close, Escape and a Tab trap.
@@ -16,13 +20,20 @@ import { lockBodyScroll } from '../../core/body-scroll-lock';
           [class]="'drawer-panel--' + size()"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="erp-drawer-title"
+          [attr.aria-labelledby]="titleId"
+          [attr.aria-busy]="busy()"
           tabindex="-1"
           (keydown)="onPanelKeydown($event)"
         >
           <header class="drawer-head">
-            <h2 id="erp-drawer-title">{{ title() }}</h2>
-            <button class="erp-icon-btn" type="button" aria-label="Đóng" (click)="close()">×</button>
+            <h2 [id]="titleId">{{ title() }}</h2>
+            <span class="drawer-head__actions">
+              @if (navigable()) {
+                <button class="erp-icon-btn" type="button" aria-label="Bản ghi trước (K)" title="Bản ghi trước (K)" [disabled]="!hasPrev() || busy()" (click)="goPrev()">‹</button>
+                <button class="erp-icon-btn" type="button" aria-label="Bản ghi sau (J)" title="Bản ghi sau (J)" [disabled]="!hasNext() || busy()" (click)="goNext()">›</button>
+              }
+              <button class="erp-icon-btn" type="button" aria-label="Đóng" [disabled]="busy()" (click)="close()">×</button>
+            </span>
           </header>
           <div class="drawer-body"><ng-content /></div>
           <footer class="drawer-foot"><ng-content select="[footer]" /></footer>
@@ -66,6 +77,11 @@ import { lockBodyScroll } from '../../core/body-scroll-lock';
         padding: 16px 18px;
         border-bottom: 1px solid var(--erp-line);
       }
+      .drawer-head__actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
       h2 {
         font-family: var(--erp-display);
         font-size: 18px;
@@ -100,7 +116,19 @@ export class AdminErpDrawer {
   readonly open = input(false);
   readonly title = input.required<string>();
   readonly size = input<'sm' | 'md' | 'lg'>('md');
+  /** Unsaved edits inside: closing or moving to another record asks "Bỏ thay đổi?" first. */
+  readonly dirty = input(false);
+  /** A save is in flight: closing/navigating is blocked. */
+  readonly busy = input(false);
+  /** Show previous/next record controls (queue processing without closing the drawer). */
+  readonly navigable = input(false);
+  readonly hasPrev = input(false);
+  readonly hasNext = input(false);
   readonly closed = output<void>();
+  readonly prev = output<void>();
+  readonly next = output<void>();
+  readonly titleId = `erp-drawer-title-${++drawerSequence}`;
+  private readonly confirm = inject(AdminErpConfirmService);
   private readonly panel = viewChild<ElementRef<HTMLElement>>('panel');
   private lastFocused: HTMLElement | null = null;
 
@@ -111,9 +139,11 @@ export class AdminErpDrawer {
       }
       this.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const releaseScroll = lockBodyScroll();
+      const releaseOverlay = pushOverlay(this);
       queueMicrotask(() => this.panel()?.nativeElement.focus());
       onCleanup(() => {
         releaseScroll();
+        releaseOverlay();
         const target = this.lastFocused;
         this.lastFocused = null;
         if (target?.isConnected) {
@@ -124,10 +154,25 @@ export class AdminErpDrawer {
   }
 
   /**
-   * Emits close so the owner controls mount state.
+   * Asks the owner to close, honouring the busy/dirty guards; the owner controls mount state.
    */
-  close(): void {
-    this.closed.emit();
+  async close(): Promise<void> {
+    if (await this.mayLeave()) this.closed.emit();
+  }
+
+  /** Moves to the previous record in the owner's list. */
+  async goPrev(): Promise<void> {
+    if (this.hasPrev() && (await this.mayLeave())) this.prev.emit();
+  }
+
+  /** Moves to the next record in the owner's list. */
+  async goNext(): Promise<void> {
+    if (this.hasNext() && (await this.mayLeave())) this.next.emit();
+  }
+
+  private async mayLeave(): Promise<boolean> {
+    if (this.busy()) return false;
+    return !this.dirty() || this.confirm.discardChanges();
   }
 
   /**
@@ -143,6 +188,19 @@ export class AdminErpDrawer {
    * Keeps focus inside the drawer while open.
    */
   onPanelKeydown(event: KeyboardEvent): void {
+    const typing = !!(event.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable="true"]');
+    if (this.navigable() && !typing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (event.key === 'j' || event.key === 'J') {
+        event.preventDefault();
+        void this.goNext();
+        return;
+      }
+      if (event.key === 'k' || event.key === 'K') {
+        event.preventDefault();
+        void this.goPrev();
+        return;
+      }
+    }
     if (event.key !== 'Tab') {
       return;
     }
@@ -163,9 +221,10 @@ export class AdminErpDrawer {
     }
   }
 
+  /** Escape closes only the topmost overlay, so a confirm over this drawer closes alone. */
   @HostListener('document:keydown.escape')
   onEscape(): void {
-    if (this.open()) {
+    if (this.open() && isTopOverlay(this)) {
       this.close();
     }
   }

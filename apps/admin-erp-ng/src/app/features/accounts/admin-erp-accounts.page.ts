@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink, type ParamMap } from '@angular/router';
 import { catchError, finalize, forkJoin, map, of } from 'rxjs';
 import {
   AdminAccountRow,
@@ -6,6 +7,8 @@ import {
   AdminErpApiService,
   AdminRoleRequestRow,
 } from '../../core/admin-erp-api.service';
+import { AdminErpConfirmService } from '../../core/admin-erp-confirm.service';
+import { type ListQuery, choiceParam, queryMatches, textParam, watchQueryParams, writeQueryParams } from '../../core/admin-erp-deep-link';
 import { adminDateTime, adminInitials, adminWordCount } from '../../core/admin-erp-format';
 import {
   adminErrorMessage,
@@ -17,7 +20,7 @@ import {
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import { AdminBadgeTone } from '../../shared/ui/admin-status-badge';
-import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
+import { AdminErpDataTable, AdminTableColumn, AdminTableRowAction } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
 import { AdminErpFilterBar } from '../../shared/ui/admin-filter-bar';
 import { AdminErpIcon } from '../../shared/ui/admin-erp-icon';
@@ -27,9 +30,16 @@ import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
 import { AdminErpPagination } from '../../shared/ui/admin-pagination';
 import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
+import { AdminErpToastService } from '../../shared/ui/admin-toast';
 
 type AccountTab = 'all' | 'members' | 'admins' | 'locked' | 'unverified' | 'promotions' | 'logs';
 type AccountAction = 'lock' | 'unlock' | 'role' | null;
+
+const ACCOUNT_TABS: readonly AccountTab[] = ['all', 'members', 'admins', 'locked', 'unverified', 'promotions', 'logs'];
+const PAGE_SIZES = [10, 20, 50] as const;
+const DEFAULT_PAGE_SIZE = 10;
+/** Minimum characters for the role-change reason asked in the confirm dialog. */
+const ROLE_REASON_MIN_LENGTH = 20;
 
 const ROLE_LABELS: Record<string, string> = {
   admin_viewer: 'Admin xem dữ liệu',
@@ -70,8 +80,17 @@ const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
 export class AdminErpAccountsPage {
   private readonly api = inject(AdminErpApiService);
   private readonly session = inject(AdminErpSessionService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly confirm = inject(AdminErpConfirmService);
+  private readonly toast = inject(AdminErpToastService);
   /** Guard so a slow response from the previous tab cannot overwrite the current one. */
   private reloadId = 0;
+  /** Set after the first URL read; later URL changes equal to the screen state are our own writes. */
+  private urlApplied = false;
+  /** Account id from `?focus=` to open once the list containing it has loaded. */
+  private pendingFocus = '';
 
   readonly tab = signal<AccountTab>('all');
   readonly query = signal('');
@@ -83,8 +102,6 @@ export class AdminErpAccountsPage {
   readonly loadError = signal<string | null>(null);
   readonly requestError = signal<string | null>(null);
   readonly logsError = signal<string | null>(null);
-  /** Confirmation banner for actions whose result is not a visible row change (202 approvals). */
-  readonly notice = signal<string | null>(null);
   readonly actionSaving = signal(false);
   readonly requestSaving = signal(false);
   readonly loading = signal(true);
@@ -92,7 +109,8 @@ export class AdminErpAccountsPage {
   readonly page = signal(1);
   readonly logsPage = signal(1);
   readonly requestPage = signal(1);
-  readonly pageSize = 10;
+  readonly pageSizes = PAGE_SIZES;
+  readonly pageSize = signal<number>(DEFAULT_PAGE_SIZE);
   readonly total = signal(0);
   readonly requestTotal = signal(0);
   readonly logsCount = signal(0);
@@ -107,7 +125,11 @@ export class AdminErpAccountsPage {
   readonly selectedRequest = signal<AdminRoleRequestRow | null>(null);
   readonly selectedLog = signal<AdminAuditRow | null>(null);
   readonly actionType = signal<AccountAction>(null);
+  /** Account the lock/unlock/role modal acts on (the drawer record, or a row's quick action). */
+  readonly actionAccount = signal<AdminAccountRow | null>(null);
   readonly actionError = signal<string | null>(null);
+  /** Confirmation banner for actions whose result is not a visible row change (202 approvals). */
+  readonly notice = signal<string | null>(null);
   readonly dirty = signal(false);
   readonly discardOpen = signal(false);
   readonly lockType = signal<'temporary' | 'permanent'>('temporary');
@@ -142,12 +164,41 @@ export class AdminErpAccountsPage {
     { key: 'logs', label: 'Nhật ký' },
   ]);
 
-  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
-  readonly requestPageCount = computed(() => Math.max(1, Math.ceil(this.requestTotal() / this.pageSize)));
-  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
-  readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, 'tài khoản'));
-  readonly requestRangeLabel = computed(() => adminRangeLabel(this.requestTotal(), this.requestPage(), this.pageSize, 'yêu cầu'));
-  readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize, 'nhật ký'));
+  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
+  readonly requestPageCount = computed(() => Math.max(1, Math.ceil(this.requestTotal() / this.pageSize())));
+  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize())));
+  readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize(), 'tài khoản'));
+  readonly requestRangeLabel = computed(() => adminRangeLabel(this.requestTotal(), this.requestPage(), this.pageSize(), 'yêu cầu'));
+  readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize(), 'nhật ký'));
+  /** Search or filter selects narrow the list (drives the empty-state "Xoá bộ lọc"). */
+  readonly hasFilters = computed(() => !!(this.query() || this.roleFilter() || this.statusFilter()));
+  /** Position of the drawer record in the current page, for prev/next. */
+  readonly selectedIndex = computed(() => {
+    const current = this.selected();
+    return current ? this.rows().findIndex((row) => row.user_id === current.user_id) : -1;
+  });
+  readonly hasPrev = computed(() => this.selectedIndex() > 0);
+  readonly hasNext = computed(() => {
+    const index = this.selectedIndex();
+    return index >= 0 && index < this.rows().length - 1;
+  });
+  /** Stable row identity so reloads keep the focused row. */
+  readonly accountRowId = (row: unknown): string => (row as AdminAccountRow).user_id;
+  /**
+   * One-click lock/unlock from the list. Each opens the same reasoned confirm as the drawer,
+   * never the drawer itself.
+   */
+  readonly accountRowActions = (row: unknown): readonly AdminTableRowAction[] => {
+    const account = row as AdminAccountRow;
+    if (!this.canMutate()) return [];
+    if (account.is_active) {
+      return [{ label: 'Khoá', tone: 'danger', disabled: this.actionSaving(), run: () => this.openActionFor(account, 'lock') }];
+    }
+    if (account.lock_type) {
+      return [{ label: 'Mở khoá', tone: 'ghost', disabled: this.actionSaving(), run: () => this.openActionFor(account, 'unlock') }];
+    }
+    return [];
+  };
 
   readonly accountColumns: readonly AdminTableColumn[] = [
     {
@@ -238,7 +289,7 @@ export class AdminErpAccountsPage {
     this.requestError.set(null);
     this.logsError.set(null);
     const tab = this.tab();
-    const pageParams = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
+    const pageParams = { limit: String(this.pageSize()), offset: adminOffset(this.page(), this.pageSize()) };
 
     forkJoin({
       accounts:
@@ -253,7 +304,7 @@ export class AdminErpAccountsPage {
       requests:
         tab === 'promotions'
           ? this.api
-              .listRoleRequests({ status: 'pending', limit: String(this.pageSize), offset: adminOffset(this.requestPage(), this.pageSize) })
+              .listRoleRequests({ status: 'pending', limit: String(this.pageSize()), offset: adminOffset(this.requestPage(), this.pageSize()) })
               .pipe(
                 catchError((error: unknown) => {
                   this.requestError.set(adminErrorMessage(error, 'Không tải được yêu cầu nâng quyền.'));
@@ -264,7 +315,7 @@ export class AdminErpAccountsPage {
       logs:
         tab === 'logs'
           ? this.api
-              .listAccountAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize) })
+              .listAccountAuditLogs({ limit: String(this.pageSize()), offset: adminOffset(this.logsPage(), this.pageSize()) })
               .pipe(
                 catchError((error: unknown) => {
                   this.logsError.set(adminErrorMessage(error, 'Không tải được nhật ký tài khoản.'));
@@ -379,6 +430,14 @@ export class AdminErpAccountsPage {
    */
   openLog(row: unknown): void {
     this.selectedLog.set(row as AdminAuditRow);
+  }
+
+  /**
+   * Opens the lock/unlock/role modal for a specific account (e.g. from row quick actions).
+   */
+  openActionFor(account: AdminAccountRow, type: Exclude<AccountAction, null>): void {
+    this.selected.set(account);
+    this.openAction(type);
   }
 
   /**

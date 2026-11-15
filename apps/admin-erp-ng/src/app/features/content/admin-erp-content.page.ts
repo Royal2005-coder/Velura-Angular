@@ -114,6 +114,7 @@ export class AdminErpContentPage {
   private readonly session = inject(AdminErpSessionService);
 
   readonly tab = signal<ContentTab>('all');
+  readonly viewMode = signal<'table' | 'cards'>('cards');
   readonly search = signal('');
   readonly rows = signal<AdminBlogRow[]>([]);
   readonly total = signal(0);
@@ -243,7 +244,8 @@ export class AdminErpContentPage {
       key: 'title',
       label: 'Bài viết',
       value: (row) => (row as AdminBlogRow).title,
-      image: (row) => (row as AdminBlogRow).image_url || (row as AdminBlogRow).og_image_url || '',
+      image: (row) => this.blogCover(row as AdminBlogRow),
+      imageRatio: '16:9',
       truncate: '280px',
     },
     { key: 'slug', label: 'Slug', value: (row) => (row as AdminBlogRow).slug || '—', mono: true, truncate: '180px' },
@@ -456,6 +458,29 @@ export class AdminErpContentPage {
    * Opens the editor for one existing post, carrying its version for optimistic locking.
    * Posts authored before the rich editor are converted from plain text once, in memory.
    */
+  /**
+   * Resolves a sharp cover image for the blog post, stripping legacy /src/ prefix and applying brand fallback.
+   */
+  blogCover(row: AdminBlogRow): string {
+    const raw = String(row.image_url || row.og_image_url || '').trim();
+    if (raw) {
+      return raw.startsWith('/src/assets/') ? raw.slice(4) : raw;
+    }
+    const cat = String(row.category_slug || '').toLowerCase();
+    if (cat === 'trend') return '/assets/images/collections/the-afterglow-decor.png';
+    if (cat === 'style') return '/assets/images/collections/weekend-escape-decor.png';
+    if (cat === 'sustainable') return '/assets/images/collections/soft-ceremony-decor.png';
+    if (cat === 'event') return '/assets/images/collections/midnight-mirage-decor.png';
+    return '/assets/images/collections/the-urban-rhythm-decor.png';
+  }
+
+  /**
+   * Toggles between grid card view and table view.
+   */
+  setViewMode(mode: 'table' | 'cards'): void {
+    this.viewMode.set(mode);
+  }
+
   openEdit(row: unknown): void {
     const blog = row as AdminBlogRow;
     if (!this.canUpdate()) return;

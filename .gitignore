@@ -28,6 +28,7 @@ __pycache__/
 *.pyc
 ~$*
 .pi/
+apps/admin-erp-ng/public/assets
 .agents/
 .claude/
 skills-lock.json

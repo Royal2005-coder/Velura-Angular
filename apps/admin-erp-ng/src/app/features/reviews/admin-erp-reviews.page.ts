@@ -141,26 +141,20 @@ export class AdminErpReviewsPage {
       key: 'rating',
       label: 'Đánh giá',
       value: (row) => `${(row as AdminReviewRow).rating || 5} ★`,
-      badge: (row) => {
-        const r = (row as AdminReviewRow).rating || 5;
-        const tone = r <= 2 ? 'danger' : (r === 3 ? 'warning' : 'success');
-        return { label: `${r} ★`, tone };
-      },
+      stars: (row) => (row as AdminReviewRow).rating || 5,
     },
     {
       key: 'review',
       label: 'Nội dung',
       value: (row) => this.commentOf(row as AdminReviewRow),
-      truncate: '280px',
+      truncate: '320px',
+      lineClamp: 2,
     },
     {
       key: 'media',
       label: 'Ảnh đính kèm',
       value: (row) => ((row as AdminReviewRow).images?.length ? `${(row as AdminReviewRow).images!.length} ảnh` : '—'),
-      badge: (row) =>
-        (row as AdminReviewRow).images?.length
-          ? { label: `📷 ${(row as AdminReviewRow).images!.length} ảnh`, tone: 'neutral' as const }
-          : null,
+      images: (row) => (row as AdminReviewRow).images || [],
     },
     {
       key: 'customer',

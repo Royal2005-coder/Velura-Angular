@@ -35,6 +35,7 @@ import { AdminErpDataTable } from '../../shared/ui/admin-data-table';
 import { AdminErpModal } from '../../shared/ui/admin-modal';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 import type { AdminTableColumn } from '../../shared/ui/admin-data-table';
+import { AdminIcon } from '../../shared/admin-icon';
 import { ProductGalleryComponent } from './product-gallery.component';
 
 const TONE_OPTIONS = [
@@ -73,7 +74,7 @@ type EditorSection = 'info' | 'variants' | 'content' | 'gallery' | 'combo';
  */
 @Component({
   selector: 'app-erp-product-editor',
-  imports: [AdminErpModal, AdminErpTabs, AdminErpDataTable, ProductGalleryComponent],
+  imports: [AdminErpModal, AdminErpTabs, AdminErpDataTable, ProductGalleryComponent, AdminIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './product-editor.component.html',
   styleUrl: './product-editor.component.scss',
@@ -183,7 +184,40 @@ export class ProductEditorComponent {
     return clashes.length ? `${SKU_DUPLICATE_MESSAGE} (${clashes.join(', ')})` : null;
   });
   readonly lowStockVariants = computed(() => lowStockVariants(this.variants()));
-  readonly priceInvalid = computed(() => this.salePrice() > this.basePrice());
+  
+  readonly discountInfo = computed(() => {
+    const base = Number(this.basePrice() || 0);
+    const sale = Number(this.salePrice() || 0);
+
+    if (base <= 0 && sale <= 0) {
+      return { hasDiscount: false, isHigher: false, text: 'Chưa thiết lập giá' };
+    }
+    if (sale > 0 && base > 0 && sale < base) {
+      const diff = base - sale;
+      const pct = Math.round((diff / base) * 100);
+      return {
+        hasDiscount: true,
+        isHigher: false,
+        text: `Giảm ${pct}% (-${adminMoney(diff)})`
+      };
+    }
+    if (sale > 0 && base > 0 && sale > base) {
+      const diff = sale - base;
+      return {
+        hasDiscount: false,
+        isHigher: true,
+        text: `Giá bán cao hơn mặc định (+${adminMoney(diff)})`
+      };
+    }
+    return { hasDiscount: false, isHigher: false, text: 'Giá chuẩn (Không giảm giá)' };
+  });
+
+  readonly formatPrice = adminMoney;
+
+  readonly priceInvalid = computed(() => {
+    return this.basePrice() < 0 || this.salePrice() < 0;
+  });
+
   readonly priceChanged = computed(() => {
     const product = this.current();
     if (!product || this.isCreate()) {
@@ -216,6 +250,7 @@ export class ProductEditorComponent {
   readonly canSave = computed(() => {
     const images = this.images();
     const needsImage = this.isCreate() ? this.status() === 'on_sale' : true;
+    const priceValid = this.isCreate() || this.priceChanged() ? !this.priceInvalid() : true;
     return (
       !this.saving() &&
       !this.galleryBusy() &&
@@ -223,7 +258,7 @@ export class ProductEditorComponent {
       this.categoryId().length > 0 &&
       images.length <= MAX_PRODUCT_IMAGES &&
       (!needsImage || images.length > 0) &&
-      !this.priceInvalid() &&
+      priceValid &&
       !this.missingApproval()
     );
   });

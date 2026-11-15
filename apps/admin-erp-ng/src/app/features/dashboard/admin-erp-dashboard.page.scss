@@ -1,5 +1,7 @@
 :host {
   display: block;
+  width: 100%;
+  min-width: 0;
 }
 
 .bi-greeting {
@@ -7,3 +9,762 @@
   font-weight: 600;
   letter-spacing: -0.015em;
 }
+/* ============================================================
+   B1 Revenue & Growth Enterprise Enhancements
+   - Multi-granularity pills (Day/Week/Month/Quarter)
+   - 3-tier Insight Panel (Peek Tooltip, Waterfall, Drivers, Recs)
+   - Cross-filtering & Interactive dimming
+   ============================================================ */
+
+.b1-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 1px 0 4px 0;
+  flex-wrap: nowrap;
+  min-width: 0;
+
+  .b1-filter-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+  }
+
+  .b1-filter-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--text-3, #94A3B8);
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin-right: 2px;
+  }
+
+  .b1-divider {
+    width: 1px;
+    height: 12px;
+    background: var(--border, #E2E8F0);
+    margin: 0 4px;
+    flex-shrink: 0;
+  }
+
+  .b1-pill-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: transparent;
+  }
+
+  .b1-pill {
+    border: 0 !important;
+    outline: none !important;
+    background: transparent;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: inherit;
+    color: var(--text-2, #64748B);
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    line-height: 16px;
+    transition: all 0.15s ease;
+
+    &:hover {
+      color: var(--text-1, #0F172A);
+      background: rgba(0, 0, 0, 0.04);
+    }
+
+    &.is-active,
+    &[aria-selected="true"] {
+      color: var(--brand, #7D263D);
+      background: #FFF1F2;
+      font-weight: 600;
+    }
+  }
+}
+
+
+
+.bi-chip--independent {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #7D263D;
+  background: #FFF5F7;
+  border: 1px solid #F2CCD7;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+
+
+.b1-chart-container {
+  position: relative;
+  width: 100%;
+  flex: 1 1 0;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  .b1-echarts-canvas {
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1 1 0;
+    min-height: 180px;
+    display: block;
+  }
+}
+
+/* Cross-filtering dimming */
+.is-dimmed {
+  opacity: 0.35 !important;
+  transition: opacity 0.2s ease;
+}
+
+.is-selected-highlight {
+  filter: drop-shadow(0 0 4px rgba(125, 38, 61, 0.45));
+}
+
+/* ============================================================
+   B2 - B5 Enterprise Clean UI & Progressive Disclosure
+   ============================================================ */
+
+.bi-rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.bi-rank-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 40px 52px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: var(--surface-2, #FFF5F7);
+  }
+
+  &__name {
+    font-weight: 600;
+    color: var(--text-1, #0F172A);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__track {
+    height: 8px;
+    background: var(--surface-2, #F1F5F9);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  &__bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+
+  &__pct {
+    font-weight: 700;
+    text-align: right;
+    color: var(--text-1, #0F172A);
+  }
+
+  &__trend {
+    font-weight: 700;
+    text-align: right;
+    font-size: 10.5px;
+
+    &.is-up {
+      color: var(--ok, #2E7D65);
+    }
+    &.is-down {
+      color: var(--bad, #B4233D);
+    }
+  }
+}
+
+/* B3 Pareto Dual Stacked Bars */
+.bi-pareto-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+
+  &__bar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  &__bar-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-2, #64748B);
+  }
+
+  &__stacked {
+    display: flex;
+    height: 14px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #E2E8F0;
+  }
+
+  &__seg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    font-size: 9.5px;
+    font-weight: 700;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: opacity 0.15s ease;
+
+    &:hover {
+      opacity: 0.9;
+    }
+  }
+
+  &__alert-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--bad, #B4233D);
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-top: 2px;
+
+    &:hover {
+      background: #FEE2E2;
+      border-color: #FCA5A5;
+    }
+  }
+}
+
+.bi-voucher-row__dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+
+  &.is-danger {
+    background: var(--bad, #B4233D);
+  }
+  &.is-warning {
+    background: var(--warn, #B96A25);
+  }
+}
+
+/* Modal Tab 0 "Điểm cần chú ý" Notice Strip */
+.bi-notice-strip {
+  background: #FFF5F7;
+  border: 1px solid #F2CCD7;
+  border-left: 3.5px solid #7D263D;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+
+  &__title {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #7D263D;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  &__list {
+    margin: 0;
+    padding-left: 16px;
+    font-size: 11px;
+    color: #554447;
+    line-height: 1.45;
+
+    li {
+      margin-bottom: 2px;
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+  }
+}
+
+/* ============================================================== */
+/* POWER BI STANDARD CHART SYSTEM (B1–B5)                        */
+/* ============================================================== */
+
+/* B2: Coordinate Grid Chart with Left Y-Axis & Tabular Alignment */
+.bi-grid-chart {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+
+  &__axis-head {
+    display: grid;
+    grid-template-columns: 78px 1fr 40px 54px;
+    align-items: center;
+    gap: 8px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--text-2, #64748B);
+    padding: 0 4px 4px;
+    border-bottom: 1px solid var(--border, #F1F5F9);
+    margin-bottom: 4px;
+  }
+
+  &__axis-lbl {
+    text-align: left;
+    padding-right: 6px;
+    border-right: 1.5px solid transparent;
+  }
+
+  &__scale-ticks {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9.5px;
+    color: #94A3B8;
+    padding: 0 2px;
+  }
+
+  &__axis-val {
+    text-align: right;
+  }
+
+  &__axis-trend {
+    text-align: right;
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+  }
+
+  &__row {
+    display: grid;
+    grid-template-columns: 78px 1fr 40px 54px;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    padding: 2.5px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: var(--surface-2, #FFF5F7);
+    }
+  }
+
+  &__name {
+    font-weight: 600;
+    color: var(--text-1, #0F172A);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+    padding-right: 6px;
+    border-right: 1.5px solid var(--border, #CBD5E1);
+  }
+
+  &__track {
+    height: 12px;
+    background: transparent;
+    position: relative;
+    border-radius: 0 3px 3px 0;
+    background-image: repeating-linear-gradient(to right, transparent, transparent calc(25% - 1px), #F1F5F9 calc(25% - 1px), #F1F5F9 25%);
+    display: flex;
+    align-items: center;
+  }
+
+  &__bar {
+    height: 10px;
+    border-radius: 0 3px 3px 0;
+    transition: width 0.3s ease;
+  }
+
+  &__pct {
+    font-weight: 700;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-1, #0F172A);
+  }
+
+  &__trend {
+    font-weight: 600;
+    text-align: right;
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+
+    &.is-up {
+      color: var(--ok, #2E7D65);
+    }
+    &.is-down {
+      color: var(--bad, #B4233D);
+    }
+  }
+}
+
+/* B3: Pareto Dual Stacked Bars with Shared Y-Axis Coordinate */
+.bi-stacked-coord {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__axis-label {
+    width: 76px;
+    text-align: left;
+    padding-right: 6px;
+    border-right: 1.5px solid var(--border, #CBD5E1);
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--text-1, #0F172A);
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  &__track {
+    flex: 1;
+    height: 18px;
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    background: #E2E8F0;
+  }
+}
+
+/* B4 & B5: Reference Line Charts (Continuous Threshold) */
+.bi-ref-chart {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--text-2, #64748B);
+    padding: 0 4px 4px;
+    border-bottom: 1px solid var(--border, #F1F5F9);
+    margin-bottom: 4px;
+
+    &-name {
+      text-align: left;
+      padding-right: 6px;
+      flex-shrink: 0;
+    }
+
+    &-mult {
+      width: 44px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    &-track {
+      flex: 1;
+      position: relative;
+      height: 14px;
+    }
+
+    &-val {
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    &-dot {
+      width: 14px;
+      flex-shrink: 0;
+    }
+  }
+
+  &__body {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+  }
+
+  /* Single Continuous Vertical Reference Line across entire chart */
+  &__v-line {
+    position: absolute;
+    top: -4px;
+    bottom: 0;
+    width: 0;
+    border-left: 1.5px dashed;
+    pointer-events: none;
+    z-index: 5;
+
+    &--warn {
+      border-color: #B96A25;
+    }
+    &--danger {
+      border-color: #B4233D;
+    }
+  }
+
+  &__tag {
+    position: absolute;
+    transform: translateX(-50%);
+    top: -1px;
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+    line-height: 1.2;
+
+    &--warn {
+      color: #B96A25;
+      background: #FEF7ED;
+      border: 1px solid #FED7AA;
+    }
+    &--danger {
+      color: #B4233D;
+      background: #FFF5F7;
+      border: 1px solid #F2CCD7;
+    }
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    padding: 2.5px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: var(--surface-2, #FFF5F7);
+    }
+  }
+
+  &__name {
+    font-weight: 600;
+    color: var(--text-1, #0F172A);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+    padding-right: 6px;
+    border-right: 1.5px solid var(--border, #CBD5E1);
+    flex-shrink: 0;
+  }
+
+  &__mult {
+    width: 44px;
+    text-align: center;
+    font-weight: 700;
+    color: var(--brand, #7D263D);
+    flex-shrink: 0;
+    font-size: 11px;
+  }
+
+  &__track {
+    flex: 1;
+    height: 12px;
+    background: transparent;
+    position: relative;
+    border-radius: 0 3px 3px 0;
+    background-image: repeating-linear-gradient(to right, transparent, transparent calc(25% - 1px), #F1F5F9 calc(25% - 1px), #F1F5F9 25%);
+    display: flex;
+    align-items: center;
+  }
+
+  &__bar {
+    height: 10px;
+    border-radius: 0 3px 3px 0;
+    transition: width 0.3s ease;
+  }
+
+  &__val {
+    text-align: right;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-1, #0F172A);
+    flex-shrink: 0;
+  }
+
+  &__dot {
+    width: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+}
+
+/* Same-line Layout (Flexbox) for Dynamic Subtitles & Compact Tabs */
+.bi-card__subrow {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 24px !important;
+  margin-top: 2px !important;
+  margin-bottom: 8px !important;
+
+  p.text-xs.text-gray-500,
+  .bi-card__sub {
+    display: block !important;
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+    color: var(--text-3, #64748B) !important;
+    margin: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+}
+
+/* B3, B4, B5: Equal height cards (100% height) with anchored content (justify-content: flex-start) */
+.bento-detail-1,
+.bento-detail-2,
+.bento-detail-3 {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  align-self: stretch !important;
+  padding-bottom: 14px !important;
+
+  .bi-card__head,
+  .bi-card__subrow {
+    flex-shrink: 0 !important;
+  }
+
+  .bi-body {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+  }
+
+  .bi-stacked-coord {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    height: auto !important;
+    flex: none !important;
+
+    &__row {
+      width: 100% !important;
+    }
+
+    .bi-pareto-card__alert-row {
+      margin-top: 10px !important;
+      align-self: flex-start !important;
+    }
+  }
+
+  .bi-ref-chart {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+    height: auto !important;
+    flex: none !important;
+
+    &__head {
+      margin-bottom: 2px !important;
+    }
+
+    &__body {
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: flex-start !important;
+      gap: 10px !important;
+    }
+
+    &__row {
+      height: 28px !important;
+      padding: 3px 6px !important;
+    }
+  }
+}
+
+.bi-seg--compact {
+  display: inline-flex;
+  align-items: center;
+  padding: 1.5px;
+  background: var(--track, #F1F5F9);
+  border-radius: 6px;
+  gap: 2px;
+  flex-shrink: 0;
+
+  button {
+    height: 22px;
+    padding: 0 7px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 4px;
+    white-space: nowrap;
+    border: 0;
+    background: transparent;
+    color: var(--text-3, #64748B);
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    &[aria-selected="true"],
+    &.is-active {
+      background: #FFFFFF;
+      color: var(--brand, #7D263D);
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+    }
+  }
+}
+
+
+

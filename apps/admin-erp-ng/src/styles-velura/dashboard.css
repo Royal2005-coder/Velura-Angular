@@ -1638,6 +1638,13 @@ svg.admin-line-icon,
   color: var(--erp-ink);
 }
 
+.bi-executive-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
 /* ------------------------------------------------------------
    Widget B2: Margin Matrix & Feature Transfer Styles
    ------------------------------------------------------------ */

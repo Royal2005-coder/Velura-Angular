@@ -130,7 +130,7 @@
               </div>
 
               <div class="preview-card__media">
-                <img [src]="preview()" alt="Ảnh bạn chọn trước khi thử đồ" class="preview-img" />
+                <img loading="lazy" decoding="async" [src]="preview()" alt="Ảnh bạn chọn trước khi thử đồ" class="preview-img" />
 
                 <!-- SCANNING LASER BEAM EFFECT DURING LOADING -->
                 @if (busy()) {
@@ -151,75 +151,8 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"></circle><path d="M12 13v8"></path><path d="M9 18h6"></path></svg>
               Người mẫu Nữ Studio
             </span>
-            <span class="studio-subtitle-text">Bộ sưu tập bối cảnh thời trang nữ Velura</span>
+            <span class="studio-subtitle-text">Chọn dáng người mẫu để thử đồ. Kết quả gồm album 360° và các dáng đứng.</span>
           </div>
-          <!-- SINGLE WRAPPED ROW OF SCENE PILLS -->
-          <div class="scene-pills">
-            <button
-              type="button"
-              class="scene-pill"
-              [class.scene-pill--active]="selectedScene() === 'all'"
-              [disabled]="busy()"
-              (click)="switchScene('all')"
-            >Tất cả</button>
-            <button
-              type="button"
-              class="scene-pill"
-              [class.scene-pill--active]="selectedScene() === 'basic'"
-              [disabled]="busy()"
-              (click)="switchScene('basic')"
-            >Studio Chuẩn</button>
-            <button
-              type="button"
-              class="scene-pill"
-              [class.scene-pill--active]="selectedScene() === 'spring'"
-              [disabled]="busy()"
-              (click)="switchScene('spring')"
-            >Mùa Xuân</button>
-            <button
-              type="button"
-              class="scene-pill"
-              [class.scene-pill--active]="selectedScene() === 'summer'"
-              [disabled]="busy()"
-              (click)="switchScene('summer')"
-            >Mùa Hạ</button>
-            <button
-              type="button"
-              class="scene-pill"
-              [class.scene-pill--active]="selectedScene() === 'autumn'"
-              [disabled]="busy()"
-              (click)="switchScene('autumn')"
-            >Mùa Thu</button>
-            <button
-              type="button"
-              class="scene-pill"
-              [class.scene-pill--active]="selectedScene() === 'winter'"
-              [disabled]="busy()"
-              (click)="switchScene('winter')"
-            >Mùa Đông</button>
-            <button
-              type="button"
-              class="scene-pill"
-              [class.scene-pill--active]="selectedScene() === 'work'"
-              [disabled]="busy()"
-              (click)="switchScene('work')"
-            >Công sở</button>
-            <button
-              type="button"
-              class="scene-pill"
-              [class.scene-pill--active]="selectedScene() === 'street'"
-              [disabled]="busy()"
-              (click)="switchScene('street')"
-            >Dạo phố</button>
-            <button
-              type="button"
-              class="scene-pill"
-              [class.scene-pill--active]="selectedScene() === 'party'"
-              [disabled]="busy()"
-              (click)="switchScene('party')"
-            >Dạ tiệc</button>
-          </div>
-
           <!-- CLEAN STUDIO CARDS GRID -->
           <div class="studio-grid">
             @for (asset of filteredStudioAssets(); track asset.id) {
@@ -251,8 +184,7 @@
             </div>
           } @else if (studioImage()) {
             <div class="studio-preview-container">
-              <img
-                class="studio-preview-img"
+              <img loading="lazy" decoding="async" class="studio-preview-img"
                 [src]="studioImage()"
                 alt="Người mẫu studio được chọn"
                 (error)="studioPreviewFailed()"
@@ -397,26 +329,10 @@
             </div>
           }
 
-          <div class="result-scenario-bar">
-            <span class="scenario-bar-title">Bối cảnh:</span>
-            <div class="scene-pills scene-pills--result">
-              @for (sc of availableScenarios; track sc.id) {
-                <button
-                  type="button"
-                  [class.scene-pill--active]="activeScenario().id === sc.id"
-                  (click)="switchScene(sc.id)"
-                  title="{{ sc.description }}"
-                >
-                  {{ sc.label }}
-                </button>
-              }
-            </div>
-          </div>
-
           <div
             class="stage-360-container"
             [class.stage-360-container--interactive]="spinnable()"
-            [style.background]="activeScenario().wallBackTexture"
+            [style.background]="activeScenario.wallBackTexture"
             [attr.tabindex]="spinnable() ? 0 : null"
             [attr.role]="spinnable() ? 'slider' : null"
             [attr.aria-label]="spinnable() ? 'Xoay góc nhìn 360°' : null"
@@ -430,13 +346,12 @@
             (pointercancel)="onStagePointerUp($event)"
             (keydown)="onStageKeydown($event)"
           >
-            <div class="stage-360__floor" [style.background]="activeScenario().floorTexture" aria-hidden="true"></div>
+            <div class="stage-360__floor" [style.background]="activeScenario.floorTexture" aria-hidden="true"></div>
             <span class="stage-360__tag">
               {{ showOriginal() ? 'Ảnh gốc' : has3d() ? '360° · ' + frames3d().length + ' góc' : 'Ảnh thử đồ AI' }}
             </span>
             <div class="stage-360__figure" [style.transform]="'scale(' + zoomLevel() + ')'">
-              <img
-                class="stage-360__img"
+              <img loading="lazy" decoding="async" class="stage-360__img"
                 [src]="currentDisplayImage()"
                 [alt]="showOriginal() ? 'Ảnh gốc trước khi thử đồ' : 'Kết quả thử đồ AI'"
                 draggable="false"
@@ -446,7 +361,6 @@
             @if (spinnable()) {
               <div class="stage-360-hud">
                 <span class="angle-indicator-pill">{{ angleDisplayLabel() }}</span>
-                <span class="scenic-tag-badge">{{ activeScenario().label }}</span>
               </div>
             }
           </div>

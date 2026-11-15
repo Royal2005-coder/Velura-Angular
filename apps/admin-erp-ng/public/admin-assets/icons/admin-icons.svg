@@ -5,7 +5,9 @@
   <symbol id="box" viewBox="0 0 24 24"><path d="m3 7 9-4 9 4-9 4-9-4Z M3 7v10l9 4 9-4V7M12 11v10"/></symbol>
   <symbol id="cart" viewBox="0 0 24 24"><path d="M3 4h2l2.2 11h10.6L20 7H6M9 20h.01M17 20h.01"/><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/></symbol>
   <symbol id="star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></symbol>
-  <symbol id="return" viewBox="0 0 24 24"><path d="M9 7 4 12l5 5M4 12h10a6 6 0 1 1 0-12"/></symbol>
+  <symbol id="return" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
+  <symbol id="percent" viewBox="0 0 24 24"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></symbol>
+  <symbol id="chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
   <symbol id="tag" viewBox="0 0 24 24"><path d="M20 13 13 20 4 11V4h7l9 9Z"/><circle cx="8.5" cy="8.5" r="1"/></symbol>
   <symbol id="log" viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6zM9 11h6M9 15h6M9 7h2"/></symbol>
   <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>

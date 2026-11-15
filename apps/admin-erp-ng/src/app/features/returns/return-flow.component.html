@@ -103,8 +103,8 @@
       @if (qrFacts() && !qrFacts()?.shipperName) {
         <label class="erp-field"><span>Người giao nhận (nhãn QR không in tên)</span><input class="erp-input" [value]="pickedUpBy()" (input)="setText('pickedUpBy', $event)" placeholder="Chỉ điền khi nhãn không có tên người giao" /></label>
       }
-      <label class="erp-field"><span>Ảnh bàn giao kiện hàng (bắt buộc)</span><input type="file" accept="image/*" multiple (change)="pickFile('photos', $event)" /><small>{{ pickupPhotos().length }} ảnh đã chọn</small></label>
-      <label class="erp-field"><span>Video bàn giao (không bắt buộc)</span><input type="file" accept="video/mp4,video/webm" (change)="pickFile('video', $event)" /><small>{{ pickupVideo()?.name }}</small></label>
+      <label class="erp-field"><span>Ảnh bàn giao kiện hàng <span class="erp-required" aria-hidden="true">*</span></span><input type="file" accept="image/*" multiple (change)="pickFile('photos', $event)" /><small>{{ pickupPhotos().length }} ảnh đã chọn</small></label>
+      <label class="erp-field"><span>Video bàn giao</span><input type="file" accept="video/mp4,video/webm" (change)="pickFile('video', $event)" /><small>{{ pickupVideo()?.name }}</small></label>
     }
     @if (flow() === 'receive') {
       <p class="flow-hint">Nhận {{ receivedQuantity() }} sản phẩm. Có thể giảm số lượng xử lý phía trên để nhận riêng phần hợp lệ.</p>
@@ -145,7 +145,7 @@
     }
     @if (flow() === 'receive' || flow() === 'manual' || flow() === 'approve' || flow() === 'ship_exchange' || flow() === 'complete_exchange') {
       <div class="erp-field">
-        <span>{{ flow() === 'manual' ? 'Chứng từ đối soát / chuyển khoản' : flow() === 'receive' ? 'Ảnh kiểm hàng tại kho (bắt buộc)' : 'Ảnh minh chứng xác nhận (bắt buộc)' }}</span>
+        <span>{{ flow() === 'manual' ? 'Chứng từ đối soát / chuyển khoản' : flow() === 'receive' ? 'Ảnh kiểm hàng tại kho' : 'Ảnh minh chứng xác nhận' }} <span class="erp-required" aria-hidden="true">*</span></span>
         <div class="custom-file-row">
           <label class="erp-btn erp-btn--sm custom-file-trigger">
             <input type="file" accept="image/*" class="erp-sr-only" (change)="pickFile('proof', $event)" />
@@ -180,7 +180,7 @@
           }
         </div>
       </div>
-      <label class="erp-field"><span>{{ needsReason() ? 'Lý do / nội dung xác nhận (bắt buộc)' : 'Ghi chú xử lý' }}</span><textarea class="erp-input" rows="3" [value]="note()" (input)="setText('note', $event)"></textarea>@if (needsReason()) { <small>Tối thiểu {{ minNote }} ký tự. Duyệt sau cuộc gọi không nghe máy phải nêu rõ căn cứ.</small> }</label>
+      <label class="erp-field"><span>{{ needsReason() ? 'Lý do / nội dung xác nhận' : 'Ghi chú xử lý' }}@if (needsReason()) { <span class="erp-required" aria-hidden="true">*</span> }</span><textarea class="erp-input" rows="3" [value]="note()" (input)="setText('note', $event)"></textarea>@if (needsReason()) { <small>Tối thiểu {{ minNote }} ký tự. Duyệt sau cuộc gọi không nghe máy phải nêu rõ căn cứ.</small> }</label>
     </div>
     @if (error()) { <p class="flow-warning" role="alert">{{ error() }}</p> }
   }

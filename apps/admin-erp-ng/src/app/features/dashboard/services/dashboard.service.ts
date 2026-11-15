@@ -7,6 +7,7 @@ import {
   ModuleHealthResponse,
   SlaApiResponse
 } from '../models/sla-metric.model';
+import { MacroKpiResponse } from '../models/macro-kpi.model';
 
 /**
  * Service Model phụ trách truy xuất số liệu phân tích Dashboard & SLA từ API Backend.
@@ -16,6 +17,14 @@ import {
 export class DashboardService {
   private readonly http = inject(HttpClient);
   private readonly apiUrl = environment.apiUrl;
+
+  /**
+   * Truy xuất 5 Macro KPIs cấp cao nhất (Chuẩn CDO) với Real Data từ PostgreSQL & Cache 10 phút.
+   * Endpoint đích: GET /api/v1/analytics/macro-kpis
+   */
+  getMacroKpis(params: Record<string, string> = {}): Observable<MacroKpiResponse> {
+    return this.http.get<MacroKpiResponse>(`${this.apiUrl}/api/v1/analytics/macro-kpis`, { params });
+  }
 
   /**
    * Truy xuất số liệu SLA vận hành 30 ngày theo vùng miền từ Materialized View Fact Table (Widget Q2).

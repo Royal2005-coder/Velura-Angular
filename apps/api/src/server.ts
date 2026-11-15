@@ -6,6 +6,7 @@ import { completeAdminPasswordSignIn, recordAdminSignOut, revokeAdminSession } f
 import { buildAuthContext, capabilitiesForRole, requireAdmin, requireAuthenticated, requirePermission } from "./rbac.js";
 import { buildDashboardSummary } from "./dashboard.js";
 import { handleDashboardRoute } from "./dashboard-router.js";
+import { handleDashboardSlaRoute } from "./features/dashboard/dashboard.routes.js";
 import { startMvRefreshJob } from "./features/dashboard/dashboard.cron.js";
 import { handleInsightsRoute } from "./insights-router.js";
 import { createAccountRepository } from "./accounts/account-repository.js";
@@ -378,6 +379,30 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       if (handled) return;
     }
 
+    if (parts[1] === "v1" && parts[2] === "analytics") {
+      const handled = await handleDashboardSlaRoute({
+        req,
+        res,
+        url,
+        parts,
+        context,
+        headers: corsHeaders
+      });
+      if (handled) return;
+    }
+
+    if (parts[1] === "dashboard") {
+      const handled = await handleDashboardSlaRoute({
+        req,
+        res,
+        url,
+        parts,
+        context,
+        headers: corsHeaders
+      });
+      if (handled) return;
+    }
+
     if (parts[1] === "v1" && parts[2] === "admin") {
       requireAdmin(context);
       if (["POST", "PATCH", "DELETE"].includes(req.method || "")) {
@@ -566,7 +591,7 @@ function validatedOAuthRedirect(raw: string): string {
       "https://admin.royalai.dev",
     ].includes(target.origin) ||
     (config.nodeEnv !== "production" &&
-      /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(target.origin));
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(target.origin));
 
   if (!isKnownOrigin || target.pathname !== "/auth/callback") {
     throw new HttpError(

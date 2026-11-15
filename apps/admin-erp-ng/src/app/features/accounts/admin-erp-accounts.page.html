@@ -1,7 +1,7 @@
 <app-erp-page-header
   eyebrow="Khách hàng & nhân sự"
   title="Tài khoản & phân quyền"
-  subtitle="Danh bạ khách hàng, nhân sự vận hành và yêu cầu nâng quyền. Mọi thao tác ghi đều dùng expectedVersion và audit của API hiện tại."
+  subtitle="Danh bạ khách hàng, nhân sự vận hành và phân quyền truy cập hệ thống."
 >
   <div actions>
     @if (canMutate()) {
@@ -231,14 +231,14 @@
       </label>
       @if (lockType() === 'temporary') {
         <label class="erp-field">
-          <span>Khóa đến</span>
+          <span>Khóa đến <span class="erp-required" aria-hidden="true">*</span></span>
           <input class="erp-input" name="lockedUntil" type="datetime-local" required />
         </label>
       }
     }
     @if (actionType() !== 'role') {
       <label class="erp-field">
-        <span>Lý do, tối thiểu 11 từ</span>
+        <span>Lý do, tối thiểu 11 từ <span class="erp-required" aria-hidden="true">*</span></span>
         <textarea class="erp-input" name="reason" rows="4" required (input)="onReasonInput($event)"></textarea>
         <small class="erp-hint">{{ wordHint() }}</small>
       </label>
@@ -270,12 +270,12 @@
     <div class="account-form__actions"><button class="erp-btn erp-btn--primary" type="button" (click)="closeCreate()">Xong</button></div>
   } @else {
     <form class="account-form" (submit)="submitCreate($event)" (input)="markDirty()" (change)="markDirty()">
-      <label class="erp-field"><span>Họ tên</span><input class="erp-input" name="fullName" type="text" placeholder="VD: Nguyễn Văn A" required /></label>
-      <label class="erp-field"><span>Email</span><input class="erp-input" name="email" type="email" placeholder="VD: admin@velura.vn" /></label>
+      <label class="erp-field"><span>Họ tên <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="fullName" type="text" placeholder="VD: Nguyễn Văn A" required /></label>
+      <label class="erp-field"><span>Email <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="email" type="email" placeholder="VD: admin@velura.vn" required /></label>
       <label class="erp-field"><span>Số điện thoại</span><input class="erp-input" name="phone" type="tel" placeholder="VD: 0901234567" /></label>
       <label class="erp-field"><span>Mật khẩu</span><input class="erp-input" name="password" type="password" placeholder="Bỏ trống để hệ thống tự tạo" minlength="8" /></label>
       <label class="erp-field">
-        <span>Loại tài khoản</span>
+        <span>Loại tài khoản <span class="erp-required" aria-hidden="true">*</span></span>
         <select class="erp-select" name="role" [value]="createRole()" (change)="onCreateRole($event)">
           <option value="member">Thành viên</option>
           <option value="admin">Quản trị viên</option>

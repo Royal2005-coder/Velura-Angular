@@ -16,11 +16,19 @@ export interface AdminTableColumn {
   badge?: (row: unknown) => AdminTableCellBadge | null;
   /** Resolves a thumbnail URL for the cell; the column then renders image plus text. */
   image?: (row: unknown) => string;
+  /** Optional aspect ratio for column image: '1:1' (default) or '16:9' (banners/covers). */
+  imageRatio?: '1:1' | '16:9';
+  /** Resolves multiple image thumbnails (e.g. customer attachments in reviews), clickable for lightbox. */
+  images?: (row: unknown) => readonly string[];
+  /** Resolves numeric stars (1-5) for visual star rendering. */
+  stars?: (row: unknown) => number | null;
   mono?: boolean;
   align?: 'left' | 'right' | 'center';
   width?: string;
   /** Max cell width (e.g. '280px'); longer text is ellipsised and shown in full on hover/focus via title. */
   truncate?: string;
+  /** Optional multi-line clamping (default single line nowrap when truncate is set, or 2 lines when lineClamp=2). */
+  lineClamp?: number;
 }
 
 /** A quick action shown at the end of a row, so routine next steps don't require opening the detail drawer. */
@@ -105,13 +113,39 @@ export interface AdminTableRowAction {
                   >
                     @if (badgeFor(column, row); as badge) {
                       <app-erp-status-badge [label]="badge.label" [tone]="badge.tone" [dot]="true" />
+                    } @else if (imagesFor(column, row); as gallery) {
+                      @if (gallery.length) {
+                        <div class="cell-gallery">
+                          @for (img of gallery; track img; let idx = $index) {
+                            @if (idx < 3) {
+                              <button type="button" class="gallery-thumb-btn" (click)="$event.stopPropagation(); imageClick.emit(img)" title="Xem ảnh">
+                                <img [src]="img" alt="Ảnh đính kèm" class="gallery-thumb" loading="lazy" />
+                              </button>
+                            }
+                          }
+                          @if (gallery.length > 3) {
+                            <span class="gallery-more">+{{ gallery.length - 3 }}</span>
+                          }
+                        </div>
+                      } @else {
+                        <span class="cell-empty-dash">—</span>
+                      }
+                    } @else if (starsFor(column, row); as rating) {
+                      <span class="cell-stars" [attr.aria-label]="rating + ' sao'">
+                        <span class="cell-stars__icons">
+                          @for (star of [1, 2, 3, 4, 5]; track star) {
+                            <span class="star-icon" [class.is-filled]="star <= rating">★</span>
+                          }
+                        </span>
+                        <span class="cell-stars__val">{{ rating }}.0</span>
+                      </span>
                     } @else if (imageFor(column, row); as thumb) {
-                      <span class="cell-media">
+                      <span class="cell-media" [class.cell-media--16-9]="column.imageRatio === '16:9'">
                         <img [src]="thumb" alt="" loading="lazy" />
-                        <span>{{ column.value(row) }}</span>
+                        <span class="cell-media__text">{{ column.value(row) }}</span>
                       </span>
                     } @else {
-                      {{ column.value(row) }}
+                      <span [class.cell-clamped]="column.lineClamp === 2">{{ column.value(row) }}</span>
                     }
                   </td>
                 }
@@ -261,6 +295,91 @@ export interface AdminTableRowAction {
         border-radius: var(--erp-radius-sm);
         background: var(--erp-surface-muted);
       }
+      .cell-media--16-9 img {
+        width: 68px;
+        height: 38px;
+        flex: 0 0 68px;
+        aspect-ratio: 16 / 9;
+        border-radius: 6px;
+      }
+      .cell-media__text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cell-gallery {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .gallery-thumb-btn {
+        padding: 0;
+        margin: 0;
+        border: 1px solid var(--erp-line);
+        border-radius: 6px;
+        background: var(--erp-surface-muted);
+        cursor: pointer;
+        overflow: hidden;
+        display: inline-flex;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .gallery-thumb-btn:hover {
+        transform: scale(1.1);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+        border-color: var(--erp-accent);
+      }
+      .gallery-thumb {
+        width: 34px;
+        height: 34px;
+        object-fit: cover;
+        display: block;
+      }
+      .gallery-more {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--erp-surface-muted);
+        color: var(--erp-muted);
+        font-size: 10.5px;
+        font-weight: 700;
+        border: 1px solid var(--erp-line);
+      }
+      .cell-stars {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .cell-stars__icons {
+        display: inline-flex;
+        gap: 1px;
+        font-size: 13px;
+        color: #d1d5db;
+        line-height: 1;
+      }
+      .cell-stars__icons .star-icon.is-filled {
+        color: #f59e0b;
+      }
+      .cell-stars__val {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--erp-text);
+      }
+      .cell-empty-dash {
+        color: var(--erp-muted);
+      }
+      .cell-clamped {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        white-space: normal;
+        line-height: 1.42;
+        word-break: break-word;
+      }
     `,
   ],
 })
@@ -284,6 +403,8 @@ export class AdminErpDataTable {
 
   readonly retry = output<void>();
   readonly rowSelected = output<unknown>();
+  /** Emits an image URL when clicked in a cell gallery, for opening a full preview lightbox. */
+  readonly imageClick = output<string>();
 
   /**
    * Resolves a badge for one cell, or null when the cell renders as text.
@@ -298,6 +419,22 @@ export class AdminErpDataTable {
   imageFor(column: AdminTableColumn, row: unknown): string | null {
     const url = column.image ? column.image(row) : '';
     return url ? url : null;
+  }
+
+  /**
+   * Resolves multiple image thumbnails (e.g. customer attachments in reviews).
+   */
+  imagesFor(column: AdminTableColumn, row: unknown): readonly string[] | null {
+    const list = column.images ? column.images(row) : null;
+    return Array.isArray(list) && list.length ? list : null;
+  }
+
+  /**
+   * Resolves a numeric rating for visual star rendering.
+   */
+  starsFor(column: AdminTableColumn, row: unknown): number | null {
+    const s = column.stars ? column.stars(row) : null;
+    return typeof s === 'number' && Number.isFinite(s) ? s : null;
   }
 
   /** Stable identity for row DOM: the table's `rowId`, falling back to position. */

@@ -150,7 +150,7 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"></circle><path d="M12 13v8"></path><path d="M9 18h6"></path></svg>
               Người mẫu Nữ Studio
             </span>
-            <span class="studio-subtitle-text">AI thử trang phục đã chọn lần lượt trên 10 dáng của người mẫu.</span>
+            <span class="studio-subtitle-text">AI thử trang phục đã chọn lần lượt trên {{ poseSlots().length || 'các' }} dáng của người mẫu.</span>
           </div>
 
           <div class="studio-inputs">
@@ -173,11 +173,25 @@
               }
               <figcaption class="studio-input__caption">Người mẫu đứng thẳng</figcaption>
             </figure>
-            <figure class="studio-input studio-input--garment">
-              <div class="studio-garment-note">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 3 6l2 4 3-1v12h8V9l3 1 2-4-5-3a4 4 0 0 1-8 0Z"></path></svg>
-                <span>Trang phục theo màu và cỡ bạn đang chọn trên trang sản phẩm.</span>
-              </div>
+            <figure class="studio-input">
+              @if (garmentLoading()) {
+                <div class="studio-preview-placeholder">
+                  <span class="spinner-inline"></span> Đang tải sản phẩm…
+                </div>
+              } @else if (garmentImage()) {
+                <div class="studio-preview-container">
+                  <img loading="lazy" decoding="async" class="studio-preview-img"
+                    [src]="garmentImage()"
+                    alt="Sản phẩm và biến thể đã chọn"
+                    (error)="garmentFailed.set(true)"
+                  />
+                </div>
+              } @else {
+                <div class="studio-garment-note">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 3 6l2 4 3-1v12h8V9l3 1 2-4-5-3a4 4 0 0 1-8 0Z"></path></svg>
+                  <span>{{ garmentFailed() ? 'Chưa tải được ảnh sản phẩm. Trang phục vẫn lấy theo màu và cỡ bạn đang chọn.' : 'Trang phục theo màu và cỡ bạn đang chọn trên trang sản phẩm.' }}</span>
+                </div>
+              }
               <figcaption class="studio-input__caption">Sản phẩm đã chọn</figcaption>
             </figure>
           </div>
@@ -260,7 +274,7 @@
             (click)="generate()"
           >
             <span class="btn-sparkle" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5V7A2.5 2.5 0 1 0 9.5 4.5"></path><path d="M12 8.5 3.6 14.1a1 1 0 0 0 .58 1.82h15.64a1 1 0 0 0 .58-1.82L12 8.5Z"></path></svg></span>
-            <span>{{ mode() === 'studio' ? 'Thử đồ 10 dáng' : 'Xác nhận & Thử đồ AI' }}</span>
+            <span>{{ mode() === 'studio' ? 'Thử đồ ' + (poseSlots().length || '') + ' dáng' : 'Xác nhận & Thử đồ AI' }}</span>
           </button>
         }
       </div>
@@ -281,7 +295,7 @@
             @if (poseProgress()) {
               <p class="pose-progress" aria-live="polite">{{ poseProgress() }}</p>
             }
-            <div class="pose-grid" role="list" aria-label="Kết quả thử đồ 10 dáng">
+            <div class="pose-grid" role="list" aria-label="Kết quả thử đồ nhiều dáng">
               @for (slot of poseSlots(); track slot.id) {
                 <figure class="pose-card" role="listitem">
                   @if (slot.src) {

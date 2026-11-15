@@ -72,6 +72,11 @@ export class AiImageWorkbench {
   readonly studioImage = signal('');
   readonly studioLoading = signal(false);
   private studioGeneration = 0;
+  /** Preview of the selected product variant's garment, the second input of every studio try-on. */
+  readonly garmentImage = signal('');
+  readonly garmentLoading = signal(false);
+  readonly garmentFailed = signal(false);
+  private garmentGeneration = 0;
   readonly preview = signal('');
   readonly result = signal('');
   readonly busy = signal(false);
@@ -141,7 +146,7 @@ export class AiImageWorkbench {
     if (job.status === 'queued') return 'Đang chờ đến lượt xử lý trên GPU...';
     if (job.task === 'image_quality') return 'Đang kiểm tra độ nét, ánh sáng và dáng người...';
     return this.mode() === 'studio'
-      ? 'Đang thử đồ lần lượt trên 10 dáng — mỗi dáng tối đa 2 phút.'
+      ? `Đang thử đồ lần lượt trên ${this.poseSlots().length || 'các'} dáng — mỗi dáng tối đa 2 phút.`
       : 'Đang phối trang phục lên ảnh — tối đa 2 phút.';
   });
   readonly elapsedLabel = computed(() => {
@@ -224,6 +229,24 @@ export class AiImageWorkbench {
     if (this.mode() === 'studio' && (!this.studioImage() || this.studioLoading())) return;
     this.consent.set((event.target as HTMLInputElement).checked);
   }
+  /** Loads the exact garment (selected colour/size SKU) that the studio job will try on, so the customer can verify it before consent. */
+  async loadGarmentPreview(): Promise<void> {
+    const epoch = ++this.garmentGeneration;
+    this.release(this.garmentImage());
+    this.garmentImage.set('');
+    this.garmentFailed.set(false);
+    if (!this.productId() || !this.variantId()) return;
+    this.garmentLoading.set(true);
+    try {
+      const blob = await firstValueFrom(this.model.garmentPreview(this.productId(), this.variantId()));
+      if (epoch !== this.garmentGeneration) return;
+      this.garmentImage.set(URL.createObjectURL(blob));
+    } catch {
+      if (epoch === this.garmentGeneration) this.garmentFailed.set(true);
+    } finally {
+      if (epoch === this.garmentGeneration) this.garmentLoading.set(false);
+    }
+  }
   /** Loads the preview of the standing studio model (first licensed pose) shown before consent. */
   async loadStudioPreview(): Promise<void> {
     const id = this.standingAssetId();
@@ -257,6 +280,7 @@ export class AiImageWorkbench {
     if (mode === 'studio' && !this.studioImage() && this.standingAssetId()) {
       void this.loadStudioPreview();
     }
+    if (mode === 'studio') void this.loadGarmentPreview();
   }
 
   /** An unreadable image is not accepted as a completed preview. */
@@ -269,8 +293,11 @@ export class AiImageWorkbench {
 
   private clearStudio(): void {
     this.studioGeneration++;
+    this.garmentGeneration++;
     this.release(this.studioImage());
+    this.release(this.garmentImage());
     this.studioImage.set('');
+    this.garmentImage.set('');
     this.studioLoading.set(false);
   }
 
@@ -432,6 +459,7 @@ export class AiImageWorkbench {
         if (this.mode() === 'studio' && !this.studioImage() && this.standingAssetId()) {
           void this.loadStudioPreview();
         }
+        if (this.mode() === 'studio') void this.loadGarmentPreview();
         const savedId = sessionStorage.getItem(this.storageKey());
           const savedPending = sessionStorage.getItem(`${this.storageKey()}_pending`);
           if (resumable && (savedId || savedPending)) {

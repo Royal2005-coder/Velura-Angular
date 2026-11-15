@@ -11,7 +11,7 @@ def quality(image, person=False, pose_detector=None) -> dict:
     if score < .5:
         gate.setdefault("warnings", []).append("BACKGROUND_TOO_COMPLEX")
     fatal = {"PERSON_NOT_DETECTED", "POSE_CHECK_UNAVAILABLE", "TOO_DARK", "OVEREXPOSED",
-             "BLURRY", "LOW_RESOLUTION", "MULTIPLE_PEOPLE"}
+             "BLURRY", "LOW_RESOLUTION", "MULTIPLE_PEOPLE", "BODY_CROPPED_OR_OCCLUDED", "POSE_NOT_FRONTAL"}
     gate["valid"] = not any(reason in fatal for reason in gate["reasons"])
     gate["threshold_version"] = "velura-measured-1"
     gate["calibration_status"] = "requires_licensed_validation_dataset"

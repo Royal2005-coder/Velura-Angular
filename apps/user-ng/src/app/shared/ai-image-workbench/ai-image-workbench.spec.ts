@@ -21,6 +21,7 @@ describe('AiImageWorkbench', () => {
     create: Mock;
     cancel: Mock;
     studioPreview: Mock;
+    garmentPreview: Mock;
     job: Mock;
     capabilities: Mock;
     pose: Mock;
@@ -45,6 +46,7 @@ describe('AiImageWorkbench', () => {
       create: vi.fn(() => of({ job: quality })),
       cancel: vi.fn(() => of({})),
       studioPreview: vi.fn(() => of(new Blob(['image'], { type: 'image/png' }))),
+      garmentPreview: vi.fn(() => of(new Blob(['garment'], { type: 'image/png' }))),
       job: vi.fn(() => of({ job: { ...quality, status: 'cancelled' as const } })),
       capabilities: vi.fn(() => of({ enabled: true, product_supported: true, variant_supported: true, tasks: [{ task: 'virtual_try_on', enabled: true }] })),
       pose: vi.fn((_job: string, poseId: string) => {

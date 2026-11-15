@@ -65,14 +65,24 @@ class MasklessVton:
         if len(subset) != 1:
             return ["MULTIPLE_PEOPLE"]
         points = bodies["candidate"]
-        # OpenPose keypoints: 2=R-Shoulder, 5=L-Shoulder, 8=R-Hip, 11=L-Hip.
-        # Accept upper body photos (shoulders visible) for tops, and full body photos.
-        has_shoulders = subset[0, 2] >= 0 and subset[0, 5] >= 0
-        has_hips = subset[0, 8] >= 0 and subset[0, 11] >= 0
-        if not has_shoulders and not has_hips:
+        # OpenPose/COCO-18 keypoints: 0=Nose, 1=Neck, 2=R-Shoulder, 5=L-Shoulder, 8=R-Hip, 11=L-Hip.
+        # A try-on needs a real, upright, camera-facing person: head and the whole torso (shoulders AND hips)
+        # must be detected. Partial detections (a projected screen, a poster, a crop) fall back to the studio models.
+        if any(subset[0, index] < 0 for index in (0, 1, 2, 5, 8, 11)):
             return ["BODY_CROPPED_OR_OCCLUDED"]
-        if has_shoulders and abs(float(points[2, 0] - points[5, 0])) < .08:
+        nose, neck = points[0], points[1]
+        shoulders = (points[2], points[5])
+        hips = (points[8], points[11])
+        shoulder_width = abs(float(shoulders[0][0] - shoulders[1][0]))
+        hip_mid_y = float(hips[0][1] + hips[1][1]) / 2
+        torso = hip_mid_y - float(neck[1])
+        if not float(nose[1]) < float(neck[1]) < hip_mid_y or torso < .15:
+            return ["BODY_CROPPED_OR_OCCLUDED"]
+        if shoulder_width < .12 or abs(float(hips[0][0] - hips[1][0])) < .06:
             return ["POSE_NOT_FRONTAL"]
+        # Real torsos are about as wide across the shoulders as neck-to-hip is tall; far-off ratios are detector artefacts.
+        if not .3 <= shoulder_width / max(torso, 1e-6) <= 2.2:
+            return ["BODY_CROPPED_OR_OCCLUDED"]
         return []
 
     @torch.inference_mode()

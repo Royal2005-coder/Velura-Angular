@@ -1,5 +1,5 @@
 import { callRpc, selectRows } from '../supabase.js';
-import type { JsonObject } from '../types.js';
+import { isJsonObject, type JsonObject } from '../types.js';
 import type { ManagementFactQuery } from './management-repository.js';
 
 function toVnDateKey(d: Date): number {

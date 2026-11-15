@@ -332,7 +332,16 @@
           </button>
           @if (notificationOpen()) {
             <div class="notification-popover" role="dialog" aria-label="Thông báo của bạn">
-              <div class="notification-popover__head"><strong>Thông báo</strong><button type="button" (click)="notifications.markAllRead()">Đánh dấu đã đọc</button></div>
+              <div class="notification-popover__head">
+                <strong>Thông báo</strong>
+                <button type="button" (click)="notifications.markAllRead()">Đánh dấu đã đọc</button>
+              </div>
+              @if (notifications.isPushSupported && !pushPermissionGranted()) {
+                <div class="notification-push-prompt">
+                  <span>Nhận thông báo đơn hàng & đổi trả tức thì qua trình duyệt (PWA)</span>
+                  <button type="button" class="btn-push-enable" (click)="enablePushNotifications()">Bật thông báo</button>
+                </div>
+              }
               @if (!notifications.notifications().length) { <p class="notification-empty">Bạn chưa có thông báo mới.</p> }
               @for (item of notifications.notifications().slice(0, 8); track item.id) {
                 <button type="button" class="notification-item" [class.is-unread]="!item.is_read" (click)="openNotification(item)">

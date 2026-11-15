@@ -59,6 +59,16 @@ export class SiteHeader {
   readonly wishlistCount = this.wishlist.itemCount;
   readonly notificationCount = this.notifications.unreadCount;
   readonly notificationOpen = signal(false);
+  readonly pushPermissionGranted = signal(
+    typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted'
+  );
+
+  async enablePushNotifications(): Promise<void> {
+    const res = await this.notifications.requestNotificationPermission();
+    if (res === 'granted') {
+      this.pushPermissionGranted.set(true);
+    }
+  }
   readonly navOpen = signal(false);
   readonly scrolled = signal(false);
 

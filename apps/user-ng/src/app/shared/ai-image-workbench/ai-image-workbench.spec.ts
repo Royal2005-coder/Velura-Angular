@@ -514,6 +514,28 @@ describe('AiImageWorkbench', () => {
       expect(hrefs).toEqual(['blob:pose-3']);
     });
 
+    it('shows the chosen pose on the large stage and downloads it from there', async () => {
+      const fixture = pageFixture();
+      const p = fixture.componentInstance;
+      await studioReady(p);
+      model.create.mockReturnValue(of({ job: vto('success', 10) }));
+      await p.generate();
+      await flush();
+      fixture.detectChanges();
+      const stageSrc = () =>
+        fixture.nativeElement.querySelector('.pose-stage__img')?.getAttribute('src') ?? undefined;
+      expect(stageSrc()).toBe('blob:female-front-relaxed-v1');
+      (fixture.nativeElement.querySelectorAll('.pose-card__select')[3] as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(stageSrc()).toBe('blob:pose-3');
+      const hrefs: string[] = [];
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+        hrefs.push(this.href);
+      });
+      (fixture.nativeElement.querySelector('.pose-stage__download') as HTMLButtonElement).click();
+      expect(hrefs).toEqual(['blob:pose-3']);
+    });
+
     it('fills the poses progressively and keeps unfinished ones as skeleton placeholders', async () => {
       vi.useFakeTimers();
       try {

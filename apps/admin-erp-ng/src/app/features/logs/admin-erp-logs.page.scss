@@ -45,21 +45,6 @@
   min-width: 170px;
 }
 
-.logs-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--erp-danger-soft);
-  background: var(--erp-danger-soft);
-  color: var(--erp-danger);
-  font-size: 12px;
-}
-
-.logs-banner .erp-btn {
-  margin-left: auto;
-}
-
 .logs-scope {
   display: flex;
   align-items: center;
@@ -78,6 +63,12 @@
 .audit-detail {
   display: grid;
   gap: 18px;
+}
+
+.audit-detail__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .audit-detail__head {

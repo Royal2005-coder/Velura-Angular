@@ -18,7 +18,9 @@ import {
   adminRangeLabel,
 } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
-import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
+import { AdminErpConfirmService } from '../../core/admin-erp-confirm.service';
+import { AdminErpToastService } from '../../shared/ui/admin-toast';
+import { AdminErpDataTable, AdminTableColumn, AdminTableRowAction } from '../../shared/ui/admin-data-table';
 import { AdminErpFilterBar } from '../../shared/ui/admin-filter-bar';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
 import { AdminErpIcon } from '../../shared/ui/admin-erp-icon';
@@ -59,6 +61,8 @@ const CODE_PATTERN = /^[A-Z0-9_-]{3,30}$/;
 export class AdminErpPromotionsPage {
   private readonly api = inject(AdminErpApiService);
   private readonly session = inject(AdminErpSessionService);
+  private readonly confirm = inject(AdminErpConfirmService);
+  private readonly toast = inject(AdminErpToastService);
 
   readonly view = signal<PromoView>('campaigns');
   readonly query = signal('');
@@ -75,7 +79,8 @@ export class AdminErpPromotionsPage {
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
   readonly page = signal(1);
-  readonly pageSize = 10;
+  readonly pageSizes = [10, 20, 50] as const;
+  readonly pageSize = signal<number>(10);
   readonly promoCount = signal(0);
   readonly voucherCount = signal(0);
   readonly logsCount = signal(0);
@@ -124,12 +129,106 @@ export class AdminErpPromotionsPage {
     { key: 'logs', label: 'Nhật ký' },
     { key: 'stats', label: 'Thống kê' },
   ]);
-  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.promoCount() / this.pageSize)));
-  readonly voucherPageCount = computed(() => Math.max(1, Math.ceil(this.voucherCount() / this.pageSize)));
-  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
-  readonly rangeLabel = computed(() => adminRangeLabel(this.promoCount(), this.page(), this.pageSize, 'chiến dịch'));
-  readonly voucherRangeLabel = computed(() => adminRangeLabel(this.voucherCount(), this.page(), this.pageSize, 'voucher'));
-  readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.page(), this.pageSize, 'nhật ký'));
+  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.promoCount() / this.pageSize())));
+  readonly voucherPageCount = computed(() => Math.max(1, Math.ceil(this.voucherCount() / this.pageSize())));
+  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize())));
+  readonly rangeLabel = computed(() => adminRangeLabel(this.promoCount(), this.page(), this.pageSize(), 'chiến dịch'));
+  readonly voucherRangeLabel = computed(() => adminRangeLabel(this.voucherCount(), this.page(), this.pageSize(), 'voucher'));
+  readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.page(), this.pageSize(), 'nhật ký'));
+  readonly hasFilters = computed(() => Boolean(this.query() || this.activeFilter() || this.campaignFilter()));
+
+  readonly campaignRowId = (row: unknown): string => {
+    const c = row as AdminPromotionRow;
+    return c.promo_id || c.promotion_id || '';
+  };
+
+  readonly campaignRowActions = (row: unknown): readonly AdminTableRowAction[] => {
+    const c = row as AdminPromotionRow;
+    if (!this.canMutate()) return [];
+    if (c.can_pause) {
+      return [{ label: 'Tạm dừng', tone: 'danger', disabled: this.actionSaving(), run: () => this.pauseCampaignWithPrompt(c) }];
+    }
+    if (c.can_activate) {
+      return [{ label: 'Chạy', tone: 'ghost', disabled: this.actionSaving(), run: () => this.activateCampaignWithConfirm(c) }];
+    }
+    return [];
+  };
+
+  readonly voucherRowId = (row: unknown): string => {
+    const v = row as AdminVoucherRow;
+    return v.voucher_id || v.code || '';
+  };
+
+  readonly voucherRowActions = (row: unknown): readonly AdminTableRowAction[] => {
+    const v = row as AdminVoucherRow;
+    if (!this.canMutate()) return [];
+    return [{
+      label: v.is_active ? 'Tắt' : 'Bật',
+      tone: v.is_active ? 'danger' : 'ghost',
+      disabled: this.actionSaving(),
+      run: () => this.toggleVoucherWithConfirm(v),
+    }];
+  };
+
+  readonly campaignIndex = computed(() => {
+    const selected = this.selectedCampaign();
+    if (!selected) return -1;
+    const id = selected.promo_id || selected.promotion_id;
+    return this.campaigns().findIndex((c) => (c.promo_id || c.promotion_id) === id);
+  });
+  readonly campaignHasPrev = computed(() => this.campaignIndex() > 0);
+  readonly campaignHasNext = computed(() => {
+    const i = this.campaignIndex();
+    return i >= 0 && i < this.campaigns().length - 1;
+  });
+
+  stepCampaign(delta: number): void {
+    const nextIdx = this.campaignIndex() + delta;
+    const nextCampaign = this.campaigns()[nextIdx];
+    if (nextCampaign) {
+      this.selectedCampaign.set(nextCampaign);
+    }
+  }
+
+  readonly voucherIndex = computed(() => {
+    const selected = this.selectedVoucher();
+    if (!selected) return -1;
+    return this.vouchers().findIndex((v) => (v.voucher_id || v.code) === (selected.voucher_id || selected.code));
+  });
+  readonly voucherHasPrev = computed(() => this.voucherIndex() > 0);
+  readonly voucherHasNext = computed(() => {
+    const i = this.voucherIndex();
+    return i >= 0 && i < this.vouchers().length - 1;
+  });
+
+  stepVoucher(delta: number): void {
+    const nextIdx = this.voucherIndex() + delta;
+    const nextVoucher = this.vouchers()[nextIdx];
+    if (nextVoucher) {
+      this.selectedVoucher.set(nextVoucher);
+    }
+  }
+
+  setPageSize(size: number): void {
+    this.pageSize.set(size);
+    this.page.set(1);
+    this.reload();
+  }
+
+  closeCampaign(): void {
+    this.selectedCampaign.set(null);
+  }
+
+  closeVoucher(): void {
+    this.selectedVoucher.set(null);
+  }
+
+  closeForm(): void {
+    this.campaignFormOpen.set(false);
+    this.voucherFormOpen.set(false);
+    this.dirty.set(false);
+    this.formError.set(null);
+  }
   readonly activeCampaigns = computed(() => this.summary()?.running ?? 0);
   readonly activeVouchers = computed(() => this.summary()?.activeVouchers ?? 0);
   readonly totalBudget = computed(() => this.summary()?.totalBudget ?? 0);
@@ -209,8 +308,8 @@ export class AdminErpPromotionsPage {
     this.loading.set(true);
     this.loadError.set(null);
     const listParams: Record<string, string> = {
-      limit: String(this.pageSize),
-      offset: adminOffset(this.page(), this.pageSize),
+      limit: String(this.pageSize()),
+      offset: adminOffset(this.page(), this.pageSize()),
     };
     if (this.query()) listParams['q'] = this.query();
     if (this.activeFilter()) listParams['isActive'] = this.activeFilter();
@@ -250,7 +349,7 @@ export class AdminErpPromotionsPage {
    */
   loadLogs(): void {
     this.loading.set(true);
-    this.api.listPricingAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) }).pipe(timeout(15_000)).subscribe({
+    this.api.listPricingAuditLogs({ limit: String(this.pageSize()), offset: adminOffset(this.page(), this.pageSize()) }).pipe(timeout(15_000)).subscribe({
       next: (payload) => {
         this.logs.set(adminListRows(payload));
         this.logsCount.set(adminListCount(payload));
@@ -479,6 +578,22 @@ export class AdminErpPromotionsPage {
   }
 
   /**
+   * Updates the campaign banner image URL from text input.
+   */
+  onBannerUrlInput(event: Event): void {
+    this.campaignBannerUrl.set((event.target as HTMLInputElement).value);
+    this.dirty.set(true);
+  }
+
+  /**
+   * Updates the parent campaign selection for the voucher.
+   */
+  onVoucherPromoIdChange(event: Event): void {
+    this.selectedVoucherPromoId.set((event.target as HTMLSelectElement).value);
+    this.dirty.set(true);
+  }
+
+  /**
    * Opens the voucher create/edit form.
    */
   openVoucherForm(): void {
@@ -497,37 +612,113 @@ export class AdminErpPromotionsPage {
    */
   setCampaignActive(active: boolean): void {
     const campaign = this.selectedCampaign();
-    const promoId = campaign?.promo_id || campaign?.promotion_id;
-    if (!campaign || !promoId || !this.canMutate() || this.actionSaving()) return;
+    if (!campaign) return;
+    if (active) {
+      this.activateCampaignWithConfirm(campaign);
+    } else {
+      this.pauseCampaignWithPrompt(campaign);
+    }
+  }
+
+  async pauseCampaignWithPrompt(campaign: AdminPromotionRow): Promise<void> {
+    const promoId = campaign.promo_id || campaign.promotion_id;
+    if (!promoId || !this.canMutate() || this.actionSaving()) return;
+    const result = await this.confirm.ask({
+      title: 'Tạm dừng chiến dịch?',
+      message: `Chiến dịch “${this.campaignName(campaign)}” sẽ ngừng áp dụng khuyến mãi cho khách hàng.`,
+      confirmLabel: 'Tạm dừng chiến dịch',
+      tone: 'danger',
+      requireReason: true,
+      reasonLabel: 'Nhập lý do tạm dừng (tối thiểu 10 ký tự)…',
+      reasonMinLength: 10,
+    });
+    if (!result.confirmed) return;
+
     this.actionError.set(null);
     this.actionSaving.set(true);
-    const request$ = active
-      ? this.api.activatePromotion(promoId, { expectedVersion: campaign.version })
-      : this.api.pausePromotion(promoId, { expectedVersion: campaign.version, reason: 'Tạm dừng từ ERP workspace' });
-    request$.pipe(finalize(() => this.actionSaving.set(false))).subscribe({
-      next: () => {
-        this.closeOverlays();
-        this.reload();
-      },
-      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+    this.api
+      .pausePromotion(promoId, { expectedVersion: campaign.version, reason: result.reason })
+      .pipe(finalize(() => this.actionSaving.set(false)))
+      .subscribe({
+        next: () => {
+          this.toast.success(`Đã tạm dừng chiến dịch “${this.campaignName(campaign)}”.`);
+          this.reload();
+        },
+        error: (error: unknown) => {
+          const message = adminErrorMessage(error, 'Không tạm dừng được chiến dịch.');
+          this.actionError.set(message);
+          this.toast.error(message);
+        },
+      });
+  }
+
+  async activateCampaignWithConfirm(campaign: AdminPromotionRow): Promise<void> {
+    const promoId = campaign.promo_id || campaign.promotion_id;
+    if (!promoId || !this.canMutate() || this.actionSaving()) return;
+    const result = await this.confirm.ask({
+      title: 'Kích hoạt chiến dịch?',
+      message: `Chiến dịch “${this.campaignName(campaign)}” sẽ bắt đầu áp dụng ngay theo lịch.`,
+      confirmLabel: 'Kích hoạt chiến dịch',
+      tone: 'primary',
     });
+    if (!result.confirmed) return;
+
+    this.actionError.set(null);
+    this.actionSaving.set(true);
+    this.api
+      .activatePromotion(promoId, { expectedVersion: campaign.version })
+      .pipe(finalize(() => this.actionSaving.set(false)))
+      .subscribe({
+        next: () => {
+          this.toast.success(`Đã kích hoạt chiến dịch “${this.campaignName(campaign)}”.`);
+          this.reload();
+        },
+        error: (error: unknown) => {
+          const message = adminErrorMessage(error, 'Không kích hoạt được chiến dịch.');
+          this.actionError.set(message);
+          this.toast.error(message);
+        },
+      });
   }
 
   /**
    * Toggles the selected voucher.
    */
-  toggleVoucher(): void {
+  toggleVoucher(): Promise<void> {
     const voucher = this.selectedVoucher();
-    if (!voucher || !this.canMutate() || this.actionSaving()) return;
+    if (!voucher) return Promise.resolve();
+    return this.toggleVoucherWithConfirm(voucher);
+  }
+
+  async toggleVoucherWithConfirm(voucher: AdminVoucherRow): Promise<void> {
+    if (!this.canMutate() || this.actionSaving()) return;
+    const willEnable = !voucher.is_active;
+    const result = await this.confirm.ask({
+      title: willEnable ? 'Bật voucher?' : 'Tắt voucher?',
+      message: willEnable
+        ? `Voucher “${voucher.code || voucher.name}” sẽ có hiệu lực ngay cho khách hàng thỏa điều kiện.`
+        : `Voucher “${voucher.code || voucher.name}” sẽ ngừng áp dụng cho đơn hàng mới.`,
+      confirmLabel: willEnable ? 'Bật voucher' : 'Tắt voucher',
+      tone: willEnable ? 'primary' : 'danger',
+    });
+    if (!result.confirmed) return;
+
     this.actionError.set(null);
     this.actionSaving.set(true);
-    this.api.toggleVoucher(voucher.voucher_id).pipe(finalize(() => this.actionSaving.set(false))).subscribe({
-      next: () => {
-        this.closeOverlays();
-        this.reload();
-      },
-      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
-    });
+    this.api
+      .toggleVoucher(voucher.voucher_id)
+      .pipe(finalize(() => this.actionSaving.set(false)))
+      .subscribe({
+        next: () => {
+          this.toast.success(`Đã ${willEnable ? 'bật' : 'tắt'} voucher ${voucher.code}.`);
+          this.reload();
+        },
+        error: (error: unknown) => {
+          const message = adminErrorMessage(error, 'Không thay đổi trạng thái voucher.');
+          this.actionError.set(message);
+          this.toast.error(message);
+        },
+      });
   }
 
   /**

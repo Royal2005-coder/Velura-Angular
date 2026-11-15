@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { Observable, Subject, of, throwError } from 'rxjs';
 import {
   AdminErpApiService,
@@ -8,6 +8,7 @@ import {
   AdminPromotionRow,
   AdminVoucherRow,
 } from '../../core/admin-erp-api.service';
+import { AdminErpConfirmService } from '../../core/admin-erp-confirm.service';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { AdminErpPromotionsPage } from './admin-erp-promotions.page';
 
@@ -84,12 +85,13 @@ type ListPromotionsFn = (params?: Record<string, string>) => Observable<AdminPro
 describe('AdminErpPromotionsPage', () => {
   async function boot(
     listPromotions: ListPromotionsFn,
-    overrides: { toggleVoucher?: () => Observable<unknown> } = {},
+    overrides: { toggleVoucher?: () => Observable<unknown>; url?: string } = {},
   ) {
     TestBed.resetTestingModule();
     let toggled = '';
     let toggleCalls = 0;
     const voucherCalls: Array<Record<string, string> | undefined> = [];
+    const pauseBodies: Array<Record<string, unknown>> = [];
     const api = {
       listPromotions,
       listVouchers: (params?: Record<string, string>) => {
@@ -104,7 +106,10 @@ describe('AdminErpPromotionsPage', () => {
         return overrides.toggleVoucher ? overrides.toggleVoucher() : of({});
       },
       activatePromotion: () => of({}),
-      pausePromotion: () => of({}),
+      pausePromotion: (_promoId: string, body: Record<string, unknown>) => {
+        pauseBodies.push(body);
+        return of({});
+      },
       createPromotion: () => of(campaigns[0]),
       updatePromotion: () => of(campaigns[0]),
       createVoucher: () => of({}),
@@ -125,10 +130,15 @@ describe('AdminErpPromotionsPage', () => {
       user: { id: 'promo', email: 'promo@velura.test' },
       profile: { user_id: 'promo', email: 'promo@velura.test', full_name: 'Promo', role: 'admin', is_active: true },
     });
+    const router = TestBed.inject(Router);
+    if (overrides.url) await router.navigateByUrl(overrides.url);
     const fixture = TestBed.createComponent(AdminErpPromotionsPage);
     fixture.detectChanges();
-    return { fixture, toggled: () => toggled, toggleCalls: () => toggleCalls, voucherCalls };
+    const confirm = TestBed.inject(AdminErpConfirmService);
+    return { fixture, router, confirm, toggled: () => toggled, toggleCalls: () => toggleCalls, voucherCalls, pauseBodies };
   }
+
+  const listCampaigns: ListPromotionsFn = () => of({ rows: campaigns, count: 1, summary: stats.promotions });
 
   it('loads campaigns and the API summary', async () => {
     const { fixture } = await boot(() =>
@@ -171,12 +181,16 @@ describe('AdminErpPromotionsPage', () => {
   });
 
   it('toggles the selected voucher through the API', async () => {
-    const { fixture, toggled } = await boot(() => of({ rows: campaigns, count: 1, summary: stats.promotions }));
+    const { fixture, confirm, toggled } = await boot(() => of({ rows: campaigns, count: 1, summary: stats.promotions }));
     const page = fixture.componentInstance;
 
     page.setView('vouchers');
     page.openVoucher(vouchers[0]);
-    page.toggleVoucher();
+    const togglePromise = page.toggleVoucher();
+    if (confirm.pending()) {
+      confirm.answer({ confirmed: true, reason: '' });
+    }
+    await togglePromise;
 
     expect(toggled()).toBe('v1');
   });
@@ -242,18 +256,23 @@ describe('AdminErpPromotionsPage', () => {
 
   it('ignores a second voucher toggle while the first is pending', async () => {
     const pending = new Subject<unknown>();
-    const { fixture, toggleCalls } = await boot(() => of({ rows: campaigns, count: 1, summary: stats.promotions }), {
+    const { fixture, confirm, toggleCalls } = await boot(() => of({ rows: campaigns, count: 1, summary: stats.promotions }), {
       toggleVoucher: () => pending,
     });
     const page = fixture.componentInstance;
 
     page.setView('vouchers');
     page.openVoucher(vouchers[0]);
-    page.toggleVoucher();
-    page.toggleVoucher();
+    const toggle1 = page.toggleVoucher();
+    if (confirm.pending()) {
+      confirm.answer({ confirmed: true, reason: '' });
+    }
+    await Promise.resolve();
+    const toggle2 = page.toggleVoucher();
 
     expect(toggleCalls()).toBe(1);
     pending.complete();
+    await Promise.all([toggle1, toggle2]);
   });
 
   it('offers exactly the audience values the API accepts', async () => {

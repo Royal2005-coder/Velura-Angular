@@ -1693,6 +1693,16 @@ export class AdminErpApiService {
   }
 
   /**
+   * Refreshes the star-schema analytics snapshot for the operations/business dashboard.
+   */
+  refreshDashboard(): Observable<{ ok: boolean; timestamp?: string }> {
+    return this.http.post<{ ok: boolean; timestamp?: string }>(
+      `${this.baseUrl}/api/v1/admin/dashboard/refresh`,
+      {}
+    );
+  }
+
+  /**
    * Recommends operational and business insights for the dashboard.
    */
   recommendInsights(params: Record<string, string> = {}): Observable<{ source?: string; lines?: string[]; narrative?: string[] }> {

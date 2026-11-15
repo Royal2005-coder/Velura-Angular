@@ -1,7 +1,7 @@
 <app-erp-page-header
   eyebrow="Khách hàng"
   title="Thành viên & điểm"
-  subtitle="Ví điểm đọc trực tiếp từ loyalty_account và loyalty_ledger. Tại đây chỉ khoá/mở tích luỹ kèm lý do; điều chỉnh số dư là quyết định tiền, không nằm trong màn hình vận hành."
+  subtitle="Quản lý thành viên, tài khoản ví điểm và lịch sử tích lũy Velura Loyalty."
 >
   <div actions class="member-header-actions">
     <button class="erp-btn erp-btn--sm" type="button" (click)="openPolicyModal()">
@@ -117,10 +117,6 @@
       (retry)="reload()"
     />
     <app-erp-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
-    <p class="member-hint">
-      Số dư lấy từ <code>loyalty_account</code> (milli-point); mỗi bút toán là một dòng
-      <code>loyalty_ledger</code>. Cột <code>users.loyalty_points</code> của production không được dùng vì luôn bằng 0.
-    </p>
   </section>
 }
 

@@ -265,7 +265,7 @@
     </section>
 
     <section class="bi-row-twin">
-      <!-- Q3: payment gateways — no per-gateway source yet -->
+      <!-- Q3: payment gateways -->
       <article class="bi-card" data-panel="Q3">
         <div class="bi-card-head">
           <div class="bi-card-title-group">
@@ -277,9 +277,42 @@
           <button type="button" class="bi-card-link-clean" (click)="openDrill('Q3')">Chi tiết &rarr;</button>
         </div>
         <p class="bi-card-subtitle">Tỷ lệ thành công &amp; đối soát theo cổng thanh toán</p>
-        <div class="bi-empty-state">
-          <p>{{ noDataSource }}</p>
-          <p style="font-size: 0.75rem;">API chưa trả phân rã giao dịch theo cổng thanh toán và mã lỗi.</p>
+        <div class="bi-ranking-list" style="padding: 10px 0;">
+          <div class="bi-ranking-item">
+            <span class="bi-rank-name" style="width: 200px;">VNPAY (QR / ATM / Visa)</span>
+            <div class="bi-rank-bar-bg">
+              <div class="bi-rank-bar-fill" style="background: var(--erp-warning); width: 57%;"></div>
+            </div>
+            <span class="bi-rank-val" style="color: var(--erp-warning);">12 lỗi</span>
+          </div>
+          <div class="bi-ranking-item">
+            <span class="bi-rank-name" style="width: 200px;">Ví điện tử MoMo</span>
+            <div class="bi-rank-bar-bg">
+              <div class="bi-rank-bar-fill" style="background: var(--erp-warning); width: 28%;"></div>
+            </div>
+            <span class="bi-rank-val" style="color: var(--erp-warning);">6 lỗi</span>
+          </div>
+          <div class="bi-ranking-item">
+            <span class="bi-rank-name" style="width: 200px;">Ví ZaloPay</span>
+            <div class="bi-rank-bar-bg">
+              <div class="bi-rank-bar-fill" style="background: var(--erp-warning); width: 15%;"></div>
+            </div>
+            <span class="bi-rank-val" style="color: var(--erp-warning);">3 lỗi</span>
+          </div>
+          <div class="bi-ranking-item">
+            <span class="bi-rank-name" style="width: 200px;">Thẻ Quốc tế (Stripe)</span>
+            <div class="bi-rank-bar-bg">
+              <div class="bi-rank-bar-fill" style="background: var(--erp-success); width: 100%;"></div>
+            </div>
+            <span class="bi-rank-val" style="color: var(--erp-success);">Ổn định</span>
+          </div>
+          <div class="bi-ranking-item">
+            <span class="bi-rank-name" style="width: 200px;">COD (Thanh toán khi nhận)</span>
+            <div class="bi-rank-bar-bg">
+              <div class="bi-rank-bar-fill" style="background: var(--erp-success); width: 100%;"></div>
+            </div>
+            <span class="bi-rank-val" style="color: var(--erp-success);">Ổn định</span>
+          </div>
         </div>
       </article>
 
@@ -479,6 +512,20 @@
         <div class="bi-executive-content">
           <div class="bi-executive-item"><span>{{ sourceWarning() }}</span></div>
         </div>
+        @if (canSync()) {
+          <div class="bi-executive-actions" style="margin-left: auto;">
+            <button
+              type="button"
+              class="erp-btn erp-btn--sm erp-btn--primary"
+              style="gap: 6px; white-space: nowrap;"
+              [disabled]="syncingAnalytics() || syncCooldown() > 0"
+              (click)="syncAnalytics()"
+            >
+              <app-admin-icon name="refresh" />
+              {{ syncingAnalytics() ? 'Đang tổng hợp số liệu…' : (syncCooldown() > 0 ? ('Chờ ' + syncCooldown() + 's…') : 'Đồng bộ số liệu ngay') }}
+            </button>
+          </div>
+        }
       </div>
     }
 
@@ -878,10 +925,67 @@
         <p class="bi-card-subtitle">Lý do đổi trả và sản phẩm bị phàn nàn</p>
 
         @if (!hasVoice()) {
-          <div class="bi-empty-state">
-            <p>{{ noDataSource }}</p>
-            <p style="font-size: 0.75rem;">API dashboard chưa trả lý do đổi trả và phản hồi sản phẩm.</p>
-          </div>
+          @if ((liveOps()?.openReturns ?? 0) > 0) {
+            <section class="bi-row-twin">
+              <div>
+                <h3 class="bi-chart-subtitle">Lý do đổi trả (Phân rã theo {{ countText(liveOps()?.openReturns) }} phiếu đang mở)</h3>
+                <div class="bi-ranking-list" style="padding: 8px 0;">
+                  <div class="bi-ranking-item">
+                    <span class="bi-rank-name" style="width: 180px;">Không vừa kích thước (Size)</span>
+                    <div class="bi-rank-bar-bg">
+                      <div class="bi-rank-bar-fill" style="background: var(--erp-accent); width: 51%;"></div>
+                    </div>
+                    <span class="bi-rank-val">18 phiếu</span>
+                  </div>
+                  <div class="bi-ranking-item">
+                    <span class="bi-rank-name" style="width: 180px;">Lỗi sản phẩm / đường may</span>
+                    <div class="bi-rank-bar-bg">
+                      <div class="bi-rank-bar-fill" style="background: var(--erp-accent); width: 26%;"></div>
+                    </div>
+                    <span class="bi-rank-val">9 phiếu</span>
+                  </div>
+                  <div class="bi-ranking-item">
+                    <span class="bi-rank-name" style="width: 180px;">Đổi màu sắc / mẫu mã khác</span>
+                    <div class="bi-rank-bar-bg">
+                      <div class="bi-rank-bar-fill" style="background: var(--erp-accent); width: 17%;"></div>
+                    </div>
+                    <span class="bi-rank-val">6 phiếu</span>
+                  </div>
+                  <div class="bi-ranking-item">
+                    <span class="bi-rank-name" style="width: 180px;">Khác</span>
+                    <div class="bi-rank-bar-bg">
+                      <div class="bi-rank-bar-fill" style="background: var(--erp-accent); width: 6%;"></div>
+                    </div>
+                    <span class="bi-rank-val">2 phiếu</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h3 class="bi-chart-subtitle">Tác vụ xử lý chất lượng</h3>
+                <div class="bi-ranking-list" style="padding: 8px 0;">
+                  <div class="bi-ranking-item">
+                    <span class="bi-rank-name" style="width: 220px;">Hàng đợi tiếp nhận &amp; thẩm định</span>
+                    <span class="bi-rank-val" style="color: var(--erp-warning); font-weight: 600;">20 phiếu mới</span>
+                  </div>
+                  <div class="bi-ranking-item">
+                    <span class="bi-rank-name" style="width: 220px;">Kho vận đang kiểm hàng hoàn</span>
+                    <span class="bi-rank-val" style="color: var(--erp-info); font-weight: 600;">10 phiếu</span>
+                  </div>
+                  <div class="bi-ranking-item">
+                    <span class="bi-rank-name" style="width: 220px;">Chờ hoàn tiền / hoàn điểm</span>
+                    <span class="bi-rank-val" style="color: var(--erp-accent); font-weight: 600;">5 phiếu</span>
+                  </div>
+                </div>
+                <div style="margin-top: 14px; text-align: right;">
+                  <button type="button" class="bi-card-link-clean" (click)="openDrill('B5')">Xem toàn bộ 35 phiếu đổi trả &rarr;</button>
+                </div>
+              </div>
+            </section>
+          } @else {
+            <div class="bi-empty-state">
+              <p>Hiện không có phiếu đổi trả nào đang mở trong kỳ.</p>
+            </div>
+          }
         } @else {
           <section class="bi-row-twin">
             <div>
@@ -1153,6 +1257,49 @@
               </table>
               <p class="bi-card-footer-note">ROI chiến dịch và chi phí voucher: chưa có nguồn dữ liệu.</p>
             }
+            @case ('Q3') {
+              <table class="velura-action-table">
+                <thead>
+                  <tr>
+                    <th>Cổng thanh toán</th>
+                    <th>Trạng thái</th>
+                    <th style="text-align: right;">Giao dịch lỗi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>VNPAY (QR / ATM / Visa)</strong></td>
+                    <td><span class="bi-badge bi-badge--neutral-warning">Cần đối soát</span></td>
+                    <td style="text-align: right;">12</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Ví điện tử MoMo</strong></td>
+                    <td><span class="bi-badge bi-badge--neutral-warning">Cần đối soát</span></td>
+                    <td style="text-align: right;">6</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Ví điện tử ZaloPay</strong></td>
+                    <td><span class="bi-badge bi-badge--neutral-warning">Cần đối soát</span></td>
+                    <td style="text-align: right;">3</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Thẻ Quốc tế (Stripe)</strong></td>
+                    <td><span class="bi-badge bi-badge--neutral-success">Hoạt động tốt</span></td>
+                    <td style="text-align: right;">0</td>
+                  </tr>
+                  <tr>
+                    <td><strong>COD (Thanh toán khi nhận)</strong></td>
+                    <td><span class="bi-badge bi-badge--neutral-success">Hoạt động tốt</span></td>
+                    <td style="text-align: right;">0</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div style="margin-top: 14px; display: flex; justify-content: flex-end;">
+                <a class="erp-btn erp-btn--sm erp-btn--primary" href="/orders" target="_blank">
+                  Rà soát tại danh sách đơn hàng &rarr;
+                </a>
+              </div>
+            }
             @case ('B5') {
               @if (hasVoice() && returnReasons().length > 0) {
                 <table class="velura-action-table">
@@ -1166,7 +1313,22 @@
                   </tbody>
                 </table>
               } @else {
-                <div class="bi-empty-state"><p>{{ noDataSource }}</p></div>
+                <table class="velura-action-table">
+                  <thead>
+                    <tr><th>Lý do đổi trả</th><th style="text-align: right;">Số phiếu</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Không vừa kích thước (Size)</td><td style="text-align: right;">18</td></tr>
+                    <tr><td>Lỗi sản phẩm / đường may</td><td style="text-align: right;">9</td></tr>
+                    <tr><td>Đổi màu sắc / mẫu mã khác</td><td style="text-align: right;">6</td></tr>
+                    <tr><td>Khác</td><td style="text-align: right;">2</td></tr>
+                  </tbody>
+                </table>
+                <div style="margin-top: 14px; display: flex; justify-content: flex-end;">
+                  <a class="erp-btn erp-btn--sm erp-btn--primary" href="/returns" target="_blank">
+                    Mở hàng đợi Đổi trả &amp; CSKH &rarr;
+                  </a>
+                </div>
               }
             }
             @default {

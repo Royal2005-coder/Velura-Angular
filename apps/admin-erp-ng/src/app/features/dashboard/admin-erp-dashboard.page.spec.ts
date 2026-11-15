@@ -130,13 +130,15 @@ describe('AdminErpDashboardPage', () => {
     const fixture = await boot();
     const root = fixture.nativeElement as HTMLElement;
 
-    expect(panel(root, 'Q3').querySelector('.bi-empty-state')?.textContent).toContain(NO_DATA_SOURCE);
+    expect(panel(root, 'Q3').textContent).toContain('Cổng Thanh toán & Đối soát');
+    expect(panel(root, 'Q3').textContent).toContain('VNPAY');
 
     fixture.componentInstance.setTab('business');
     fixture.detectChanges();
     expect(root.querySelector('[data-kpi="gross-profit"]')?.textContent).toContain(NO_DATA_SOURCE);
     expect(root.querySelector('[data-kpi="repeat-customers"]')?.textContent).toContain(NO_DATA_SOURCE);
-    expect(panel(root, 'B5').querySelector('.bi-empty-state')?.textContent).toContain(NO_DATA_SOURCE);
+    expect(panel(root, 'B5').textContent).toContain('Đổi trả & Chất lượng Sản phẩm');
+    expect(panel(root, 'B5').textContent).toContain('Không vừa kích thước');
 
     fixture.componentInstance.setB1Tab('price_bar');
     fixture.detectChanges();

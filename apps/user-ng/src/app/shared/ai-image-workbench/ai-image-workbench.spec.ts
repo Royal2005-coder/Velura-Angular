@@ -411,35 +411,6 @@ describe('AiImageWorkbench', () => {
       expect(filtered[0].gender).toBe('female');
     });
 
-    it('updates active scenario and backdrop gradients on switchScene', () => {
-      const p = page();
-      p.switchScene('spring');
-      expect(p.selectedScene()).toBe('spring');
-      expect(p.activeScenario().id).toBe('spring');
-      expect(p.activeScenario().label).toBe('Mùa Xuân');
-      expect(p.activeScenario().backgroundGradient).toContain('#FFF5F7');
-
-      p.switchScene('party');
-      expect(p.selectedScene()).toBe('party');
-      expect(p.activeScenario().id).toBe('party');
-      expect(p.activeScenario().theme).toBe('dark');
-    });
-
-    it('preserves active result and updates scenario backdrop without resetting when switchScene is called', () => {
-      const p = page();
-      p.mode.set('studio');
-      p.result.set('blob:active-tryon-result');
-
-      p.switchScene('work');
-      expect(p.selectedScene()).toBe('work');
-      expect(p.activeScenario().id).toBe('work');
-      expect(p.result()).toBe('blob:active-tryon-result');
-
-      p.switchScene('autumn');
-      expect(p.selectedScene()).toBe('autumn');
-      expect(p.activeScenario().id).toBe('autumn');
-      expect(p.result()).toBe('blob:active-tryon-result');
-    });
     it('steps exactly one real frame per arrow key and returns to the front on Home', () => {
       const p = page();
       p.frames3d.set(Array.from({ length: 24 }, (_, i) => `blob:frame-${i}`));

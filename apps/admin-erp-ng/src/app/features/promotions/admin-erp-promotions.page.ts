@@ -239,7 +239,8 @@ export class AdminErpPromotionsPage {
       key: 'name',
       label: 'Chiến dịch',
       value: (row) => this.campaignName(row as AdminPromotionRow),
-      image: (row) => (row as AdminPromotionRow).banner_image_url || '',
+      image: (row) => this.campaignBanner(row as AdminPromotionRow),
+      imageRatio: '16:9',
       truncate: '260px',
     },
     { key: 'type', label: 'Loại', value: (row) => this.campaignType(row as AdminPromotionRow) },
@@ -407,6 +408,21 @@ export class AdminErpPromotionsPage {
     this.view.set(view as PromoView);
     this.page.set(1);
     this.reload();
+  }
+
+  /**
+   * Resolves a sharp 16:9 banner image URL for the campaign row, with brand fallback.
+   */
+  campaignBanner(row: AdminPromotionRow): string {
+    const raw = String(row.banner_image_url || '').trim();
+    if (raw) {
+      return raw.startsWith('/src/assets/') ? raw.slice(4) : raw;
+    }
+    const type = String(row.promo_type || row.type || '').toLowerCase();
+    if (type.includes('flash')) return '/assets/images/collections/weekend-escape-decor.png';
+    if (type.includes('heritage') || type.includes('di_san')) return '/assets/images/collections/midnight-mirage-decor.png';
+    if (type.includes('combo')) return '/assets/images/collections/the-urban-rhythm-decor.png';
+    return '/assets/images/collections/the-afterglow-decor.png';
   }
 
   /**

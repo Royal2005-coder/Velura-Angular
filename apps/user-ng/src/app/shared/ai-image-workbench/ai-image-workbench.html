@@ -130,7 +130,7 @@
               </div>
 
               <div class="preview-card__media">
-                <img [src]="preview()" alt="Ảnh bạn chọn trước khi thử đồ" class="preview-img" />
+                <img loading="lazy" decoding="async" [src]="preview()" alt="Ảnh bạn chọn trước khi thử đồ" class="preview-img" />
 
                 <!-- SCANNING LASER BEAM EFFECT DURING LOADING -->
                 @if (busy()) {
@@ -251,8 +251,7 @@
             </div>
           } @else if (studioImage()) {
             <div class="studio-preview-container">
-              <img
-                class="studio-preview-img"
+              <img loading="lazy" decoding="async" class="studio-preview-img"
                 [src]="studioImage()"
                 alt="Người mẫu studio được chọn"
                 (error)="studioPreviewFailed()"
@@ -435,8 +434,7 @@
               {{ showOriginal() ? 'Ảnh gốc' : has3d() ? '360° · ' + frames3d().length + ' góc' : 'Ảnh thử đồ AI' }}
             </span>
             <div class="stage-360__figure" [style.transform]="'scale(' + zoomLevel() + ')'">
-              <img
-                class="stage-360__img"
+              <img loading="lazy" decoding="async" class="stage-360__img"
                 [src]="currentDisplayImage()"
                 [alt]="showOriginal() ? 'Ảnh gốc trước khi thử đồ' : 'Kết quả thử đồ AI'"
                 draggable="false"

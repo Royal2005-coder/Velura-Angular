@@ -100,7 +100,7 @@
 
       <div class="content-form__hero">
         <label class="erp-field">
-          <span>Tiêu đề</span>
+          <span>Tiêu đề <span class="erp-required" aria-hidden="true">*</span></span>
           <input class="erp-input erp-input--title" type="text" [value]="form.title" (input)="onField('title', $event); markDirty()" />
         </label>
         @if (errors()['title']) {
@@ -108,7 +108,7 @@
         }
         <div class="content-form__row">
           <label class="erp-field">
-            <span>Slug</span>
+            <span>Slug <span class="erp-required" aria-hidden="true">*</span></span>
             <input class="erp-input" type="text" [value]="form.slug" (input)="onField('slug', $event); markDirty()" />
           </label>
           <button class="erp-btn erp-btn--sm content-form__slug" type="button" (click)="suggestSlug(); markDirty()">Lấy từ tiêu đề</button>
@@ -120,7 +120,7 @@
 
       <div class="content-form__grid content-form__grid--meta">
         <label class="erp-field">
-          <span>Danh mục</span>
+          <span>Danh mục <span class="erp-required" aria-hidden="true">*</span></span>
           <select class="erp-select" [value]="form.categorySlug" (change)="onField('categorySlug', $event); markDirty()">
             <option value="">— Chọn danh mục —</option>
             @for (category of categoryOptions(); track category.content_category_id) {
@@ -245,7 +245,7 @@
               [hidden]="!sourceMode()"
               [value]="draft()?.contentHtml || ''"
               (input)="onSourceInput($event)"
-              placeholder="Nhập hoặc dán mã nguồn HTML đầy đủ (hỗ trợ <article>, <figure>, <img style=...>, <figcaption>)..."
+              placeholder="Nhập hoặc dán mã nguồn HTML đầy đủ (hỗ trợ article, figure, img, figcaption)..."
               spellcheck="false"
             ></textarea>
             <div class="content-editor__status">

@@ -7,6 +7,7 @@ import {
   type CarrierDeliveryEvent,
 } from "./carrier-contract.js";
 import type { CarrierRepository } from "./carrier-repository.js";
+import { notifyOrderDelivered } from "../orders/order-notifications.js";
 
 /**
  * Action của state machine mà webhook được phép chạy, tách thành dependency để nghiệp vụ test được
@@ -82,6 +83,10 @@ export function createCarrierService({ repository, orders }: { repository: Carri
         payload: carrierEventPayload(event),
       });
       await repository.markApplied(event, order.order_id, action);
+
+      if (event.status === "delivered" || action === "carrier_delivered") {
+        void notifyOrderDelivered(order.order_id);
+      }
 
       return { received: true, duplicate: false, orderCode: order.order_code, action };
     },

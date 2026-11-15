@@ -275,7 +275,7 @@
                   [style.background]="productId() === item.productId && orderId() === item.orderId ? '#FAF6F2' : '#fff'"
                  
                  class="u-inline-916b40b67e">
-                  <img [src]="item.productImage" [alt]="item.productName" class="u-inline-8ef2e0b8a7" />
+                  <img loading="lazy" decoding="async" [src]="item.productImage" [alt]="item.productName" class="u-inline-8ef2e0b8a7" />
                   <div class="u-inline-9e7cc82db5">
                     <strong class="u-inline-b1de2269dc">{{ item.productName }}</strong>
                     <small class="u-inline-055437ae8e">Đơn #{{ item.orderCode.slice(0, 8) }}</small>
@@ -290,7 +290,7 @@
           <div class="review-card">
             <!-- Product Summary Block -->
             <div class="product-summary" id="js-product-summary">
-              <img class="product-summary__image" id="js-product-img" [src]="productImage()" [alt]="productName()" />
+              <img loading="lazy" decoding="async" class="product-summary__image" id="js-product-img" [src]="productImage()" [alt]="productName()" />
               <div class="product-summary__details">
                 <h2 class="product-summary__name" id="js-product-name">{{ productName() }}</h2>
                 <div class="product-summary__meta">
@@ -435,7 +435,7 @@
                     <div class="media-upload__preview u-inline-f9f3c71d28">
                       @for (img of images(); track $index) {
                         <div class="media-upload__thumb-wrapper">
-                          <img [src]="img" class="media-upload__thumb" alt="Ảnh đánh giá" />
+                          <img loading="lazy" decoding="async" [src]="img" class="media-upload__thumb" alt="Ảnh đánh giá" />
                           <button
                             type="button"
                             class="media-upload__remove-btn"
@@ -596,7 +596,7 @@
                 @if (rev.images && rev.images.length > 0) {
                   <div class="u-inline-e1470908f8">
                     @for (img of rev.images; track img) {
-                      <img [src]="img" alt="Ảnh thực tế" class="u-inline-491c3ceee5" />
+                      <img loading="lazy" decoding="async" [src]="img" alt="Ảnh thực tế" class="u-inline-491c3ceee5" />
                     }
                   </div>
                 }
@@ -616,7 +616,7 @@
                     @if (rep.image_url) {
                       <div style="margin-top: 6px;">
                         <a [href]="rep.image_url" target="_blank" rel="noopener noreferrer">
-                          <img [src]="rep.image_url" alt="Ảnh đính kèm từ CSKH" style="max-width: 140px; max-height: 140px; border-radius: 6px; border: 1px solid #e2d5c7; object-fit: cover; display: block;" />
+                          <img loading="lazy" decoding="async" [src]="rep.image_url" alt="Ảnh đính kèm từ CSKH" style="max-width: 140px; max-height: 140px; border-radius: 6px; border: 1px solid #e2d5c7; object-fit: cover; display: block;" />
                         </a>
                       </div>
                     }

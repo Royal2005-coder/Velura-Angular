@@ -653,7 +653,7 @@
           </div>
 
           <div class="qr-modal__qrcode-wrap">
-            <img [src]="qrImageUrl()" alt="Mã thanh toán QR" class="qr-modal__image" />
+            <img loading="lazy" decoding="async" [src]="qrImageUrl()" alt="Mã thanh toán QR" class="qr-modal__image" />
             <div class="qr-modal__timer">
               <span>Hết hạn sau: <strong>{{ qrCountdownLabel() }}</strong></span>
             </div>

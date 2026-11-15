@@ -41,13 +41,13 @@
   <div class="gallery-stage">
     <div class="gallery-preview">
       @if (enhanced(); as result) {
-        <img [src]="result.url" alt="Ảnh sau khi AI cải thiện" />
+        <img loading="lazy" decoding="async" [src]="result.url" alt="Ảnh sau khi AI cải thiện" />
         <span class="gallery-preview__tag">Bản AI · {{ result.model }}</span>
       } @else if (originalUrl()) {
-        <img [src]="originalUrl()" alt="Ảnh vừa tải lên" />
+        <img loading="lazy" decoding="async" [src]="originalUrl()" alt="Ảnh vừa tải lên" />
         <span class="gallery-preview__tag">Ảnh gốc đã kiểm tra</span>
       } @else if (images()[slot()]; as url) {
-        <img [src]="resolve(url)" alt="Ảnh đang chọn" />
+        <img loading="lazy" decoding="async" [src]="resolve(url)" alt="Ảnh đang chọn" />
       } @else {
         <p class="gallery-preview__empty">Chọn ô ảnh rồi tải ảnh lên để bắt đầu.</p>
       }

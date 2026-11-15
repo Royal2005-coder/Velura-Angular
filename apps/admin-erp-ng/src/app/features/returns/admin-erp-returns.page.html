@@ -223,7 +223,7 @@
             <div class="record__evidence">
               <span>Ảnh ĐVVC lấy hàng</span>
               @for (image of shipment.pickup_photo_urls; track image) {
-                <a [href]="image" target="_blank" rel="noopener"><img [src]="image" alt="Ảnh ĐVVC lấy hàng" /></a>
+                <a [href]="image" target="_blank" rel="noopener"><img loading="lazy" decoding="async" [src]="image" alt="Ảnh ĐVVC lấy hàng" /></a>
               }
             </div>
           }
@@ -375,7 +375,7 @@
         <div class="record__evidence">
           <span>Ảnh khách gửi</span>
           @for (image of record.evidence_images; track image) {
-            <a [href]="image" target="_blank" rel="noopener"><img [src]="image" alt="Minh chứng khách gửi" /></a>
+            <a [href]="image" target="_blank" rel="noopener"><img loading="lazy" decoding="async" [src]="image" alt="Minh chứng khách gửi" /></a>
           }
         </div>
       }

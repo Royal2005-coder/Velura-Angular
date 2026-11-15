@@ -48,7 +48,8 @@ export interface ModuleHealthRecord {
 
 export interface ModuleHealthResponse {
   success: boolean;
-  data: ModuleHealthRecord;
+  /** Null when any count could not be read: the dashboard shows "no data" instead of an invented number. */
+  data: ModuleHealthRecord | null;
   fetched_at: string;
 }
 
@@ -70,7 +71,8 @@ export async function getDashboardSlaMetrics(): Promise<SlaMetricsResponse> {
       violated_orders: Number(r.violated_orders || 0),
       avg_processing_hours: Number(r.avg_processing_hours || 0),
       sla_compliance_pct: Number(r.sla_compliance_pct || 0),
-      mv_refreshed_at: String(r.mv_refreshed_at || new Date().toISOString())
+      // Missing refresh time stays empty; stamping "now" would claim a freshness the view never had.
+      mv_refreshed_at: r.mv_refreshed_at ? String(r.mv_refreshed_at) : ''
     })),
     fetched_at: new Date().toISOString()
   };
@@ -151,10 +153,10 @@ export async function getInventoryAlerts(): Promise<InventoryAlertsResponse> {
 
 /**
  * Data Access Object (DAO) / Service: Truy xuất chỉ số sức khỏe 6 phân hệ (Widget Q1)
- * Kiến trúc 3 tầng:
+ * Kiến trúc 2 tầng:
  * 1. Primary: RPC `rpc_get_module_health` (tối ưu nguyên tử 1 roundtrip)
  * 2. Secondary: Dynamic query song song qua PostgREST exact count từ 6 bảng nghiệp vụ
- * 3. Tertiary: Circuit breaker safe defaults khi mất kết nối cơ sở dữ liệu
+ * Nếu không đọc được đủ 6 số đếm thì trả `success: false, data: null` — không bao giờ bịa số.
  */
 export async function getModuleHealth(): Promise<ModuleHealthResponse> {
   // Tầng 1: Thử gọi RPC chuyên dụng
@@ -191,12 +193,11 @@ export async function getModuleHealth(): Promise<ModuleHealthResponse> {
       selectRows('approval_admin_request', { status: 'eq.pending', limit: 1 }, { count: 'exact', silentError: true })
     ]);
 
-    const ordersCount = ordersRes.status === 'fulfilled' && typeof ordersRes.value.count === 'number' ? ordersRes.value.count : 16;
-    const variantsCount = variantsRes.status === 'fulfilled' && typeof variantsRes.value.count === 'number' ? variantsRes.value.count : 10;
-    const ticketsCount = ticketsRes.status === 'fulfilled' && typeof ticketsRes.value.count === 'number' ? ticketsRes.value.count : 4;
-    const vouchersCount = vouchersRes.status === 'fulfilled' && typeof vouchersRes.value.count === 'number' ? vouchersRes.value.count : 1;
-    const reviewsCount = reviewsRes.status === 'fulfilled' && typeof reviewsRes.value.count === 'number' ? reviewsRes.value.count : 2;
-    const adminCount = adminRes.status === 'fulfilled' && typeof adminRes.value.count === 'number' ? adminRes.value.count : 1;
+    const counts = [ordersRes, variantsRes, ticketsRes, vouchersRes, reviewsRes, adminRes].map((res) =>
+      res.status === 'fulfilled' && typeof res.value.count === 'number' ? res.value.count : null,
+    );
+    if (counts.some((count) => count === null)) return moduleHealthUnavailable();
+    const [ordersCount, variantsCount, ticketsCount, vouchersCount, reviewsCount, adminCount] = counts as number[];
 
     return {
       success: true,
@@ -213,20 +214,11 @@ export async function getModuleHealth(): Promise<ModuleHealthResponse> {
       fetched_at: new Date().toISOString()
     };
   } catch {
-    // Tầng 3: Circuit Breaker Static Fallback
-    return {
-      success: true,
-      data: {
-        orders_pending_24h: 16,
-        variants_out_of_stock: 10,
-        tickets_open_24h: 4,
-        promotions_near_budget: 1,
-        reviews_urgent: 2,
-        admin_requests_pending: 1,
-        total_issues: 34,
-        fetched_at: new Date().toISOString()
-      },
-      fetched_at: new Date().toISOString()
-    };
+    return moduleHealthUnavailable();
   }
+}
+
+/** Honest failure: the widget renders its empty state instead of a fabricated count. */
+function moduleHealthUnavailable(): ModuleHealthResponse {
+  return { success: false, data: null, fetched_at: new Date().toISOString() };
 }

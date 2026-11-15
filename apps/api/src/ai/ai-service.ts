@@ -33,6 +33,8 @@ const TASKS: AiTask[] = [
   "virtual_try_on",
   "product_image_enhance",
 ];
+/** Job errors caused by the platform (restart/deploy, engine down, storage); they never consume a VTO-10 retry. */
+const NOT_AN_ATTEMPT: Record<string, true> = { AI_JOB_INTERRUPTED: true, AI_ENGINE_UNAVAILABLE: true, AI_QUEUE_STORAGE_FAILED: true };
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object")
@@ -72,6 +74,8 @@ export class AiService {
   private work?: Promise<void>;
   private maintenance?: ReturnType<typeof setInterval>;
   private readonly controllers = new Map<string, AbortController>();
+  /** Last time each VTO job's product/variant was confirmed still tryable; a viewer fetches 24 frames at once. */
+  private readonly supportCheckedAt = new Map<string, number>();
   private creating: Promise<unknown> = Promise.resolve();
   constructor(
     private readonly repo: LocalAiRepository,
@@ -229,7 +233,7 @@ export class AiService {
       bytes = await (expected === "jpeg" ? raster.jpeg({ quality: 95 }) : expected === "png" ? raster.png() : raster.webp({ quality: 95 })).toBuffer();
       if (bytes.length > 8 * 1024 * 1024) throw new Error("IMAGE_SIZE");
     } catch { throw new HttpError(422, "INVALID_IMAGE", "Ảnh không đọc được hoặc vượt giới hạn điểm ảnh."); }
-    await this.repo.purge();
+    await this.purgeExpired();
     const id = randomUUID();
     const asset: AiAsset = {
       id,
@@ -304,7 +308,7 @@ export class AiService {
     if (this.closed) throw new HttpError(503, "AI_ENGINE_UNAVAILABLE", "Bộ xử lý AI đang dừng.");
     await this.refreshReadiness();
     this.enabled();
-    await this.repo.purge();
+    await this.purgeExpired();
     const task = asString(body.task) as AiTask;
     if (!TASKS.includes(task))
       throw new HttpError(400, "INVALID_TASK", "Tác vụ AI không được hỗ trợ.");
@@ -352,14 +356,16 @@ export class AiService {
         ["queued", "running"].includes(job.status),
     );
     if (active) return this.view(active);
+    // VTO-10: infrastructure faults (restart, engine down, storage) are the shop's failure, not a user attempt.
     const attempts = task === "virtual_try_on"
-      ? jobs.filter(job => job.owner === owner && job.fingerprint === fingerprint)
+      ? jobs.filter(job => job.owner === owner && job.fingerprint === fingerprint && !NOT_AN_ATTEMPT[job.error ?? ""])
         .sort((a, b) => a.created_at.localeCompare(b.created_at))
       : [];
     if (task === "virtual_try_on" && attempts.length >= this.maxVtoAttempts())
       throw new HttpError(429, "AI_RETRY_LIMIT", "Đã đạt giới hạn thử lại cho ảnh và sản phẩm này.");
     if (
-      jobs.filter((job) => ["queued", "running"].includes(job.status)).length >=
+      // A pending 360° stage still needs the single GPU, so it counts toward global capacity.
+      jobs.filter((job) => ["queued", "running"].includes(job.status) || job.stage3d === "pending").length >=
         12 ||
       jobs.filter(
         (job) =>
@@ -618,6 +624,7 @@ export class AiService {
       ...(job.attempt ? { attempt: job.attempt, retry_of: job.retry_of } : {}),
       ...(job.result_url ? { result_url: job.result_url } : {}),
       ...(job.frames3d?.length ? { frames3d: job.frames3d } : {}),
+      ...(job.stage3d ? { stage3d: job.stage3d } : {}),
       ...(job.gate ? { gate: job.gate } : {}),
       ...(job.error ? { error: job.error } : {}),
       ...(job.matches ? { matches: job.matches } : {}),
@@ -666,11 +673,7 @@ export class AiService {
   async result(owner: string, id: string): Promise<Buffer> {
     const job = await this.owned(owner, id);
     if (this.storageBlocked) throw new HttpError(503, "AI_QUEUE_STORAGE_FAILED", "Kho tác vụ tạm thời không khả dụng.");
-    if (job.task === "virtual_try_on") {
-      const support = await this.productCapabilities(job.product_id!, job.variant_id);
-      if (!support.product_supported || !support.variant_supported)
-        throw new HttpError(409, "VTO_PRODUCT_UNAVAILABLE", "Sản phẩm hoặc biến thể không còn hỗ trợ thử đồ.");
-    }
+    if (job.task === "virtual_try_on") await this.requireVtoSelectionSupported(job);
     if (job.status !== "success" || !job.result_url)
       throw new HttpError(
         409,
@@ -683,24 +686,48 @@ export class AiService {
   async resultFile(owner: string, id: string, name: string): Promise<Buffer> {
     const job = await this.owned(owner, id);
     if (this.storageBlocked) throw new HttpError(503, "AI_QUEUE_STORAGE_FAILED", "Kho tác vụ tạm thời không khả dụng.");
+    // Frames depict the same product as the 2D result, so they follow the same withdrawal rule (VTO-03/11).
+    if (job.task === "virtual_try_on") await this.requireVtoSelectionSupported(job, 30_000);
     const published = (job.frames3d || []).map((url) => url.split("/").pop());
     if (job.status !== "success" || !published.includes(name))
       throw new HttpError(409, "RESULT_UNAVAILABLE", "Kết quả 3D chưa sẵn sàng.");
     return this.repo.resultFile(job, name);
   }
-  /** Recover interrupted local work as failed; only queued work can claim the single GPU. */
+  /**
+   * A VTO output is served only while its exact product/variant is still offered for try-on. `reuseMs` lets the
+   * frame burst of one viewer share a single catalog check instead of 2 reads per frame.
+   */
+  private async requireVtoSelectionSupported(job: AiJob, reuseMs = 0): Promise<void> {
+    const checkedAt = this.supportCheckedAt.get(job.id);
+    if (reuseMs && checkedAt && Date.now() - checkedAt < reuseMs) return;
+    const support = await this.productCapabilities(job.product_id!, job.variant_id);
+    if (!support.product_supported || !support.variant_supported) {
+      this.supportCheckedAt.delete(job.id);
+      throw new HttpError(409, "VTO_PRODUCT_UNAVAILABLE", "Sản phẩm hoặc biến thể không còn hỗ trợ thử đồ.");
+    }
+    for (const [id, at] of this.supportCheckedAt) if (Date.now() - at >= 30_000) this.supportCheckedAt.delete(id);
+    this.supportCheckedAt.set(job.id, Date.now());
+  }
+  /** Remove expired jobs/assets, never the directory of a job a worker is still writing into. */
+  private purgeExpired(): Promise<void> {
+    return this.repo.purge(Date.now(), new Set(this.controllers.keys()));
+  }
+  /** After a restart: interrupted running work fails (not a user attempt); queued work and pending 360° stages resume. */
   async recover(): Promise<void> {
-    await this.repo.purge();
-    for (const job of await this.repo.jobs())
+    await this.purgeExpired();
+    for (const job of await this.repo.jobs()) {
       if (job.status === "running")
         await this.repo.transition(job.id, ["running"], {
           status: "failed",
           error: "AI_JOB_INTERRUPTED",
         });
+      // A pending 360° stage is left pending: nothing runs in a fresh process, and the pump picks it up once the
+      // 2D queue is empty (or marks it failed when the worker cannot render it).
+    }
     this.startPump();
     if (!this.maintenance) {
       this.maintenance = setInterval(
-        () => void this.repo.purge().catch(() => undefined),
+        () => void this.purgeExpired().catch(() => undefined),
         60_000,
       );
       this.maintenance.unref();
@@ -711,7 +738,7 @@ export class AiService {
     clearInterval(this.maintenance);
     this.closed = true;
     await this.creating;
-    for (const controller of this.controllers.values()) controller.abort();
+    for (const controller of this.controllers.values()) controller.abort("shutdown");
     await this.work;
   }
   private startPump(): void {
@@ -728,14 +755,19 @@ export class AiService {
       await this.refreshReadiness();
       while (!this.closed) {
         await this.refreshReadiness();
-        const job = (await this.repo.jobs())
-          .filter(
-            (row) =>
-              row.status === "queued" &&
-              Date.parse(row.expires_at) > Date.now(),
-          )
+        const live = (await this.repo.jobs()).filter((row) => Date.parse(row.expires_at) > Date.now());
+        const job = live
+          .filter((row) => row.status === "queued")
           .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
-        if (!job) break;
+        if (!job) {
+          // 2D try-ons always go first; a 360° add-on only uses the GPU when nobody is waiting for a try-on.
+          const stage = live
+            .filter((row) => row.status === "success" && row.stage3d === "pending")
+            .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+          if (!stage) break;
+          await this.renderTurntable(stage);
+          continue;
+        }
         if (!this.worker.ready(job.task)) {
           await this.repo.transition(job.id, ["queued"], { status: "failed", error: "AI_ENGINE_UNAVAILABLE" });
           continue;
@@ -749,11 +781,11 @@ export class AiService {
         job.status = "running";
         const controller = new AbortController();
         this.controllers.set(job.id, controller);
-        // A reconstruction stage runs after the try-on in the same job, so its budget is added up front.
+        // VTO-09: the try-on itself gets 120 s from the moment it starts running. The optional 360° stage runs later
+        // as its own step, so it can never make the try-on time out.
         const requested3d = job.task === "virtual_try_on" && job.worker.render_3d === true
           && this.worker.turntableReady?.() === true;
-        const timeout = setTimeout(() => controller.abort(), requested3d ? 630_000
-          : job.task === "virtual_try_on" ? 180_000 : 60_000);
+        const timeout = setTimeout(() => controller.abort("deadline"), job.task === "virtual_try_on" ? 120_000 : 60_000);
         timeout.unref();
         try {
           const result = await this.worker.run(
@@ -786,15 +818,7 @@ export class AiService {
             await output.stats();
             job.result_url = `jobs/${job.id}/result`;
           }
-          if (requested3d && result.status === "success") {
-            // The 360° stage is an extra: a reconstruction failure never demotes the finished try-on.
-            try {
-              const stage = await this.worker.turntable?.(job.directory, controller.signal);
-              if (stage) job.frames3d = await this.publishTurntable(job, stage);
-            } catch (error) {
-              console.error("AI_TURNTABLE_STAGE_FAILED", job.id, (error as Error).message?.slice(0, 120));
-            }
-          }
+          if (requested3d && result.status === "success") job.stage3d = "pending";
           if (job.task === "image_embedding" && result.status === "success") {
             if (job.catalog_batch_metadata) {
               if (
@@ -876,8 +900,10 @@ export class AiService {
             continue;
           }
           job.status = "failed";
+          job.stage3d = undefined;
+          // Only the deadline is a Timeout; a shutdown/deploy abort is an interruption and is not a user attempt.
           job.error = error instanceof HttpError ? error.code : controller.signal.aborted
-            ? "AI_JOB_TIMEOUT"
+            ? controller.signal.reason === "deadline" ? "AI_JOB_TIMEOUT" : "AI_JOB_INTERRUPTED"
             : "AI_INFERENCE_FAILED";
         } finally {
           clearTimeout(timeout);
@@ -889,6 +915,7 @@ export class AiService {
           error: job.error,
           result_url: job.result_url,
           frames3d: job.frames3d,
+          stage3d: job.stage3d,
           matches: job.matches,
           index_summary: job.index_summary,
           processing_version: job.processing_version,
@@ -899,15 +926,41 @@ export class AiService {
     }
   }
 
+  /** The 360° add-on runs after the try-on is already Success: it can add frames or mark itself failed, never demote. */
+  private async renderTurntable(job: AiJob): Promise<void> {
+    const controller = new AbortController();
+    this.controllers.set(job.id, controller);
+    // Own bound, independent of any adapter's internal timeout, so one stage can never hold the queue indefinitely.
+    const timeout = setTimeout(() => controller.abort("deadline"), 450_000);
+    timeout.unref();
+    let patch: Partial<AiJob>;
+    try {
+      const stage = await this.worker.turntable?.(job.directory, controller.signal);
+      if (!stage) throw new Error("AI_TURNTABLE_UNAVAILABLE");
+      patch = { frames3d: await this.publishTurntable(job, stage), stage3d: undefined };
+    } catch (error) {
+      console.error("AI_TURNTABLE_STAGE_FAILED", job.id, (error as Error).message?.slice(0, 120));
+      patch = { stage3d: "failed" };
+    } finally {
+      clearTimeout(timeout);
+      this.controllers.delete(job.id);
+    }
+    // Only a still-pending stage may be settled; never overwrite a stage another path already resolved.
+    await this.repo.transition(job.id, ["success"], patch, (row) => row.stage3d === "pending");
+  }
+
   /** Slice the worker's turntable sheet into strict-name frames under the job's render3d directory. */
   private async publishTurntable(job: AiJob, stage: TurntableStage): Promise<string[]> {
     const directory = join(job.directory, "render3d");
-    await mkdir(directory, { recursive: true, mode: 0o700 });
+    // Non-recursive: if purge already removed the job, fail instead of resurrecting an orphan frame folder.
+    await mkdir(directory, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+    });
     const sheet = await sharp(stage.bytes, { failOn: "warning", limitInputPixels: 40_000_000 })
       .raw()
       .toBuffer({ resolveWithObject: true });
     const { width, height, channels } = sheet.info;
-    if (width !== stage.columns * stage.tile || height < stage.rows * stage.tile || channels < 3)
+    if (width !== stage.columns * stage.tile || height !== stage.rows * stage.tile || channels < 3)
       throw new Error("INVALID_IMAGE_RESULT");
     const names: string[] = [];
     for (let index = 0; index < stage.frames; index += 1) {

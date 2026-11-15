@@ -11,6 +11,7 @@ import {
   normalizedImageVector,
 } from "../../apps/api/src/ai/image-vector-repository.js";
 import type {
+  AiJobView,
   AiWorker,
   AiWorkerResult,
 } from "../../apps/api/src/ai/ai-types.js";
@@ -90,10 +91,16 @@ async function setup(worker: AiWorker, source: AiCatalog = catalog) {
     },
   };
 }
-async function terminal(service: AiService, owner: string, id: string) {
+/** Poll the in-process queue (it exposes no completion event) until `settled` holds; default = left queued/running. */
+async function terminal(
+  service: AiService,
+  owner: string,
+  id: string,
+  settled: (job: AiJobView) => boolean = (job) => !["queued", "running"].includes(job.status),
+) {
   for (let i = 0; i < 2000; i++) {
     const job = await service.get(owner, id);
-    if (!["queued", "running"].includes(job.status)) return job;
+    if (settled(job)) return job;
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("TEST_JOB_TIMEOUT");
@@ -762,8 +769,9 @@ test("VTO enforces configured retry limits, tracks retry_of lineage, and re-veri
     await fixture.close();
   }
 });
-test("A studio try-on publishes sliced turntable frames that only its own job may serve", async () => {
+test("A studio try-on is Success before its 360° stage, then publishes frames only its own job may serve", async () => {
   const columns = 4, rows = 3, tile = 64, frames = 12;
+  const reconstruction = Promise.withResolvers<void>();
   const raw = Buffer.alloc(columns * tile * rows * tile * 3);
   for (let index = 0; index < frames; index += 1) {
     for (let y = 0; y < tile; y += 1)
@@ -778,7 +786,7 @@ test("A studio try-on publishes sliced turntable frames that only its own job ma
   const fixture = await setup({
     ready: () => true,
     turntableReady: () => true,
-    async turntable() { return { bytes: sheet, frames, columns, rows, tile }; },
+    async turntable() { await reconstruction.promise; return { bytes: sheet, frames, columns, rows, tile }; },
     async run(directory) {
       const request = JSON.parse(await readFile(join(directory, "job.json"), "utf8")) as { request_id: string };
       await writeFile(join(directory, "result.png"), PNG);
@@ -793,8 +801,16 @@ test("A studio try-on publishes sliced turntable frames that only its own job ma
       idempotency_key: "turntable-vto-123",
     });
     const done = await terminal(fixture.service, "a", job.id);
+    // D2/VTO-09: the try-on result is usable while the 360° add-on is still being built.
     assert.equal(done.status, "success");
-    assert.equal(done.frames3d?.length, frames);
+    assert.equal(done.stage3d, "pending");
+    assert.equal(done.frames3d, undefined);
+    assert.ok(await fixture.service.result("a", job.id));
+    reconstruction.resolve();
+    const built = await terminal(fixture.service, "a", job.id, (row) => row.stage3d !== "pending");
+    assert.equal(built.status, "success");
+    assert.equal(built.stage3d, undefined);
+    assert.equal(built.frames3d?.length, frames);
     const frame = await fixture.service.resultFile("a", job.id, "frame-007.png");
     const pixel = (await sharp(frame).raw().toBuffer({ resolveWithObject: true })).data;
     assert.equal(pixel[0], 7 * 20 + 5);
@@ -820,9 +836,54 @@ test("A reconstruction failure leaves a successful try-on published and without 
       mode: "studio", studio_asset_id: "female", consent: true, confirmed: true, render3d: true,
       idempotency_key: "turntable-failure-vto-123",
     });
-    const done = await terminal(fixture.service, "a", job.id);
+    const done = await terminal(fixture.service, "a", job.id, (row) => row.status === "success" && row.stage3d !== "pending");
     assert.equal(done.status, "success");
+    assert.equal(done.stage3d, "failed");
     assert.equal(done.frames3d, undefined);
     assert.ok(await fixture.service.result("a", job.id));
   } finally { await fixture.close(); }
+});
+
+test("A 360° stage left pending by a restart resumes and settles instead of leaving clients polling forever", async () => {
+  const fixture = await setup(worker);
+  try {
+    const id = "33333333-3333-4333-8333-333333333333";
+    await mkdir(join(fixture.root, "jobs", id), { recursive: true });
+    await fixture.repo.saveJob({
+      id, task: "virtual_try_on", status: "success", stage3d: "pending",
+      created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 600_000).toISOString(),
+      result_url: `jobs/${id}/result`, owner: "a", idempotency_key: "restart-3d-123", fingerprint: "f",
+      directory: join(fixture.root, "jobs", id), worker: {},
+    });
+    await fixture.service.recover();
+    // This worker has no turntable, so the resumed stage must settle as failed — never stay pending.
+    const job = await terminal(fixture.service, "a", id, (row) => row.stage3d !== "pending");
+    assert.equal(job.status, "success");
+    assert.equal(job.stage3d, "failed");
+  } finally { await fixture.close(); }
+});
+
+test("A shutdown abort is recorded as an interruption (AI_JOB_INTERRUPTED), not a VTO timeout", async () => {
+  const started = Promise.withResolvers<void>();
+  const fixture = await setup({
+    ready: () => true,
+    async run(_directory, signal) {
+      started.resolve();
+      const aborted = Promise.withResolvers<never>();
+      signal.addEventListener("abort", () => aborted.reject(new Error("aborted")));
+      return aborted.promise;
+    },
+  }, { ...catalog, async support() { return { product_supported: true, variant_supported: true, garment_category: "upper_body" }; } });
+  const body = {
+    task: "virtual_try_on", product_id: product, variant_id: "22222222-2222-4222-8222-222222222222",
+    mode: "studio", studio_asset_id: "female", consent: true, confirmed: true, idempotency_key: "shutdown-vto-123",
+  };
+  try {
+    const job = await fixture.service.create("a", body);
+    await started.promise;
+    await fixture.service.close();
+    const stored = await fixture.repo.job(job.id);
+    assert.equal(stored?.status, "failed");
+    assert.equal(stored?.error, "AI_JOB_INTERRUPTED");
+  } finally { await rm(fixture.root, { recursive: true, force: true }); }
 });

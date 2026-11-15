@@ -70,7 +70,8 @@ export class ShopAiCatalog implements AiCatalog {
     variantId?: string,
   ): Promise<{ product_supported: boolean; variant_supported: boolean; garment_category?: string }> {
     const product = await this.deps.product(productId);
-    if (!product || product.status !== "on_sale" || product.is_combo === true) {
+    // VTO-02: stock is not a try-on condition, so a sold-out product stays tryable; hidden/discontinued do not.
+    if (!product || !["on_sale", "out_of_stock"].includes(asString(product.status)) || product.is_combo === true) {
       return { product_supported: false, variant_supported: false };
     }
     const catalogCategory = asString(asJsonObject(product?.category).slug);

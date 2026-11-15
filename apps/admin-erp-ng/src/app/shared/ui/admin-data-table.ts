@@ -141,7 +141,7 @@ export interface AdminTableColumn {
       th,
       td {
         padding: 12px 16px;
-        border-bottom: 1px solid var(--erp-line);
+        border-bottom: 1px solid var(--erp-line-subtle);
         text-align: left;
         vertical-align: middle;
         white-space: nowrap;
@@ -150,31 +150,35 @@ export interface AdminTableColumn {
         position: sticky;
         top: 0;
         z-index: 1;
-        background: #f8fafc;
-        color: #64748b;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.05em;
+        height: 44px;
+        padding-block: 0;
+        background: var(--erp-surface);
+        box-shadow: inset 0 -1px 0 var(--erp-line);
+        color: var(--erp-muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
         text-transform: uppercase;
-        border-bottom: 1px solid var(--erp-line-strong);
+        border-bottom: 1px solid var(--erp-line);
       }
       td {
         color: var(--erp-text);
-        font-size: 13px;
+        font-size: 14px;
         font-family: inherit;
+        font-variant-numeric: tabular-nums;
         transition: background 100ms ease;
       }
       tbody tr:last-child td {
         border-bottom: 0;
       }
       tbody tr:hover td {
-        background: rgba(241, 245, 249, 0.7);
+        background: var(--erp-surface-muted);
       }
       tr.is-clickable {
         cursor: pointer;
       }
       tr.is-clickable:focus-visible {
-        outline: 2px solid var(--erp-accent);
+        outline: 2px solid var(--erp-rose);
         outline-offset: -2px;
       }
       .is-right {

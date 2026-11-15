@@ -56,7 +56,7 @@ export interface AdminErpTab {
         border-radius: var(--erp-radius-sm);
         background: transparent;
         color: var(--erp-muted);
-        font-size: 12.5px;
+        font-size: 13px;
         font-weight: 500;
         cursor: pointer;
         transition: color 120ms ease, background 120ms ease;
@@ -84,9 +84,9 @@ export interface AdminErpTab {
       }
       .tabs__item.is-active {
         background: var(--erp-surface);
-        color: var(--erp-ink);
+        color: var(--erp-accent);
         font-weight: 600;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+        box-shadow: var(--erp-shadow-sm);
       }
       .tabs__count {
         min-width: 18px;
@@ -94,7 +94,7 @@ export interface AdminErpTab {
         border-radius: 999px;
         background: var(--erp-accent-soft);
         color: var(--erp-accent);
-        font-size: 10.5px;
+        font-size: 11px;
         font-weight: 600;
         text-align: center;
       }

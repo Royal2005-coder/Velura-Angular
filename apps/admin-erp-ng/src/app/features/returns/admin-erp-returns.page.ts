@@ -769,13 +769,13 @@ export class AdminErpReturnsPage {
     doc.title = `Phiếu gửi hoàn ${record.return_code || record.return_id}`;
     const style = doc.createElement('style');
     style.textContent = `
-      body{font-family:Arial,Helvetica,sans-serif;margin:24px;color:#111}
-      .slip{border:2px solid #111;border-radius:12px;padding:20px;max-width:440px}
-      h1{font-size:18px;margin:0 0 4px} .muted{color:#555;font-size:12px}
-      .code{font-family:monospace;font-size:15px;font-weight:700;margin:12px 0 4px}
+      body{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;margin:24px;color:#2A1A1D}
+      .slip{border:2px solid #2A1A1D;border-radius:12px;padding:20px;max-width:440px}
+      h1{font-size:18px;margin:0 0 4px} .muted{color:#7A5A62;font-size:12px}
+      .code{font-family:ui-monospace,"SFMono-Regular",Consolas,monospace;font-size:15px;font-weight:700;margin:12px 0 4px}
       .qr{display:block;margin:14px auto;width:240px;height:240px}
       table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
-      td{padding:5px 0;vertical-align:top} td:first-child{color:#555;width:38%}
+      td{padding:5px 0;vertical-align:top} td:first-child{color:#7A5A62;width:38%}
       .note{margin-top:14px;font-size:12px;line-height:1.5}`;
     doc.head.appendChild(style);
 

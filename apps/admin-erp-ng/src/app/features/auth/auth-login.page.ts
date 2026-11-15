@@ -82,30 +82,30 @@ const STATE_STORAGE_KEY = 'velura-admin-erp-oauth-state';
       }
       .auth-head span {
         color: var(--erp-accent);
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.12em;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
       }
       .auth-head h2 {
-        font-family: var(--erp-font);
-        font-size: 26px;
-        font-weight: 700;
-        letter-spacing: -0.025em;
-        line-height: 1.15;
+        font-family: var(--erp-display);
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
         color: var(--erp-ink);
       }
       .auth-head p,
       .auth-google-note,
       .auth-attempts {
         color: var(--erp-muted);
-        font-size: 12px;
+        font-size: 13px;
       }
       .auth-alert {
         margin-bottom: 14px;
         padding: 10px 12px;
         border-radius: var(--erp-radius-sm);
-        font-size: 12px;
+        font-size: 13px;
       }
       .auth-alert--error {
         background: var(--erp-danger-soft);
@@ -126,20 +126,22 @@ const STATE_STORAGE_KEY = 'velura-admin-erp-oauth-state';
         gap: 10px;
         width: 100%;
         min-height: 40px;
-        border: 1px solid var(--erp-line-strong);
-        border-radius: var(--erp-radius-sm);
+        border: 1px solid var(--erp-input-border);
+        border-radius: var(--erp-radius-md);
         background: var(--erp-surface);
-        font-size: 13px;
+        color: var(--erp-text);
+        font-size: 14px;
         font-weight: 600;
         cursor: pointer;
       }
       .auth-google:hover:not(:disabled) {
         background: var(--erp-surface-muted);
+        border-color: var(--erp-accent);
       }
       .auth-google-note {
         margin-top: 7px;
         text-align: center;
-        font-size: 10px;
+        font-size: 12px;
       }
       .auth-divider {
         display: flex;
@@ -147,7 +149,7 @@ const STATE_STORAGE_KEY = 'velura-admin-erp-oauth-state';
         gap: 10px;
         margin: 18px 0;
         color: var(--erp-soft);
-        font-size: 10px;
+        font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 0.12em;
       }
@@ -164,6 +166,7 @@ const STATE_STORAGE_KEY = 'velura-admin-erp-oauth-state';
       }
       .auth-submit {
         min-height: 42px;
+        width: 100%;
         margin-top: 4px;
       }
       .auth-links {
@@ -176,7 +179,7 @@ const STATE_STORAGE_KEY = 'velura-admin-erp-oauth-state';
         border: 0;
         background: transparent;
         color: var(--erp-accent-strong);
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 600;
         cursor: pointer;
       }

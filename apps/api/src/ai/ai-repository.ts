@@ -82,11 +82,12 @@ export class LocalAiRepository {
     id: string,
     allowed: AiJob["status"][],
     patch: Partial<AiJob>,
+    when: (job: AiJob) => boolean = () => true,
   ): Promise<AiJob | null> {
     const pending = (this.writes.get(id) || Promise.resolve()).then(
       async () => {
         const job = await this.job(id);
-        if (!job || !allowed.includes(job.status)) return null;
+        if (!job || !allowed.includes(job.status) || !when(job)) return null;
         const updated = { ...job, ...patch };
         await this.writeJob(updated);
         return updated;
@@ -121,10 +122,10 @@ export class LocalAiRepository {
     );
     return rows.filter((row): row is AiJob => row !== null);
   }
-  /** Expired jobs and their copies are removed; the caller periodically invokes maintenance. */
-  async purge(now = Date.now()): Promise<void> {
+  /** Expired jobs and their copies are removed; jobs still being processed (`keep`) are left for their worker. */
+  async purge(now = Date.now(), keep: ReadonlySet<string> = new Set()): Promise<void> {
     for (const job of await this.jobs())
-      if (Date.parse(job.expires_at) <= now)
+      if (Date.parse(job.expires_at) <= now && !keep.has(job.id))
         await rm(job.directory, { recursive: true, force: true });
     const { readdir } = await import("node:fs/promises");
     for (const filename of await readdir(join(this.root, "assets")).catch(

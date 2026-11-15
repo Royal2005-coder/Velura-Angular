@@ -38,7 +38,7 @@ import { lockBodyScroll } from '../../core/body-scroll-lock';
         z-index: 70;
         display: flex;
         justify-content: flex-end;
-        background: rgba(36, 31, 28, 0.42);
+        background: rgba(42, 20, 28, 0.45);
       }
       .drawer-panel {
         display: grid;
@@ -46,8 +46,10 @@ import { lockBodyScroll } from '../../core/body-scroll-lock';
         width: min(92vw, 520px);
         height: 100%;
         border-left: 1px solid var(--erp-line);
+        border-radius: var(--erp-radius-xl) 0 0 var(--erp-radius-xl);
         background: var(--erp-surface);
-        box-shadow: -24px 0 60px -30px rgba(36, 31, 28, 0.6);
+        box-shadow: var(--erp-shadow-modal);
+        overflow: hidden;
         animation: drawer-in 160ms ease-out;
       }
       .drawer-panel--lg {
@@ -66,7 +68,7 @@ import { lockBodyScroll } from '../../core/body-scroll-lock';
       }
       h2 {
         font-family: var(--erp-display);
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 600;
         color: var(--erp-ink);
       }

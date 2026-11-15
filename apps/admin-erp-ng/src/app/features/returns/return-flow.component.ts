@@ -314,27 +314,27 @@ export class ReturnFlowComponent {
       <defs>
         <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#7A283C" />
-          <stop offset="100%" stop-color="#4A1523" />
+          <stop offset="100%" stop-color="#631F30" />
         </linearGradient>
       </defs>
-      <rect width="${W}" height="${H}" rx="16" fill="#FFFFFF" stroke="#EAD7DD" stroke-width="2" />
+      <rect width="${W}" height="${H}" rx="16" fill="#FFFFFF" stroke="#F0DDE2" stroke-width="2" />
       <rect width="${W}" height="70" rx="16" fill="url(#g)" />
       <rect y="54" width="${W}" height="16" fill="url(#g)" />
-      <text x="32" y="44" font-family="sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF">VELURA — BIÊN LAI ĐỐI SOÁT CHI HỘ COD</text>
-      <text x="32" y="110" font-family="sans-serif" font-size="14" fill="#6B635D">MÃ ĐỐI SOÁT:</text>
-      <text x="200" y="110" font-family="monospace" font-size="16" font-weight="bold" fill="#18181B">${reference}</text>
-      <text x="32" y="150" font-family="sans-serif" font-size="14" fill="#6B635D">SỐ TIỀN HOÀN:</text>
-      <text x="200" y="150" font-family="sans-serif" font-size="18" font-weight="bold" fill="#7A283C">${amount.toLocaleString('vi-VN')} đ</text>
-      <text x="32" y="190" font-family="sans-serif" font-size="14" fill="#6B635D">NGÂN HÀNG:</text>
-      <text x="200" y="190" font-family="sans-serif" font-size="14" font-weight="bold" fill="#18181B">${bankName}</text>
-      <text x="32" y="230" font-family="sans-serif" font-size="14" fill="#6B635D">SỐ TÀI KHOẢN:</text>
-      <text x="200" y="230" font-family="monospace" font-size="14" font-weight="bold" fill="#18181B">••••${accountLast4}</text>
-      <text x="32" y="270" font-family="sans-serif" font-size="14" fill="#6B635D">CHỦ TÀI KHOẢN:</text>
-      <text x="200" y="270" font-family="sans-serif" font-size="14" fill="#18181B">${holder.toUpperCase()}</text>
-      <text x="32" y="310" font-family="sans-serif" font-size="14" fill="#6B635D">THỜI ĐIỂM:</text>
-      <text x="200" y="310" font-family="sans-serif" font-size="14" fill="#18181B">${dateStr}</text>
-      <line x1="32" y1="335" x2="568" y2="335" stroke="#EAD7DD" stroke-width="1" />
-      <text x="32" y="360" font-family="sans-serif" font-size="12" fill="#047857">✔ ĐÃ ĐỐI SOÁT &amp; XÁC NHẬN CHI HỘ QUA CỔNG NGÂN HÀNG (NAPAS B2C)</text>
+      <text x="32" y="44" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF">VELURA — BIÊN LAI ĐỐI SOÁT CHI HỘ COD</text>
+      <text x="32" y="110" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#7A5A62">MÃ ĐỐI SOÁT:</text>
+      <text x="200" y="110" font-family="ui-monospace, Consolas, monospace" font-size="16" font-weight="bold" fill="#2A1A1D">${reference}</text>
+      <text x="32" y="150" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#7A5A62">SỐ TIỀN HOÀN:</text>
+      <text x="200" y="150" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="bold" fill="#7A283C">${amount.toLocaleString('vi-VN')} đ</text>
+      <text x="32" y="190" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#7A5A62">NGÂN HÀNG:</text>
+      <text x="200" y="190" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="bold" fill="#2A1A1D">${bankName}</text>
+      <text x="32" y="230" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#7A5A62">SỐ TÀI KHOẢN:</text>
+      <text x="200" y="230" font-family="ui-monospace, Consolas, monospace" font-size="14" font-weight="bold" fill="#2A1A1D">••••${accountLast4}</text>
+      <text x="32" y="270" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#7A5A62">CHỦ TÀI KHOẢN:</text>
+      <text x="200" y="270" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#2A1A1D">${holder.toUpperCase()}</text>
+      <text x="32" y="310" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#7A5A62">THỜI ĐIỂM:</text>
+      <text x="200" y="310" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#2A1A1D">${dateStr}</text>
+      <line x1="32" y1="335" x2="568" y2="335" stroke="#F0DDE2" stroke-width="1" />
+      <text x="32" y="360" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#42624D">✔ ĐÃ ĐỐI SOÁT &amp; XÁC NHẬN CHI HỘ QUA CỔNG NGÂN HÀNG (NAPAS B2C)</text>
     </svg>`;
 
     return new Promise<File>((resolve) => {
@@ -363,10 +363,10 @@ export class ReturnFlowComponent {
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = '#7A283C';
-        ctx.font = 'bold 16px sans-serif';
+        ctx.font = 'bold 16px Inter, system-ui, sans-serif';
         ctx.fillText('VELURA — BIÊN LAI ĐỐI SOÁT CHI HỘ COD', 32, 44);
-        ctx.fillStyle = '#18181B';
-        ctx.font = 'bold 14px monospace';
+        ctx.fillStyle = '#2A1A1D';
+        ctx.font = 'bold 14px ui-monospace, Consolas, monospace';
         ctx.fillText(`Mã: ${reference}`, 32, 80);
         ctx.fillText(`Số tiền: ${amount.toLocaleString('vi-VN')} đ`, 32, 110);
         ctx.fillText(`Ngân hàng: ${bankName}`, 32, 140);

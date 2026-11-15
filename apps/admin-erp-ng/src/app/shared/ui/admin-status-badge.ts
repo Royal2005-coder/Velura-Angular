@@ -21,11 +21,12 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
       .badge {
         display: inline-flex;
         align-items: center;
-        gap: 5px;
-        padding: 3px 9px;
+        gap: 6px;
+        padding: 2px 10px;
         border-radius: 999px;
-        font-size: 11.5px;
+        font-size: 12px;
         font-weight: 600;
+        line-height: 1.5;
         white-space: nowrap;
         border: 1px solid transparent;
       }
@@ -37,44 +38,29 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
         background: currentColor;
       }
       .badge--neutral {
-        background: #f1f5f9;
-        color: #475569;
-        border-color: #e2e8f0;
-      }
-      .badge--neutral i {
-        background: #64748b;
+        background: var(--erp-surface-muted);
+        color: var(--erp-muted);
+        border-color: var(--erp-line);
       }
       .badge--success {
-        background: #ecfdf5;
-        color: #065f46;
-        border-color: #a7f3d0;
-      }
-      .badge--success i {
-        background: #10b981;
+        background: var(--erp-success-soft);
+        color: var(--erp-success);
+        border-color: color-mix(in srgb, var(--erp-success) 22%, transparent);
       }
       .badge--warning {
-        background: #fffbeb;
-        color: #92400e;
-        border-color: #fde68a;
-      }
-      .badge--warning i {
-        background: #f59e0b;
+        background: var(--erp-warning-soft);
+        color: var(--erp-warning);
+        border-color: var(--erp-warning-line);
       }
       .badge--danger {
-        background: #fff1f2;
-        color: #9f1239;
-        border-color: #fecdd3;
-      }
-      .badge--danger i {
-        background: #f43f5e;
+        background: var(--erp-danger-soft);
+        color: var(--erp-danger);
+        border-color: var(--erp-danger-line);
       }
       .badge--info {
-        background: #eff6ff;
-        color: #1e40af;
-        border-color: #bfdbfe;
-      }
-      .badge--info i {
-        background: #3b82f6;
+        background: var(--erp-info-soft);
+        color: var(--erp-info);
+        border-color: color-mix(in srgb, var(--erp-info) 22%, transparent);
       }
     `,
   ],

@@ -1,4 +1,4 @@
-<div class="shell" [class.is-collapsed]="sidebarCollapsed()">
+<div class="shell" [attr.data-sidebar]="sidebarCollapsed() ? 'collapsed' : 'expanded'" [class.is-collapsed]="sidebarCollapsed()">
   <aside
     #sidebar
     class="sidebar"
@@ -13,14 +13,9 @@
         <img src="/admin-assets/images/logo.png" alt="" />
         <span class="brand__copy">
           <strong>Velura</strong>
-          <small>ERP</small>
+          <small>ERP Workspace</small>
         </span>
       </a>
-      @if (isMobile()) {
-        <button class="sidebar__close" type="button" aria-label="Đóng menu" (click)="closeMobileNav()">
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
-        </button>
-      }
     </div>
 
     <nav class="sidebar__nav">
@@ -34,6 +29,7 @@
               [class.is-active]="isActive(item)"
               [class.is-planned]="item.status === 'planned'"
               [attr.aria-current]="isActive(item) ? 'page' : null"
+              [title]="item.label"
             >
               <app-erp-icon [name]="item.icon" [size]="'17'" />
               <span class="nav-link__label">{{ item.label }}</span>
@@ -54,12 +50,10 @@
           <small>{{ session.roleLabel() }}</small>
         </span>
       </div>
-      @if (session.session()?.passwordLogin) {
-        <a class="nav-link nav-link--quiet" routerLink="/change-password">
-          <app-erp-icon name="lock" [size]="'16'" />
-          <span class="nav-link__label">Đổi mật khẩu</span>
-        </a>
-      }
+      <a class="nav-link nav-link--quiet" routerLink="/change-password">
+        <app-erp-icon name="lock" [size]="'16'" />
+        <span class="nav-link__label">Đổi mật khẩu</span>
+      </a>
       <button class="nav-link nav-link--quiet nav-link--button" type="button" (click)="askLogout()">
         <app-erp-icon name="log" [size]="'16'" />
         <span class="nav-link__label">Đăng xuất</span>
@@ -73,54 +67,33 @@
 
   <div class="main">
     <header class="topbar">
-      <button
-        class="topbar__menu"
-        type="button"
-        aria-controls="erp-sidebar"
-        [attr.aria-label]="menuLabel()"
-        [attr.aria-expanded]="isMobile() ? mobileNavOpen() : !sidebarCollapsed()"
-        (click)="toggleSidebar()"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="3" y="4" width="18" height="16" rx="2.5" />
-          <path d="M9 4v16" />
-          <path [attr.d]="sidebarCollapsed() && !isMobile() ? 'M13 10l2 2-2 2' : 'M16 10l-2 2 2 2'" />
-        </svg>
+      <button class="topbar__menu" type="button" [attr.aria-label]="menuLabel()" (click)="toggleSidebar()" title="Đóng/Mở menu điều hướng">
+        <span></span><span></span><span></span>
       </button>
-      <nav class="topbar__title" aria-label="Breadcrumb">
-        @if (workspaceLabel()) {
+      <div class="topbar__title">
+        @if (workspaceLabel() && workspaceLabel() !== pageTitle() && workspaceLabel() !== 'Tổng quan') {
           <span class="topbar__workspace">{{ workspaceLabel() }}</span>
           <span class="topbar__sep" aria-hidden="true">/</span>
         }
         <strong class="topbar__page">{{ pageTitle() }}</strong>
-      </nav>
+      </div>
       <div class="topbar__actions">
         <button class="topbar__search" type="button" (click)="openSearch()" aria-label="Tìm kiếm nhanh phân hệ">
           <app-erp-icon name="search" [size]="'14'" />
           <span class="topbar__search-text">Tìm kiếm…</span>
           <kbd class="topbar__search-kbd">⌘K</kbd>
         </button>
-        <button class="erp-btn erp-btn--sm topbar__refresh-btn" type="button" (click)="refresh()" aria-label="Làm mới dữ liệu">
+        <button class="erp-btn erp-btn--sm topbar__refresh-btn" type="button" (click)="refresh()" aria-label="Làm mới dữ liệu" title="Làm mới · Đồng bộ: 7 ngày gần nhất">
           <app-erp-icon name="refresh" [size]="'14'" />
           <span>Làm mới</span>
         </button>
-        @if (session.session()?.passwordLogin) {
-          <a class="topbar__avatar" routerLink="/change-password" [attr.aria-label]="'Tài khoản ' + session.displayName()">
-            @if (session.avatarUrl()) {
-              <img [src]="session.avatarUrl()" alt="" />
-            } @else {
-              {{ session.initials() }}
-            }
-          </a>
-        } @else {
-          <span class="topbar__avatar" [attr.aria-label]="'Tài khoản ' + session.displayName()">
-            @if (session.avatarUrl()) {
-              <img [src]="session.avatarUrl()" alt="" />
-            } @else {
-              {{ session.initials() }}
-            }
-          </span>
-        }
+        <a class="topbar__avatar" routerLink="/change-password" [attr.aria-label]="'Tài khoản ' + session.displayName()">
+          @if (session.avatarUrl()) {
+            <img [src]="session.avatarUrl()" alt="" />
+          } @else {
+            {{ session.initials() }}
+          }
+        </a>
       </div>
     </header>
 
@@ -182,7 +155,3 @@
     <span>Đang chuyển trang…</span>
   </div>
 }
-
-<!-- One feedback channel and one confirmation dialog for every module. -->
-<app-erp-toast-host />
-<app-erp-confirm-host />

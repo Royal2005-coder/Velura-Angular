@@ -1,3 +1,5 @@
+> Superseded by .specify/specs/vto-studio-10-pose-preview.md (3D/360 removed).
+
 # Feature Specification: SOTA Virtual Try-On (2D Upload + 3D 360° Studio) Refactoring
 
 **Feature ID**: `FEAT-VTO-REFACTOR-SOTA-3D`  

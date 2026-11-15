@@ -1,7 +1,7 @@
 <app-erp-page-header
   eyebrow="Marketing"
   title="Nội dung"
-  subtitle="Quản lý bài viết xu hướng, cẩm nang phối đồ và tin tức thời trang Velura."
+  subtitle="Bài viết cho website: bản nháp chỉ admin thấy, công bố là lộ ra /api/content. Mỗi lần lưu đều ghi audit và tăng phiên bản."
 >
   <div actions>
     @if (canCreate()) {
@@ -38,38 +38,12 @@
       <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />
     </div>
 
-    <div class="content-toolbar">
-      <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
-        <label class="erp-field content-search">
-          <span>Tiêu đề hoặc slug</span>
-          <input class="erp-input" type="search" [value]="search()" (input)="onSearchInput($event)" placeholder="ví dụ: áo lụa" />
-        </label>
-      </app-erp-filter-bar>
-      @if (tab() !== 'subscribers') {
-        <div class="content-view-switcher" role="group" aria-label="Chế độ hiển thị">
-          <button
-            type="button"
-            class="content-view-btn"
-            [class.is-active]="viewMode() === 'cards'"
-            (click)="setViewMode('cards')"
-            title="Dạng thẻ trực quan"
-          >
-            <app-erp-icon name="box" [size]="'14'" />
-            <span>Thẻ ảnh</span>
-          </button>
-          <button
-            type="button"
-            class="content-view-btn"
-            [class.is-active]="viewMode() === 'table'"
-            (click)="setViewMode('table')"
-            title="Dạng bảng dữ liệu"
-          >
-            <app-erp-icon name="dashboard" [size]="'14'" />
-            <span>Bảng</span>
-          </button>
-        </div>
-      }
-    </div>
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+      <label class="erp-field content-search">
+        <span>Tiêu đề hoặc slug</span>
+        <input class="erp-input" type="search" [value]="search()" (input)="onSearchInput($event)" placeholder="ví dụ: áo lụa" />
+      </label>
+    </app-erp-filter-bar>
 
     @if (loadError()) {
       <div class="content-banner" role="alert">
@@ -93,34 +67,6 @@
         [clickable]="false"
         (retry)="reload()"
       />
-    } @else if (viewMode() === 'cards') {
-      @if (rows().length === 0 && !loading()) {
-        <div class="content-empty-state">
-          <p>Chưa có bài viết nào phù hợp bộ lọc.</p>
-        </div>
-      } @else {
-        <div class="content-cards-grid">
-          @for (blog of rows(); track blog.blog_id || blog.slug) {
-            <article class="blog-card" (click)="canUpdate() && openEdit(blog)">
-              <div class="blog-card__media">
-                <img [src]="blogCover(blog)" alt="{{ blog.title }}" loading="lazy" />
-                <span class="blog-card__category">{{ categoryLabel(blog.category_slug) }}</span>
-                <span class="blog-card__status" [class.is-published]="blog.status === 'published'">
-                  {{ blog.status === 'published' ? 'Đã công bố' : 'Bản nháp' }}
-                </span>
-              </div>
-              <div class="blog-card__body">
-                <h3 class="blog-card__title" title="{{ blog.title }}">{{ blog.title }}</h3>
-                <p class="blog-card__excerpt">{{ blog.excerpt || 'Chưa có tóm tắt nội dung...' }}</p>
-                <div class="blog-card__footer">
-                  <span class="blog-card__author">{{ blog.author || 'Velura Editorial' }}</span>
-                  <time class="blog-card__date">{{ dateTime(blog.updated_at) }}</time>
-                </div>
-              </div>
-            </article>
-          }
-        </div>
-      }
     } @else {
       <app-erp-data-table
         caption="Danh sách bài viết"
@@ -135,6 +81,7 @@
       />
     }
     <app-erp-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
+    <p class="content-hint">Bản nháp không xuất hiện ở <code>/api/content/blogs</code>: RLS của bảng chỉ mở dòng <code>status = published</code>.</p>
   </section>
 }
 

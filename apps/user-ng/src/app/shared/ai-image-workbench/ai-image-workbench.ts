@@ -571,6 +571,20 @@ export class AiImageWorkbench {
     this.poseUrls.set({});
     this.poseRequested.clear();
     this.poseJobId = '';
+    this.selectedPose.set('');
+  }
+
+  /** Pose chosen from the thumbnails; empty means the first finished pose. */
+  readonly selectedPose = signal('');
+  /** The finished pose shown on the large stage: the chosen one, else the first one that is ready. */
+  readonly previewedPose = computed<PoseSlot | null>(() => {
+    const slots = this.poseSlots();
+    return slots.find((slot) => slot.id === this.selectedPose() && slot.src) ?? slots.find((slot) => slot.src) ?? null;
+  });
+
+  /** Shows an already finished pose on the large stage. */
+  selectPose(slot: PoseSlot): void {
+    if (slot.src) this.selectedPose.set(slot.id);
   }
 
    async generate(): Promise<void> {

@@ -12,10 +12,13 @@ import {
   AdminErpNavItem,
   adminErpNavItemForNavKey,
   adminErpNavLink,
+  adminErpNavMatchesSearch,
 } from '../core/admin-erp-navigation';
 import { useBodyClass } from '../core/body-class';
+import { AdminErpConfirmHost } from '../shared/ui/admin-confirm';
 import { AdminErpIcon } from '../shared/ui/admin-erp-icon';
 import { AdminErpModal } from '../shared/ui/admin-modal';
+import { AdminErpToastHost } from '../shared/ui/admin-toast';
 
 type ShellNavGroup = Omit<AdminErpNavGroup, 'items'> & {
   items: AdminErpNavItem[];
@@ -24,12 +27,28 @@ type ShellNavGroup = Omit<AdminErpNavGroup, 'items'> & {
 /** localStorage key holding the desktop sidebar rail state (`'true'` = collapsed). */
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = 'velura-erp-sidebar-collapsed';
 
+function readSidebarCollapsed(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeSidebarCollapsed(collapsed: boolean): void {
+  try {
+    globalThis.localStorage?.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+  } catch {
+    // Storage blocked (private mode, quota): the rail still toggles for this session.
+  }
+}
+
 /**
  * ERPNext-inspired workspace shell: grouped sidebar, compact topbar and routable workspaces.
  */
 @Component({
   selector: 'app-admin-erp-shell',
-  imports: [RouterLink, RouterOutlet, AdminErpIcon, AdminErpModal],
+  imports: [RouterLink, RouterOutlet, AdminErpIcon, AdminErpModal, AdminErpToastHost, AdminErpConfirmHost],
   templateUrl: './admin-erp-shell.html',
   styleUrl: './admin-erp-shell.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -42,15 +61,8 @@ export class AdminErpShell {
   private readonly destroyRef = inject(DestroyRef);
   readonly session = inject(AdminErpSessionService);
 
-  readonly sidebarCollapsed = signal(this.initialSidebar());
-
-  private initialSidebar(): boolean {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-    const saved = localStorage.getItem('sidebar');
-    return saved ? saved === 'collapsed' : !window.matchMedia('(min-width: 1680px)').matches;
-  }
+  /** Desktop rail state, restored from {@link SIDEBAR_COLLAPSED_STORAGE_KEY}. */
+  readonly sidebarCollapsed = signal(readSidebarCollapsed());
   readonly mobileNavOpen = signal(false);
   readonly isMobile = signal(false);
   readonly navigating = signal(false);
@@ -60,6 +72,8 @@ export class AdminErpShell {
   readonly searchOpen = signal(false);
   readonly searchQuery = signal('');
   readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
+  /** A guard waiting on a slow API must not leave the blocking navigation layer up forever. */
+  private navigationWatchdog: ReturnType<typeof setTimeout> | null = null;
   private readonly navigationTick = toSignal(
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),
@@ -78,22 +92,17 @@ export class AdminErpShell {
   });
 
   readonly searchResults = computed(() => {
-    const query = this.searchQuery().trim().toLowerCase();
+    const query = this.searchQuery();
     const allItems: { item: AdminErpNavItem; groupLabel: string }[] = [];
     for (const group of this.groups()) {
       for (const item of group.items) {
         allItems.push({ item, groupLabel: group.label });
       }
     }
-    if (!query) {
+    if (!query.trim()) {
       return allItems;
     }
-    return allItems.filter(
-      ({ item, groupLabel }) =>
-        item.label.toLowerCase().includes(query) ||
-        groupLabel.toLowerCase().includes(query) ||
-        item.title.toLowerCase().includes(query),
-    );
+    return allItems.filter(({ item, groupLabel }) => adminErpNavMatchesSearch(item, groupLabel, query));
   });
   readonly currentNav = computed(() => {
     this.navigationTick();
@@ -122,7 +131,7 @@ export class AdminErpShell {
     return ADMIN_ERP_NAV_GROUPS.find((group) => group.key === item.group)?.label || '';
   });
   readonly menuLabel = computed(() => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 920px)').matches) {
+    if (this.isMobile()) {
       return this.mobileNavOpen() ? 'Đóng menu' : 'Mở menu';
     }
     return this.sidebarCollapsed() ? 'Mở sidebar' : 'Thu gọn sidebar';
@@ -134,16 +143,28 @@ export class AdminErpShell {
     this.isMobile.set(media.matches);
     const onMediaChange = (event: MediaQueryListEvent) => this.isMobile.set(event.matches);
     media.addEventListener('change', onMediaChange);
-    this.destroyRef.onDestroy(() => media.removeEventListener('change', onMediaChange));
+    this.destroyRef.onDestroy(() => {
+      media.removeEventListener('change', onMediaChange);
+      if (this.navigationWatchdog) clearTimeout(this.navigationWatchdog);
+    });
     this.router.events
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((event) => {
         if (event instanceof NavigationStart) {
           // Block a second click immediately; the overlay fades in instead of flashing.
           this.navigating.set(true);
+          if (this.navigationWatchdog) clearTimeout(this.navigationWatchdog);
+          this.navigationWatchdog = setTimeout(() => {
+            this.navigationWatchdog = null;
+            this.navigating.set(false);
+          }, 15_000);
           return;
         }
         if (event instanceof NavigationEnd || event instanceof NavigationCancel || event instanceof NavigationError) {
+          if (this.navigationWatchdog) {
+            clearTimeout(this.navigationWatchdog);
+            this.navigationWatchdog = null;
+          }
           this.navigating.set(false);
         }
       });
@@ -155,6 +176,7 @@ export class AdminErpShell {
       .subscribe(() => this.mobileNavOpen.set(false));
   }
 
+  /** ⌘K / Ctrl+K opens module search; "/" jumps to the current page's first filter field (list convention). */
   @HostListener('document:keydown', ['$event'])
   onGlobalKeydown(event: KeyboardEvent): void {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
@@ -163,6 +185,17 @@ export class AdminErpShell {
         this.closeSearch();
       } else {
         this.openSearch();
+      }
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    const typing = !!target?.closest('input, textarea, select, [contenteditable="true"]');
+    if (event.key === '/' && !typing && !event.isComposing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const field = document.querySelector<HTMLInputElement>('app-erp-filter-bar input:not([type="checkbox"]):not([type="radio"])');
+      if (field) {
+        event.preventDefault();
+        field.focus();
+        field.select();
       }
     }
   }
@@ -202,7 +235,7 @@ export class AdminErpShell {
   }
 
   /**
-   * Toggles the off-canvas nav on mobile and the rail on desktop.
+   * Toggles the off-canvas nav on mobile and the rail on desktop; the rail state persists.
    */
   toggleSidebar(): void {
     if (this.isMobile()) {
@@ -213,11 +246,9 @@ export class AdminErpShell {
       }
       return;
     }
-    const next = !this.sidebarCollapsed();
-    this.sidebarCollapsed.set(next);
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('sidebar', next ? 'collapsed' : 'expanded');
-    }
+    const collapsed = !this.sidebarCollapsed();
+    this.sidebarCollapsed.set(collapsed);
+    writeSidebarCollapsed(collapsed);
   }
 
   /**

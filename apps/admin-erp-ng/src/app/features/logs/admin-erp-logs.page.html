@@ -1,10 +1,10 @@
 <app-erp-page-header
   eyebrow="Hệ thống"
   title="Nhật ký hệ thống"
-  subtitle="Tra cứu audit theo phân hệ, người thao tác và kết quả. Dữ liệu lấy trực tiếp từ API, phân trang phía server."
+  subtitle="Tra cứu nhật ký thao tác và kiểm toán hệ thống trên toàn bộ các phân hệ."
 >
   <div actions>
-    <app-erp-status-badge label="Audit thật" tone="success" [dot]="true" />
+    <app-erp-status-badge label="Trực tuyến" tone="success" [dot]="true" />
     <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
       <app-erp-icon name="refresh" [size]="'15'" />
       {{ loading() ? 'Đang tải…' : 'Làm mới' }}

@@ -95,18 +95,20 @@ export class ShopAiCatalog implements AiCatalog {
     const inferredCategory = this.inferGarmentCategory(catalogCategory, product);
     if (!inferredCategory) return { product_supported: false, variant_supported: false };
 
-    // Check if product has usable catalog images
-    const images = Array.isArray(product.images) ? product.images : [];
-    if (images.length === 0) return { product_supported: false, variant_supported: false };
-    const primaryImageUrl = typeof images[0] === "string" ? images[0] : asString(asJsonObject(images[0]).url);
-    try { this.allowedUrl(primaryImageUrl); } catch { return { product_supported: false, variant_supported: false }; }
-
-    // Check variant existence
-    let productSupported = true;
+    // Catalog photos must show the requested colour: a variant never borrows another colour's garment photo.
+    const allImageUrls = this.catalogImageUrls(product);
+    if (allImageUrls.length === 0 || !this.isAllowedImage(allImageUrls[0])) {
+      return { product_supported: false, variant_supported: false };
+    }
+    const productSupported = true;
     let variantSupported = !variantId;
     if (variantId) {
       const variant = await this.deps.variant(productId, variantId);
-      variantSupported = !!variant && variant.product_id === productId && variant.variant_id === variantId;
+      variantSupported =
+        !!variant &&
+        variant.product_id === productId &&
+        variant.variant_id === variantId &&
+        this.catalogImageUrls(product, asString(variant.color)).some((url) => this.isAllowedImage(url));
     }
     return {
       product_supported: productSupported,
@@ -133,6 +135,25 @@ export class ShopAiCatalog implements AiCatalog {
       variant_supported: variantSupported,
       ...(productSupported ? { garment_category: category } : {}),
     };
+  }
+  /** Catalog photo URLs; with `color`, only photos the product's image_colors map assigns to that colour. */
+  private catalogImageUrls(product: JsonObject, color?: string): string[] {
+    const images = Array.isArray(product.images) ? product.images : [];
+    const all = images
+      .map((img) => (typeof img === "string" ? img : asString(asJsonObject(img).url)))
+      .filter(Boolean);
+    const colors = asJsonObject(product.image_colors);
+    if (!color || Object.keys(colors).length === 0) return all;
+    const wanted = color.trim().toLowerCase();
+    return all.filter((url) => asString(colors[url]).trim().toLowerCase() === wanted);
+  }
+  private isAllowedImage(url: string): boolean {
+    try {
+      this.allowedUrl(url);
+      return true;
+    } catch {
+      return false;
+    }
   }
   /** Infer AI worker garment category from database catalog slug and product name. */
   private inferGarmentCategory(catalogSlug: string, product: JsonObject): string | null {
@@ -213,16 +234,20 @@ export class ShopAiCatalog implements AiCatalog {
         return { bytes: await this.fetchImage(registryUrl), category: support.garment_category! };
       } catch { /* fall through to catalog image */ }
     }
-    // 2. Fall back to product catalog primary image
+    // 2. Fall back to the catalog photos of this variant's colour
     const product = await this.deps.product(productId);
-    const images = Array.isArray(product?.images) ? product.images : [];
-    for (const img of images.slice(0, 3)) {
-      const url = typeof img === "string" ? img : asString(asJsonObject(img).url);
+    const allImages = Array.isArray(product?.images) ? product.images : [];
+    if (allImages.length === 0) {
+      throw new HttpError(422, "VTO_PRODUCT_UNAVAILABLE", "Sản phẩm chưa có ảnh phù hợp cho thử đồ.");
+    }
+    const variant = await this.deps.variant(productId, variantId);
+    const urls = product ? this.catalogImageUrls(product, asString(variant?.color)) : [];
+    for (const url of urls.slice(0, 3)) {
       try {
         return { bytes: await this.fetchImage(url), category: support.garment_category! };
       } catch { continue; }
     }
-    throw new HttpError(422, "VTO_PRODUCT_UNAVAILABLE", "Sản phẩm chưa có ảnh phù hợp cho thử đồ.");
+    throw new HttpError(422, urls.length === 0 ? "VTO_VARIANT_UNAVAILABLE" : "VTO_PRODUCT_UNAVAILABLE", "Biến thể màu này chưa có ảnh thử đồ phù hợp.");
   }
   private async fetchImage(imageUrl: string): Promise<Buffer> {
     const url = this.allowedUrl(imageUrl);

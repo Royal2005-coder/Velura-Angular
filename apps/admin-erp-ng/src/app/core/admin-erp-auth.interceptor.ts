@@ -22,7 +22,13 @@ export const adminErpAuthInterceptor: HttpInterceptorFn = (req, next) => {
   const request = token ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }) : req;
   return next(request).pipe(
     catchError((error: unknown) => {
-      if (error instanceof HttpErrorResponse && error.status === 401 && !signInRequest) {
+      if (
+        error instanceof HttpErrorResponse &&
+        error.status === 401 &&
+        !signInRequest &&
+        session.token() &&
+        (error.error as { error?: { code?: string } } | null)?.error?.code !== 'SUPABASE_ERROR'
+      ) {
         session.clear();
         void router.navigateByUrl('/login', { replaceUrl: true });
       }

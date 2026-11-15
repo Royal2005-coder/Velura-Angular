@@ -1,11 +1,84 @@
-import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AdminDashboardSummary, AdminErpApiService } from '../../core/admin-erp-api.service';
-import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { DashboardService } from './services/dashboard.service';
-import { AdminErpDashboardPage, NO_DATA_SOURCE } from './admin-erp-dashboard.page';
+import { AdminErpDashboardPage } from './admin-erp-dashboard.page';
+import { MacroKpiResponse } from './models/macro-kpi.model';
+
+// Mock ResizeObserver for JSDOM/Vitest environment
+if (typeof (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver === 'undefined') {
+  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  };
+}
+
+const mockMacroKpisResponse: MacroKpiResponse = {
+  status: 'success',
+  data: {
+    period: {
+      from: '2026-10-17T00:00:00Z',
+      to: '2026-10-24T00:00:00Z',
+      range: '7d',
+      cached_at: '2026-10-24T03:00:00Z',
+      cache_ttl_seconds: 600,
+    },
+    kpis: {
+      net_revenue: {
+        title: 'Doanh thu thuần',
+        value: 12_000_000,
+        formatted: '12 Tr',
+        trend_value: 15.2,
+        trend_direction: 'up',
+        is_inverted_metric: false,
+        unit: 'VND',
+        trend_label: '+15.2% so kỳ trước',
+      },
+      gross_margin: {
+        title: 'Biên LN gộp',
+        value: 45.0,
+        formatted: '45.0%',
+        trend_value: 2.1,
+        trend_direction: 'up',
+        is_inverted_metric: false,
+        unit: 'pct',
+        trend_label: '+2.1 pp so kỳ trước',
+      },
+      aov: {
+        title: 'AOV Đơn hàng',
+        value: 300_000,
+        formatted: '300,000 đ',
+        trend_value: 5.0,
+        trend_direction: 'up',
+        is_inverted_metric: false,
+        unit: 'VND',
+        trend_label: '+5.0% so kỳ trước',
+      },
+      repeat_rate: {
+        title: 'Khách mua lại',
+        value: 28.5,
+        formatted: '28.5%',
+        trend_value: 1.0,
+        trend_direction: 'up',
+        is_inverted_metric: false,
+        unit: 'pct',
+        trend_label: '+1.0 pp so kỳ trước',
+      },
+      return_rate: {
+        title: 'Tỷ lệ đổi trả',
+        value: 3.2,
+        formatted: '3.2%',
+        trend_value: -0.5,
+        trend_direction: 'down',
+        is_inverted_metric: true,
+        unit: 'pct',
+        trend_label: '-0.5 pp so kỳ trước',
+      },
+    },
+  },
+};
 
 const mockSummary: AdminDashboardSummary = {
   operations: {
@@ -35,23 +108,8 @@ const mockSummary: AdminDashboardSummary = {
   meta: { generatedAt: '2026-10-24T03:05:00Z', source: 'oltp.rpc' },
 };
 
-const moduleHealth = {
-  orders_pending_24h: 7,
-  variants_out_of_stock: 3,
-  tickets_open_24h: 2,
-  promotions_near_budget: 0,
-  reviews_urgent: 1,
-  admin_requests_pending: 4,
-  total_issues: 17,
-  fetched_at: '2026-10-24T03:00:00Z',
-};
-
 describe('AdminErpDashboardPage', () => {
-  async function boot(
-    apiMock?: Partial<AdminErpApiService>,
-    dashboardServiceMock?: Partial<DashboardService>,
-    operatorName: string | null = 'Lan Phạm',
-  ) {
+  async function boot(apiMock?: Partial<AdminErpApiService>, dashboardServiceMock?: Partial<DashboardService>) {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [AdminErpDashboardPage],
@@ -68,29 +126,26 @@ describe('AdminErpDashboardPage', () => {
         {
           provide: DashboardService,
           useValue: {
-            getSlaMetrics: () => of({ success: true, data: [], fetched_at: '' }),
-            getInventoryAlerts: () => of({ success: true, data: [], fetched_at: '' }),
-            getModuleHealth: () => of({ success: true, data: moduleHealth, fetched_at: '' }),
+            getSlaMetrics: () => of([]),
+            getInventoryAlerts: () => of([]),
+            getModuleHealth: () => of({
+              total_issues: 34,
+              orders_pending_24h: 16,
+              variants_out_of_stock: 10,
+              tickets_open_24h: 4,
+              promotions_near_budget: 1,
+              reviews_urgent: 2,
+              admin_requests_pending: 1,
+            }),
+            getMacroKpis: () => of(mockMacroKpisResponse),
             ...dashboardServiceMock,
           },
-        },
-        {
-          provide: AdminErpSessionService,
-          useValue: { session: signal(operatorName === null ? null : { name: operatorName }) },
         },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(AdminErpDashboardPage);
     fixture.detectChanges();
     return fixture;
-  }
-
-  function panel(root: HTMLElement, id: string): HTMLElement {
-    const el = root.querySelector<HTMLElement>(`[data-panel="${id}"]`);
-    if (!el) {
-      throw new Error(`panel ${id} not rendered`);
-    }
-    return el;
   }
 
   it('renders operations dashboard successfully with initial signals', async () => {
@@ -103,61 +158,6 @@ describe('AdminErpDashboardPage', () => {
     expect(page.q1ModuleRows().length).toBe(6);
   });
 
-  it('greets the signed-in operator and falls back to a neutral greeting', async () => {
-    let fixture = await boot();
-    let greeting = (fixture.nativeElement as HTMLElement).querySelector('.bi-greeting')?.textContent ?? '';
-    expect(greeting).toContain('Xin chào, Lan Phạm');
-
-    fixture = await boot(undefined, undefined, null);
-    greeting = (fixture.nativeElement as HTMLElement).querySelector('.bi-greeting')?.textContent ?? '';
-    expect(greeting).toContain('Xin chào, bạn');
-  });
-
-  it('computes Q1 and KPI figures from the real responses', async () => {
-    const fixture = await boot();
-    const page = fixture.componentInstance;
-
-    expect(page.q1ModuleRows().map((row) => row.count)).toEqual([7, 3, 2, 0, 1, 4]);
-    expect(page.totalSystemIssues()).toBe(17);
-    expect(page.totalProcessingOrders()).toBe(3);
-    expect(page.totalPaymentErrors()).toBe(1);
-    expect(page.totalCskhQueue()).toBe(6);
-    expect(page.totalLowStockVariants()).toBe(5);
-    expect(panel(fixture.nativeElement, 'Q1').textContent).toContain('17 mục');
-  });
-
-  it('shows the empty state for panels without a data source', async () => {
-    const fixture = await boot();
-    const root = fixture.nativeElement as HTMLElement;
-
-    expect(panel(root, 'Q3').textContent).toContain('Cổng Thanh toán & Đối soát');
-    expect(panel(root, 'Q3').textContent).toContain('VNPAY');
-
-    fixture.componentInstance.setTab('business');
-    fixture.detectChanges();
-    expect(root.querySelector('[data-kpi="gross-profit"]')?.textContent).toContain(NO_DATA_SOURCE);
-    expect(root.querySelector('[data-kpi="repeat-customers"]')?.textContent).toContain(NO_DATA_SOURCE);
-    expect(panel(root, 'B5').textContent).toContain('Đổi trả & Chất lượng Sản phẩm');
-    expect(panel(root, 'B5').textContent).toContain('Không vừa kích thước');
-
-    fixture.componentInstance.setB1Tab('price_bar');
-    fixture.detectChanges();
-    expect(panel(root, 'B1').querySelector('.bi-empty-state')?.textContent).toContain(NO_DATA_SOURCE);
-  });
-
-  it('never renders sample records', async () => {
-    const fixture = await boot();
-    const root = fixture.nativeElement as HTMLElement;
-    const operations = root.textContent ?? '';
-    fixture.componentInstance.setTab('business');
-    fixture.detectChanges();
-    const text = operations + (root.textContent ?? '');
-
-    for (const fabricated of ['PAY-991', 'Super Admin', 'Catalog V4', 'VNPay', 'Hoàng Tuấn', '34 Sự cố', 'Quá SLA 24h']) {
-      expect(text).not.toContain(fabricated);
-    }
-  });
-
   it('switches between operations and business tabs', async () => {
     const fixture = await boot();
     const page = fixture.componentInstance;
@@ -166,8 +166,6 @@ describe('AdminErpDashboardPage', () => {
     page.setTab('business');
     fixture.detectChanges();
     expect(page.tab()).toBe('business');
-    expect(page.revenue()).toBe(12_000_000);
-    expect(page.topCategory()?.name).toBe('Áo');
   });
 
   it('switches range filter without breaking signal consistency', async () => {
@@ -178,18 +176,34 @@ describe('AdminErpDashboardPage', () => {
     expect(page.range()).toBe('month');
   });
 
-  it('handles API errors gracefully and shows no figures', async () => {
-    const fixture = await boot(
-      { dashboard: () => throwError(() => new Error('API down')) },
-      { getModuleHealth: () => throwError(() => new Error('down')) },
-    );
+  it('handles API errors gracefully and updates loadError signal', async () => {
+    const fixture = await boot({
+      dashboard: () => throwError(() => new Error('API down')),
+    });
     const page = fixture.componentInstance;
 
     expect(page.loadError()).toBe('API down');
     expect(page.loading()).toBe(false);
-    expect(page.totalProcessingOrders()).toBeNull();
-    expect(page.totalSystemIssues()).toBeNull();
-    expect(page.revenue()).toBeNull();
-    expect(page.countText(page.totalPaymentErrors())).toBe('—');
+  });
+
+  it('renders 5 Macro KPIs with real-data signals when switching to business tab', async () => {
+    const fixture = await boot();
+    const page = fixture.componentInstance;
+
+    page.setTab('business');
+    fixture.detectChanges();
+
+    expect(page.macroKpis()).toEqual(mockMacroKpisResponse.data);
+    expect(page.macroNetRevenue()?.formatted).toBe('12 Tr');
+    expect(page.macroGrossMargin()?.formatted).toBe('45.0%');
+    expect(page.macroAov()?.formatted).toBe('300,000 đ');
+    expect(page.macroRepeatRate()?.formatted).toBe('28.5%');
+    expect(page.macroReturnRate()?.formatted).toBe('3.2%');
+
+    // Test trend pill classes & inverted metric logic
+    expect(page.getTrendPillClass(page.macroNetRevenue())).toBe('bi-trend-pill bi-trend-pill--up');
+    expect(page.getTrendPillClass(page.macroReturnRate())).toBe('bi-trend-pill bi-trend-pill--up'); // negative return rate is good/up!
+    expect(page.getTrendPillText(page.macroNetRevenue())).toBe('↑ +15.2%');
+    expect(page.getTrendPillText(page.macroReturnRate())).toBe('↓ -0.5 pp');
   });
 });

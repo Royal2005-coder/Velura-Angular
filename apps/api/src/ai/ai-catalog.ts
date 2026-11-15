@@ -150,7 +150,9 @@ export class ShopAiCatalog implements AiCatalog {
       const explicit = asString(colors[url]).trim();
       return explicit ? colorKey(explicit) : colorKeyFromImageUrl(url);
     };
-    if (!all.some((url) => tagOf(url))) return all;
+    // Operator mappings are strict; file-name colours only discriminate when the photos show at least two colours.
+    const hasExplicit = all.some((url) => asString(colors[url]).trim());
+    if (!hasExplicit && new Set(all.map(tagOf).filter(Boolean)).size < 2) return all;
     const wanted = colorKey(color);
     return all.filter((url) => tagOf(url) === wanted);
   }

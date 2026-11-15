@@ -1,5 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
+import { Location } from '@angular/common';
 import { useBodyClass } from '../../core/utils/body-class';
 
 export const POLICY_TABS = ['returns', 'privacy', 'shipping', 'terms', 'faq', 'member'] as const;
@@ -20,7 +21,7 @@ export function isPolicyTab(value: string | null): value is PolicyTab {
 })
 export class PoliciesPage {
   private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
+  private readonly location = inject(Location);
   readonly tab = signal<PolicyTab>('returns');
 
   constructor() {
@@ -29,18 +30,32 @@ export class PoliciesPage {
     if (isPolicyTab(requested)) {
       this.tab.set(requested);
     }
+
+    // Keep active tab in sync when user navigates using browser back / forward
+    this.location.onUrlChange((url) => {
+      try {
+        const search = url.includes('?') ? url.split('?')[1] : '';
+        const params = new URLSearchParams(search);
+        const tabParam = params.get('tab');
+        if (isPolicyTab(tabParam) && this.tab() !== tabParam) {
+          this.tab.set(tabParam);
+        }
+      } catch {
+        // Safe fallback
+      }
+    });
   }
 
   /**
-   * Selects a policy panel and keeps `?tab=` in sync for shareable URLs.
+   * Selects a policy panel and keeps `?tab=` in sync for shareable URLs
+   * without triggering router navigation (which forces scroll-to-top).
    */
   selectTab(value: PolicyTab): void {
     this.tab.set(value);
-    void this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { tab: value },
-      queryParamsHandling: 'merge',
-      replaceUrl: true,
-    });
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', value);
+      this.location.replaceState(url.pathname, url.searchParams.toString());
+    }
   }
 }

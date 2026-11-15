@@ -181,12 +181,245 @@ export class OrderFlowPage {
   otp = '';
   reason = 'Tôi muốn thay đổi sản phẩm';
   otherReason = '';
-  returnKind: DemoReturn['kind'] = 'refund';
-  returnReason = '';
-  returnReasonCode: ReturnReasonCode | '' = '';
-  bankName = '';
-  bankAccount = '';
-  bankHolder = '';
+  private readonly _returnKind = signal<DemoReturn['kind']>('refund');
+  get returnKind(): DemoReturn['kind'] {
+    return this._returnKind();
+  }
+  set returnKind(val: DemoReturn['kind']) {
+    this._returnKind.set(val);
+  }
+
+  readonly returnReasonMaxLength = 500;
+  private readonly _returnReason = signal('');
+  get returnReason(): string {
+    return this._returnReason();
+  }
+  set returnReason(val: string) {
+    const text = val || '';
+    this._returnReason.set(text.slice(0, this.returnReasonMaxLength));
+  }
+  readonly isReasonAtMax = computed(() => this._returnReason().length >= this.returnReasonMaxLength);
+
+  onReasonInput(event: Event): void {
+    const target = event.target as HTMLTextAreaElement;
+    if (target && target.value.length > this.returnReasonMaxLength) {
+      target.value = target.value.slice(0, this.returnReasonMaxLength);
+      this.returnReason = target.value;
+    }
+    this.reasonTouched.set(true);
+  }
+
+  private readonly _returnReasonCode = signal<ReturnReasonCode | ''>('');
+  get returnReasonCode(): ReturnReasonCode | '' {
+    return this._returnReasonCode();
+  }
+  set returnReasonCode(val: ReturnReasonCode | '') {
+    this._returnReasonCode.set(val || '');
+  }
+
+  private readonly _bankName = signal('');
+  get bankName(): string {
+    return this._bankName();
+  }
+  set bankName(val: string) {
+    this._bankName.set(val || '');
+  }
+
+  private readonly _bankAccount = signal('');
+  get bankAccount(): string {
+    return this._bankAccount();
+  }
+  set bankAccount(val: string) {
+    this._bankAccount.set(val || '');
+  }
+
+  private readonly _bankHolder = signal('');
+  get bankHolder(): string {
+    return this._bankHolder();
+  }
+  set bankHolder(val: string) {
+    this._bankHolder.set(val || '');
+  }
+
+  readonly selectionTouched = signal(false);
+  readonly reasonTouched = signal(false);
+  readonly evidenceTouched = signal(false);
+  readonly exchangeTouched = signal(false);
+  readonly bankNameTouched = signal(false);
+  readonly bankAccountTouched = signal(false);
+  readonly bankHolderTouched = signal(false);
+
+  readonly bankNameError = computed(() => {
+    if (!this.requiresRefundBank()) return '';
+    const anyBank = Boolean(this._bankName().trim() || this._bankAccount().trim() || this._bankHolder().trim());
+    if (anyBank && this.bankNameTouched() && !this._bankName().trim()) {
+      return 'Vui lòng chọn ngân hàng thụ hưởng.';
+    }
+    return '';
+  });
+
+  readonly bankAccountError = computed(() => {
+    if (!this.requiresRefundBank()) return '';
+    const anyBank = Boolean(this._bankName().trim() || this._bankAccount().trim() || this._bankHolder().trim());
+    if (anyBank && this.bankAccountTouched()) {
+      const acc = this._bankAccount().trim();
+      if (!acc) return 'Vui lòng nhập số tài khoản ngân hàng.';
+      if (!/^\d{6,20}$/.test(acc)) return 'Số tài khoản phải gồm từ 6 đến 20 chữ số.';
+    }
+    return '';
+  });
+
+  readonly bankHolderError = computed(() => {
+    if (!this.requiresRefundBank()) return '';
+    const anyBank = Boolean(this._bankName().trim() || this._bankAccount().trim() || this._bankHolder().trim());
+    if (anyBank && this.bankHolderTouched() && !this._bankHolder().trim()) {
+      return 'Vui lòng nhập tên chủ tài khoản thụ hưởng.';
+    }
+    return '';
+  });
+
+  readonly reasonError = computed(() => {
+    if (!this.reasonTouched()) return '';
+    if (!this._returnReason().trim() && !this._returnReasonCode()) {
+      return 'Vui lòng chọn nhóm lý do hoặc nhập lý do đổi/trả sản phẩm.';
+    }
+    return '';
+  });
+
+  readonly evidenceError = computed(() => {
+    const ev = this.evidence();
+    const hasImg = ev.some((item) => item.file.type.startsWith('image/'));
+    const hasVid = ev.some((item) => item.file.type.startsWith('video/'));
+    if (this.evidenceTouched() || ev.length > 0) {
+      if (!hasImg && !hasVid) return 'Cần tải lên ít nhất 1 ảnh và 1 video ban đầu.';
+      if (!hasImg) return 'Cần bổ sung thêm ít nhất 1 ảnh chụp sản phẩm.';
+      if (!hasVid) return 'Cần bổ sung thêm ít nhất 1 video quay sản phẩm.';
+    }
+    return '';
+  });
+
+  itemExchangeError(variantId: string): string {
+    if (this._returnKind() !== 'exchange' || !this.exchangeTouched()) return '';
+    const selected = this.selectedLines().find((s) => s.variantId === variantId);
+    if (!selected) return '';
+    const line = this.lineFor(variantId);
+    if (line?.is_combo) {
+      const comps = this.comboComponents(line);
+      const count = Object.keys(selected.comboReplacements || {}).length;
+      if (comps.length > 0 && count === 0) {
+        return `Vui lòng chọn size / màu mới cho ít nhất một món trong combo "${line.product_name}".`;
+      }
+    } else {
+      if (!selected.replacement && !selected.replacementVariantId) {
+        return `Vui lòng chọn size / màu mới cần đổi.`;
+      }
+    }
+    return '';
+  }
+
+  readonly isReturnFormValid = computed(() => {
+    const lines = this.selectedLines();
+    if (!lines.length) return false;
+
+    const order = this.order();
+    for (const selected of lines) {
+      const line = order?.items.find((item) => item.variant_id === selected.variantId);
+      if (!line || selected.quantity > line.availableQuantity || selected.quantity <= 0) {
+        return false;
+      }
+      if (this._returnKind() === 'refund' && line.is_combo && selected.quantity < line.quantity) {
+        return false;
+      }
+      if (this._returnKind() === 'exchange') {
+        if (line.is_combo) {
+          const comps = this.comboComponents(line);
+          const count = Object.keys(selected.comboReplacements || {}).length;
+          if (comps.length > 0 && count === 0) return false;
+        } else {
+          if (!selected.replacement && !selected.replacementVariantId) return false;
+        }
+      }
+    }
+
+    if (!this._returnReason().trim() && !this._returnReasonCode()) {
+      return false;
+    }
+
+    const ev = this.evidence();
+    const hasImg = ev.some((item) => item.file.type.startsWith('image/'));
+    const hasVid = ev.some((item) => item.file.type.startsWith('video/'));
+    if (!hasImg || !hasVid) {
+      return false;
+    }
+
+    if (this.requiresRefundBank()) {
+      const anyBank = Boolean(this._bankName().trim() || this._bankAccount().trim() || this._bankHolder().trim());
+      if (anyBank) {
+        if (!this._bankName().trim()) return false;
+        if (!this._bankHolder().trim()) return false;
+        if (!/^\d{6,20}$/.test(this._bankAccount().trim())) return false;
+      }
+    }
+
+    return true;
+  });
+
+  readonly returnFormHintMessage = computed(() => {
+    const lines = this.selectedLines();
+    if (!lines.length) return 'Vui lòng chọn ít nhất 1 sản phẩm cần đổi/trả';
+    if (this._returnKind() === 'exchange') {
+      for (const sel of lines) {
+        const line = this.lineFor(sel.variantId);
+        if (line?.is_combo) {
+          const comps = this.comboComponents(line);
+          const count = Object.keys(sel.comboReplacements || {}).length;
+          if (comps.length > 0 && count === 0) return 'Vui lòng chọn size/màu mới cho combo';
+        } else if (!sel.replacement && !sel.replacementVariantId) {
+          return 'Vui lòng chọn size/màu mới cho sản phẩm cần đổi';
+        }
+      }
+    }
+    if (!this._returnReason().trim() && !this._returnReasonCode()) {
+      return 'Vui lòng chọn hoặc nhập lý do đổi/trả';
+    }
+    const ev = this.evidence();
+    const hasImg = ev.some((item) => item.file.type.startsWith('image/'));
+    const hasVid = ev.some((item) => item.file.type.startsWith('video/'));
+    if (!hasImg && !hasVid) return 'Cần tải lên ít nhất 1 ảnh và 1 video sản phẩm';
+    if (!hasImg) return 'Cần tải thêm ít nhất 1 ảnh sản phẩm';
+    if (!hasVid) return 'Cần tải thêm ít nhất 1 video sản phẩm';
+
+    if (this.requiresRefundBank()) {
+      const anyBank = Boolean(this._bankName().trim() || this._bankAccount().trim() || this._bankHolder().trim());
+      if (anyBank) {
+        if (!this._bankName().trim()) return 'Vui lòng chọn ngân hàng thụ hưởng';
+        if (!this._bankAccount().trim() || !/^\d{6,20}$/.test(this._bankAccount().trim())) return 'Số tài khoản phải gồm 6–20 chữ số';
+        if (!this._bankHolder().trim()) return 'Vui lòng nhập tên chủ tài khoản';
+      }
+    }
+    return '';
+  });
+
+  touchAllReturnFields(): void {
+    this.selectionTouched.set(true);
+    this.reasonTouched.set(true);
+    this.evidenceTouched.set(true);
+    this.exchangeTouched.set(true);
+    this.bankNameTouched.set(true);
+    this.bankAccountTouched.set(true);
+    this.bankHolderTouched.set(true);
+  }
+
+  resetReturnTouched(): void {
+    this.selectionTouched.set(false);
+    this.reasonTouched.set(false);
+    this.evidenceTouched.set(false);
+    this.exchangeTouched.set(false);
+    this.bankNameTouched.set(false);
+    this.bankAccountTouched.set(false);
+    this.bankHolderTouched.set(false);
+  }
+
   /** Lets the customer replace an already valid receiving account via "Cập nhật". */
   readonly banks = VIETNAM_BANKS;
   isStandardBank(name: string): boolean {
@@ -560,6 +793,10 @@ export class OrderFlowPage {
     this.clearEvidence();
     this.returnReason = '';
     this.returnReasonCode = '';
+    this.bankName = '';
+    this.bankAccount = '';
+    this.bankHolder = '';
+    this.resetReturnTouched();
     this.error.set('');
     this.view.set('return');
     void this.model.loadReplacementChoices?.(order.id);
@@ -682,6 +919,7 @@ export class OrderFlowPage {
   }
   /** Review the old-to-new variants before submitting either branch. */
   reviewReturn(): void {
+    this.touchAllReturnFields();
     if (!this.selectedLines().length) {
       this.error.set('Vui lòng chọn ít nhất một sản phẩm cần đổi/trả.');
       return;

@@ -83,7 +83,7 @@
         </div>
         <!-- Indicators (Dots/Dash) -->
         <div class="hero__indicators" aria-label="Bộ sưu tập">
-          @for (look of heroLooks; track look.id; let i = $index) {
+          @for (look of heroLooks(); track look.id; let i = $index) {
             <button
               type="button"
               class="hero__indicator"
@@ -99,7 +99,7 @@
       <div class="hero__runway" aria-label="Sàn diễn người mẫu thời trang">
         <div class="hero__runway-floor" aria-hidden="true"></div>
         <div class="hero__models-stage">
-          @for (look of heroLooks; track look.id; let i = $index) {
+          @for (look of heroLooks(); track look.id; let i = $index) {
             @let dist = getModelDistance(i);
             <div
               class="runway-model"
@@ -377,7 +377,7 @@
             </div>
           </div>
           <p class="testimonial-card__quote">
-            “Mình đã mua nhiều lần tại Velura và luôn hài lòng. Giao hàng nhanh, đóng gói đẹp, sản phẩm đúng mô tả.”
+            “Lần đầu mua sắm tại Velura mà ưng ý ngoài mong đợi. Giao hàng nhanh, đóng gói chỉn chu sang trọng, form dáng chuẩn từng đường kim mũi chỉ!”
           </p>
         </article>
         <article class="testimonial-card">
@@ -386,7 +386,7 @@
             <div class="testimonial-card__avatar">MT</div>
             <div>
               <h3 class="testimonial-card__name">Minh Thư</h3>
-              <span class="testimonial-card__tag">Khách hàng thân thiết</span>
+              <span class="testimonial-card__tag">Thành viên VIP</span>
             </div>
           </div>
           <p class="testimonial-card__quote">

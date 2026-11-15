@@ -48,7 +48,7 @@
       }
     </nav>
   </header>
-  @if (error()) {
+  @if (error() && view() !== 'return') {
     <p role="alert" class="error">{{ error() }}</p>
   }
   @if (model.loading?.()) { <p role="status">Đang tải đơn hàng và yêu cầu đổi trả…</p> }
@@ -818,6 +818,12 @@
                   </div>
                 </article>
               }
+              @if (selectionTouched() && selectedLines().length === 0) {
+                <div class="field-error-text" role="alert" style="margin-top: 10px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span>Vui lòng chọn ít nhất một sản phẩm cần đổi/trả.</span>
+                </div>
+              }
               <h2>2. Bạn muốn xử lý thế nào?</h2>
               <label class="choice" [class.selected]="returnKind === 'refund'"
                 ><input type="radio" name="kind" value="refund" [(ngModel)]="returnKind" /><span
@@ -844,9 +850,16 @@
                   <div class="refund-bank-box">
                     <strong>Thông tin nhận tiền hoàn COD (có thể bổ sung sau)</strong>
                     <small>Chưa bắt buộc khi gửi yêu cầu; cần tài khoản hợp lệ trước khi Velura hoàn tiền.</small>
-                    <label class="field">
+                    <label class="field" [class.is-invalid]="!!bankNameError()">
                       Ngân hàng
-                      <select name="refundBankName" [(ngModel)]="bankName" required>
+                      <select
+                        name="refundBankName"
+                        [(ngModel)]="bankName"
+                        (blur)="bankNameTouched.set(true)"
+                        (change)="bankNameTouched.set(true)"
+                        [class.is-invalid]="!!bankNameError()"
+                        required
+                      >
                         <option value="">-- Chọn ngân hàng thụ hưởng --</option>
                         @for (b of banks; track b.code) {
                           <option [value]="b.shortName">{{ b.shortName }} ({{ b.name }})</option>
@@ -855,9 +868,49 @@
                           <option [value]="bankName">{{ bankName }}</option>
                         }
                       </select>
+                      @if (bankNameError()) {
+                        <span class="field-error-text" role="alert">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                          {{ bankNameError() }}
+                        </span>
+                      }
                     </label>
-                    <label class="field">Số tài khoản<input name="refundBankAccount" [(ngModel)]="bankAccount" inputmode="numeric" pattern="[0-9]{6,20}" placeholder="Nhập 6–20 chữ số" /></label>
-                    <label class="field">Tên chủ tài khoản<input name="refundBankHolder" [(ngModel)]="bankHolder" placeholder="Nhập đúng tên trên tài khoản" /></label>
+                    <label class="field" [class.is-invalid]="!!bankAccountError()">
+                      Số tài khoản
+                      <input
+                        name="refundBankAccount"
+                        [(ngModel)]="bankAccount"
+                        (input)="bankAccountTouched.set(true)"
+                        (blur)="bankAccountTouched.set(true)"
+                        [class.is-invalid]="!!bankAccountError()"
+                        inputmode="numeric"
+                        pattern="[0-9]{6,20}"
+                        placeholder="Nhập 6–20 chữ số"
+                      />
+                      @if (bankAccountError()) {
+                        <span class="field-error-text" role="alert">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                          {{ bankAccountError() }}
+                        </span>
+                      }
+                    </label>
+                    <label class="field" [class.is-invalid]="!!bankHolderError()">
+                      Tên chủ tài khoản
+                      <input
+                        name="refundBankHolder"
+                        [(ngModel)]="bankHolder"
+                        (input)="bankHolderTouched.set(true)"
+                        (blur)="bankHolderTouched.set(true)"
+                        [class.is-invalid]="!!bankHolderError()"
+                        placeholder="Nhập đúng tên trên tài khoản"
+                      />
+                      @if (bankHolderError()) {
+                        <span class="field-error-text" role="alert">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                          {{ bankHolderError() }}
+                        </span>
+                      }
+                    </label>
                   </div>
                 }
               }
@@ -896,8 +949,7 @@
                               <select
                                 [ngModel]="selectedComboVariant(selected, comp.productId)"
                                 [disabled]="!!model.replacementsLoading?.()"
-                                (ngModelChange)="comboComponentReplacement(line, comp, $event)"
-                               
+                                (ngModelChange)="comboComponentReplacement(line, comp, $event); exchangeTouched.set(true)"
                                class="u-inline-27830d4dc8">
                                 <option value="">-- Giữ nguyên hoặc chọn size / màu mới --</option>
                                 @for (choice of comp.choices; track choice.id) {
@@ -909,59 +961,113 @@
                             </div>
                           }
                         </div>
+                        @if (itemExchangeError(selected.variantId)) {
+                          <span class="field-error-text" role="alert">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            {{ itemExchangeError(selected.variantId) }}
+                          </span>
+                        }
                       </div>
                     } @else {
-                      <label class="field"
+                      <label class="field" [class.is-invalid]="!!itemExchangeError(selected.variantId)"
                         >{{ line.product_name }} · {{ displaySize(line.size) }} / {{ line.color }} →<select
                           [ngModel]="selected.replacementVariantId || selected.replacement || ''"
                           [disabled]="!!model.replacementsLoading?.()"
-                          (ngModelChange)="replacement(line, $event)"
+                          (ngModelChange)="replacement(line, $event); exchangeTouched.set(true)"
+                          [class.is-invalid]="!!itemExchangeError(selected.variantId)"
                         >
                           <option value="">Chọn size / màu mới</option>
                           @for (variant of replacementChoices(line); track variant.id) {
                             <option [value]="variant.id" [disabled]="variant.stock !== undefined && variant.stock < selected.quantity">{{ variant.label }}@if (variant.stock !== undefined) { · Còn {{ variant.stock }}}</option>
                           }
-                        </select></label
-                      >
+                        </select>
+                        @if (itemExchangeError(selected.variantId)) {
+                          <span class="field-error-text" role="alert">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            {{ itemExchangeError(selected.variantId) }}
+                          </span>
+                        }
+                      </label>
                     }
                   }
                 }
               }
               <h2>3. Thông tin bổ sung</h2>
-              <label class="field">Nhóm lý do (tùy chọn)<select [(ngModel)]="returnReasonCode">
+              <label class="field">Nhóm lý do (tùy chọn)<select [(ngModel)]="returnReasonCode" (change)="reasonTouched.set(true)">
                 <option value="">Không cung cấp</option><option value="size">Size chưa phù hợp</option><option value="color">Màu chưa phù hợp</option>
                 <option value="error">Lỗi sản phẩm</option><option value="mismatch">Không đúng sản phẩm</option><option value="damaged">Hư hỏng</option>
                 <option value="mind_change">Thay đổi nhu cầu</option><option value="other">Khác</option>
               </select></label>
-              <label class="field"
-                >Lý do (bắt buộc nếu chưa chọn nhóm lý do)<textarea
+              <label class="field" [class.is-invalid]="!!reasonError()" [class.is-max]="isReasonAtMax()">
+                <div class="field-label-row">
+                  <span>Mô tả chi tiết lỗi / lý do (bắt buộc nếu chưa chọn nhóm lý do)</span>
+                  <span
+                    class="char-counter"
+                    [class.char-counter--max]="isReasonAtMax()"
+                    aria-live="polite"
+                  >
+                    {{ returnReason.length }}/500 ký tự
+                  </span>
+                </div>
+                <textarea
                   [(ngModel)]="returnReason"
-                  maxlength="1000"
-                  placeholder="Chia sẻ thêm để Velura hỗ trợ tốt hơn"
-                ></textarea></label
-              ><label class="field"
+                  (input)="onReasonInput($event)"
+                  (blur)="reasonTouched.set(true)"
+                  [class.is-invalid]="!!reasonError()"
+                  [class.is-max]="isReasonAtMax()"
+                  maxlength="500"
+                  placeholder="Chia sẻ thêm mô tả chi tiết lỗi sản phẩm để Velura hỗ trợ tốt hơn (tối đa 500 ký tự)"
+                ></textarea>
+                @if (isReasonAtMax()) {
+                  <span class="field-error-text field-error-text--max" role="alert">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    Đã đạt giới hạn tối đa 500 ký tự. Không thể nhập thêm.
+                  </span>
+                }
+                @if (reasonError()) {
+                  <span class="field-error-text" role="alert">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    {{ reasonError() }}
+                  </span>
+                }
+              </label>
+              <label class="field" [class.is-invalid]="!!evidenceError()"
                 >Ảnh và video ban đầu (bắt buộc cả hai)<input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
                   multiple
-                  (change)="files($event)"
+                  (change)="evidenceTouched.set(true); files($event)"
                 /><small
                   >Tối đa 5 ảnh (5 MB/ảnh) và 3 video MP4/WebM (50 MB/video). Video đóng gói bổ sung sau là tùy chọn.</small
-                ></label
-              >
+                >
+                @if (evidenceError()) {
+                  <span class="field-error-text" role="alert">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    {{ evidenceError() }}
+                  </span>
+                }
+              </label>
               <div class="preview-images">
                 @for (file of evidence(); track file.url) {
-                  <div>
+                  <div class="preview-item" [class.preview-item--video]="file.file.type.startsWith('video/')">
                     @if (file.file.type.startsWith('video/')) {
-                      <video [src]="file.url" controls [attr.aria-label]="file.name"></video>
+                      <div class="preview-media-wrap preview-media-wrap--video">
+                        <video [src]="file.url" controls preload="metadata" playsinline [attr.aria-label]="file.name"></video>
+                        <span class="preview-badge-video">▶ Video</span>
+                      </div>
                     } @else {
-                      <img [src]="file.url" [alt]="file.name" />
-                    }<button
-                      class="secondary"
+                      <div class="preview-media-wrap">
+                        <img [src]="file.url" [alt]="file.name" />
+                      </div>
+                    }
+                    <button
+                      type="button"
+                      class="secondary preview-remove-btn"
                       (click)="removeImage($index)"
-                      [attr.aria-label]="'Xóa ảnh ' + file.name"
+                      [attr.aria-label]="'Xóa ' + file.name"
                     >
-                      Xóa
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                      <span>Xóa</span>
                     </button>
                   </div>
                 }
@@ -992,14 +1098,35 @@
                   </div>
                 </div>
               } @else {
+                @if (error() && view() === 'return') {
+                  <p role="alert" class="error return-form-global-error">{{ error() }}</p>
+                }
                 <div class="actions">
                   <button class="secondary" (click)="view.set('detail')">Quay lại</button>
                   @if (returnKind === 'exchange') {
-                    <button type="button" [disabled]="busy()" (click)="submitReturnDirect()">
+                    <button
+                      type="button"
+                      [disabled]="!isReturnFormValid() || busy()"
+                      [class.btn--dimmed]="!isReturnFormValid()"
+                      (click)="submitReturnDirect()"
+                    >
                       {{ busy() ? 'Đang gửi…' : 'Gửi yêu cầu đổi hàng' }}
                     </button>
                   } @else {
-                    <button (click)="reviewReturn()">Tiếp tục</button>
+                    <button
+                      type="button"
+                      [disabled]="!isReturnFormValid() || busy()"
+                      [class.btn--dimmed]="!isReturnFormValid()"
+                      (click)="reviewReturn()"
+                    >
+                      Tiếp tục
+                    </button>
+                  }
+                  @if (!isReturnFormValid()) {
+                    <span class="return-form-hint" role="status">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      {{ returnFormHintMessage() }}
+                    </span>
                   }
                 </div>
               }

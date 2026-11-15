@@ -14,7 +14,7 @@
     "start:admin": "npm run start -w @velura/admin-ng",
     "start:admin-erp": "npm run start -w @velura/admin-erp-ng",
     "start:user": "npm run start -w @velura/user-ng",
-    "start:api": "node --env-file-if-exists=.env --import tsx --watch apps/api/src/server.ts",
+    "start:api": "node --use-system-ca --env-file-if-exists=.env --import tsx --watch apps/api/src/server.ts",
     "build:admin": "npm run build -w @velura/admin-ng",
     "build:admin-erp": "npm run build -w @velura/admin-erp-ng",
     "build:user": "npm run build -w @velura/user-ng",

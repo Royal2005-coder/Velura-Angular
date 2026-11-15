@@ -32,15 +32,22 @@
           <article class="quiz-split-card" [class.u-hidden]="showSummary()" [style.display]="showSummary() ? 'none' : null">
             <!-- Left Side Editorial Panel -->
             <aside class="quiz-side-panel">
-              <div class="quiz-side-panel__top">
-                <span class="quiz-side-panel__tag">A NOTE FOR YOU</span>
-                <p class="quiz-side-panel__quote">Gu thẩm mỹ không cần khuôn mẫu.</p>
+              <div class="quiz-side-panel__inner">
+                <div class="quiz-side-panel__top">
+                  <span class="quiz-side-panel__tag">{{ currentEditorial().tag }}</span>
+                  <p class="quiz-side-panel__quote">{{ currentEditorial().quote }}</p>
+                </div>
+                <div class="quiz-side-panel__art">
+                  <span class="quiz-side-panel__watermark">velura</span>
+                  <img
+                    class="quiz-side-panel__model"
+                    [src]="currentEditorial().model"
+                    [alt]="currentEditorial().collectionName"
+                  />
+                  <div class="quiz-side-panel__pedestal" aria-hidden="true"></div>
+                </div>
+                <p class="quiz-side-panel__hint">{{ currentEditorial().hint }}</p>
               </div>
-              <div class="quiz-side-panel__art">
-                <span class="quiz-side-panel__watermark">velura</span>
-                <img class="quiz-side-panel__model" src="/assets/images/models/model_cutout_1.png" alt="" />
-              </div>
-              <p class="quiz-side-panel__hint">Chọn nhiều hơn một đáp án khi câu hỏi cho phép.</p>
             </aside>
 
             <!-- Right Main Panel -->
@@ -102,7 +109,7 @@
                         aria-label="Nhập chiều cao (cm)"
                       />
                       <span class="quiz-slider-unit">cm</span>
-                      <span id="height-val" class="u-sr-only" aria-hidden="true">{{ height() }}</span>
+                      <span id="height-val" class="u-sr-only" aria-hidden="true" style="display: none;">{{ height() }}</span>
                     </div>
                   </div>
                   <input
@@ -135,7 +142,7 @@
                         aria-label="Nhập cân nặng (kg)"
                       />
                       <span class="quiz-slider-unit">kg</span>
-                      <span id="weight-val" class="u-sr-only" aria-hidden="true">{{ weight() }}</span>
+                      <span id="weight-val" class="u-sr-only" aria-hidden="true" style="display: none;">{{ weight() }}</span>
                     </div>
                   </div>
                   <input

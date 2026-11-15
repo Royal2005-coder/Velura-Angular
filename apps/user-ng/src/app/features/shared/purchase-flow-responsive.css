@@ -38,14 +38,23 @@
 }
 .preview-images {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
+  align-items: flex-start;
 }
 .preview-images img {
-  width: 80px;
-  height: 80px;
+  width: 90px;
+  height: 90px;
   object-fit: cover;
-  border-radius: 7px;
+  border-radius: 8px;
+}
+.preview-images video {
+  width: 180px;
+  max-width: 100%;
+  height: 108px;
+  object-fit: contain;
+  background: #111111;
+  border-radius: 8px;
 }
 .split {
   display: grid;

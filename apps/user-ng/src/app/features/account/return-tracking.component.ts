@@ -237,7 +237,7 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
       .success-text { color: #1b5e20; font-size: 12px; }
       .track-options { background: #faf5f6; border: 1px solid #f2c2cf; }
       .option-button-group { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
-      .opt-btn { padding: 7px 13px; border: 1px solid #c94f70; border-radius: 999px; background: #fff; color: #7a283c; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; }
+      .opt-btn { padding: 7px 13px; border: 1px solid #c94f70; border-radius: 8px !important; background: #fff; color: #7a283c; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; }
       .opt-btn:hover { background: #fdf2f4; }
       .opt-btn.is-selected { background: #7a283c; color: #fff; border-color: #7a283c; }
       .opt-input { width: 100%; padding: 8px 10px; border: 1px solid #d4c5c8; border-radius: 8px; font-size: 13px; font-family: inherit; }

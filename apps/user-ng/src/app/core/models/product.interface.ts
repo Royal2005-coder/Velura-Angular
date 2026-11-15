@@ -83,3 +83,21 @@ export interface CategorySummary {
   slug?: string;
   product_count?: number;
 }
+
+/**
+ * Lọc bỏ các sản phẩm rác, test, demo hoặc UAT không thuộc danh mục thời trang Velura thật (ví dụ: 'gà rán', 'test', 'demo').
+ */
+export function isStorefrontProduct(item: ProductSummary | null | undefined): boolean {
+  if (!item || !item.name) return false;
+  const name = item.name.toLowerCase();
+  return (
+    !name.includes('test') &&
+    !name.includes('validation') &&
+    !name.includes('commit') &&
+    !name.includes('gà rán') &&
+    !name.includes('ga ran') &&
+    !name.includes('prd02') &&
+    !name.includes('demo') &&
+    !/\buat\b/i.test(name)
+  );
+}

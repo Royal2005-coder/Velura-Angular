@@ -1,7 +1,8 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { filter } from 'rxjs';
 import type { ProductSummary } from '../../core/models/product.interface';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -133,6 +134,15 @@ export class SiteHeader {
         next: (capabilities) => this.aiTextSearchReady.set(capabilities.ai_search?.text === true),
         error: () => this.aiTextSearchReady.set(false),
       });
+
+    this.router.events
+      .pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroy)
+      )
+      .subscribe(() => {
+        this.navOpen.set(false);
+      });
   }
 
   /** Refreshes suggestions when search opens so an admin rename does not remain cached in the header. */
@@ -151,6 +161,13 @@ export class SiteHeader {
    */
   toggleNav(): void {
     this.navOpen.update((open) => !open);
+  }
+
+  /**
+   * Closes the mobile navigation drawer when a link is clicked.
+   */
+  closeNav(): void {
+    this.navOpen.set(false);
   }
 
   /**
@@ -238,6 +255,12 @@ export class SiteHeader {
     } else {
       void this.router.navigate(['/products'], { queryParams: { match_ids: '', q: null, ai: null } });
     }
+  }
+
+  /** Opens the search overlay from mobile action buttons or drawer bar. */
+  openSearch(): void {
+    this.navOpen.set(false);
+    this.onSearchFocus();
   }
 
   /** Opens search with the current catalog instead of the header's initial product snapshot. */

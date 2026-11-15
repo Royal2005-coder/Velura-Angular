@@ -1855,7 +1855,7 @@ body.page-product-detail .size-btn.is-selected { color: #fff; background: var(--
 body.page-product-detail .size-btn.is-out-of-stock { color: var(--soft); background: #f7f3f4; }
 body.page-product-detail .add-to-cart-btn,
 body.page-product-detail .buy-now-btn,
-body.page-product-detail .product-actions-grid .wishlist-btn { border-radius: 999px; }
+body.page-product-detail .product-actions-grid .wishlist-btn { border-radius: 8px !important; }
 body.page-product-detail .add-to-cart-btn { color: var(--velura-maroon); border-color: var(--velura-maroon); }
 body.page-product-detail .add-to-cart-btn:hover { color: var(--velura-maroon-deep); background: var(--velura-blush); }
 body.page-product-detail .buy-now-btn { background: var(--velura-rose-fill); }
@@ -1910,7 +1910,7 @@ body.page-product-detail :is(button, a):focus-visible { outline: 3px solid var(-
   }
   
   /* Add padding bottom to body to prevent content hidden under sticky bar */
-  body {
+  body.page-product-detail {
     padding-bottom: 80px;
   }
   
@@ -2002,7 +2002,7 @@ body.page-product-detail :is(button, a):focus-visible { outline: 3px solid var(-
   align-items: center;
   justify-content: center;
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: #2a2522;
   color: #fff;
   font-size: 0.78rem;
@@ -2148,7 +2148,7 @@ body.page-product-detail :is(button, a):focus-visible { outline: 3px solid var(-
 
 .velura-filter-pill {
   padding: 7px 14px;
-  border-radius: 999px;
+  border-radius: 8px !important;
   border: 1px solid #e2d7cb;
   background: #faf7f4;
   color: #4a413a;
@@ -2258,7 +2258,7 @@ body.page-product-detail :is(button, a):focus-visible { outline: 3px solid var(-
   background: #faf4ee;
   border: 1px solid #e8dfd6;
   padding: 5px 10px;
-  border-radius: 999px;
+  border-radius: 6px;
 }
 
 .velura-carousel-arrow {
@@ -2574,7 +2574,7 @@ body.page-product-detail :is(button, a):focus-visible { outline: 3px solid var(-
   gap: 6px;
   padding: 5px 12px;
   border: 1px solid #e8dfd6;
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: #fffdfb;
   color: #6b635d;
   font-size: 0.76rem;

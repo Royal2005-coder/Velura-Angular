@@ -8,6 +8,7 @@ import {
   ProductReview,
   ProductSummary,
   ProductVariant,
+  isStorefrontProduct,
 } from '../../core/models/product.interface';
 import { CartLine, CartComboSubItem } from '../../core/services/cart.store';
 import { AuthService } from '../../core/services/auth.service';
@@ -491,15 +492,16 @@ export class ProductDetailPage {
           this.loading.set(false);
           this.catalog.getProducts().subscribe({
             next: (rows) => {
+              const cleanRows = rows.filter(isStorefrontProduct);
               const targetCategory = row.category_slug || null;
-              const categoryMatches = rows
+              const categoryMatches = cleanRows
                 .filter((item) => item.product_id !== row.product_id)
                 .filter((item) => !targetCategory || item.category_slug === targetCategory);
               const related = categoryMatches.slice(0, 8);
               this.related.set(
                 related.length
                   ? related
-                  : rows.filter((item) => item.product_id !== row.product_id).slice(0, 8),
+                  : cleanRows.filter((item) => item.product_id !== row.product_id).slice(0, 8),
               );
             },
           });

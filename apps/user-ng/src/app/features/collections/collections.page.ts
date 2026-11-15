@@ -1,7 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Location } from '@angular/common';
 import { COLLECTION_LOOKBOOKS } from '../../core/models/collection-lookbook';
-import { ProductSummary } from '../../core/models/product.interface';
+import { ProductSummary, isStorefrontProduct } from '../../core/models/product.interface';
 import { CartLine, CartStore } from '../../core/services/cart.store';
 import { CatalogService } from '../../core/services/catalog.service';
 import { CheckoutStore } from '../../core/services/checkout.store';
@@ -20,6 +21,8 @@ export class CollectionsPage {
   private readonly cart = inject(CartStore);
   private readonly checkout = inject(CheckoutStore);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly location = inject(Location);
 
   readonly loading = signal(true);
   readonly products = signal<ProductSummary[]>([]);
@@ -61,9 +64,38 @@ export class CollectionsPage {
 
   constructor() {
     useBodyClass('page-collections');
+
+    // Synchronize collection filter from URL query param (?id= or ?collection=) or fragment (#...)
+    const initialParam =
+      this.route.snapshot?.queryParamMap?.get('id') ||
+      this.route.snapshot?.queryParamMap?.get('collection') ||
+      this.route.snapshot?.fragment;
+    if (initialParam && this.lookbooks().some((item) => item.id === initialParam)) {
+      this.filter.set(initialParam);
+    }
+
+    if (this.route.queryParamMap) {
+      this.route.queryParamMap.subscribe((params) => {
+        const param = params.get('id') || params.get('collection');
+        if (param && this.lookbooks().some((item) => item.id === param)) {
+          this.filter.set(param);
+        } else if (!param && !this.route.snapshot?.fragment && this.filter() !== 'all') {
+          this.filter.set('all');
+        }
+      });
+    }
+
+    if (this.route.fragment) {
+      this.route.fragment.subscribe((frag) => {
+        if (frag && this.lookbooks().some((item) => item.id === frag)) {
+          this.filter.set(frag);
+        }
+      });
+    }
+
     this.catalog.getProducts().subscribe({
       next: (rows) => {
-        this.products.set(rows);
+        this.products.set(rows.filter(isStorefrontProduct));
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
@@ -71,10 +103,25 @@ export class CollectionsPage {
   }
 
   /**
-   * Filters lookbooks using the original collection tabs.
+   * Filters lookbooks using the collection tabs and updates query param without full page reload.
    */
   setFilter(id: string): void {
     this.filter.set(id);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (id === 'all') {
+        url.searchParams.delete('id');
+        url.searchParams.delete('collection');
+        url.hash = '';
+      } else {
+        url.searchParams.set('id', id);
+        url.searchParams.delete('collection');
+        url.hash = '';
+      }
+      this.location.replaceState(url.pathname, url.searchParams.toString());
+      const headerEl = document.querySelector('.collections-header');
+      headerEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   /**

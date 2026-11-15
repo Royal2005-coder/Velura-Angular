@@ -53,7 +53,7 @@
   min-height: 40px;
   padding: 0 17px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: #fff;
   color: var(--text-secondary);
   font: 600 .86rem "Inter", sans-serif;
@@ -107,7 +107,7 @@
 
 .offer-card__top,
 .offer-card__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.offer-card__badge { padding: 6px 10px; border-radius: 999px; background: #f7e4dc; color: var(--terracotta); font-size: .75rem; font-weight: 800; }
+.offer-card__badge { padding: 6px 10px; border-radius: 6px !important; background: #f7e4dc; color: var(--terracotta); font-size: .75rem; font-weight: 800; }
 .offer-card__expiry,
 .offer-card__minimum { color: var(--text-muted); font-size: .78rem; }
 .offer-card__title {
@@ -186,7 +186,7 @@ app-site-shell:has(.chatbot-widget--open) .hot-offer-widget { visibility: hidden
 .campaign-page-btn {
   padding: 8px 16px;
   border: 1px solid var(--velura-border, #f2c2cf);
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: #ffffff;
   color: var(--velura-maroon, #7a283c);
   font-size: 0.8125rem;
@@ -269,7 +269,7 @@ app-site-shell:has(.chatbot-widget--open) .hot-offer-widget { visibility: hidden
 .offers-page .offer-banner-row__condition { color: var(--text-secondary); }
 .offers-page .offer-banner-row__cta {
   border: 1px solid var(--velura-maroon);
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: #fff;
   color: var(--velura-maroon);
 }

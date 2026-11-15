@@ -37,15 +37,16 @@
             [attr.data-category]="group.lookbook.id"
             [attr.aria-labelledby]="'collection-title-' + group.lookbook.id"
           >
-            <!-- 1. Hero Panoramic Banner with 5 Models & Cursive Script -->
+            <!-- 1. Hero Panoramic Banner with Official Collection Cover -->
             <div class="collection-hero" [style.background]="group.lookbook.heroGradient">
+              <img
+                [src]="group.lookbook.banner"
+                [alt]="group.lookbook.name"
+                class="collection-hero__banner-img"
+                loading="lazy"
+              />
               <div class="collection-hero__glow" aria-hidden="true"></div>
               <span class="collection-hero__script" aria-hidden="true">{{ group.lookbook.script }}</span>
-              <img [src]="group.lookbook.models[0]" alt="" class="collection-model model-1" loading="lazy" />
-              <img [src]="group.lookbook.models[1]" alt="" class="collection-model model-2" loading="lazy" />
-              <img [src]="group.lookbook.models[2]" alt="" class="collection-model model-3" loading="lazy" />
-              <img [src]="group.lookbook.models[3]" alt="" class="collection-model model-4" loading="lazy" />
-              <img [src]="group.lookbook.models[4]" alt="" class="collection-model model-5" loading="lazy" />
               <div class="collection-hero__shade" aria-hidden="true"></div>
               <div class="collection-hero__title-wrap">
                 <span class="collection-hero__tag">{{ group.lookbook.colNumber }}</span>
@@ -60,10 +61,17 @@
                 <span class="collection-story__kicker">{{ group.lookbook.kicker }}</span>
                 <h3 class="collection-story__title">{{ group.lookbook.storyHeadline }}</h3>
                 <p class="collection-story__desc">{{ group.lookbook.storyDesc }}</p>
-                <a [routerLink]="group.lookbook.categoryLink" class="collection-story__cta">
-                  <span>{{ group.lookbook.exploreCta }}</span>
-                  <span aria-hidden="true">→</span>
-                </a>
+                @if (filter() === group.lookbook.id) {
+                  <button type="button" class="collection-story__cta" (click)="setFilter('all')">
+                    <span aria-hidden="true">←</span>
+                    <span>Xem tất cả bộ sưu tập</span>
+                  </button>
+                } @else {
+                  <button type="button" class="collection-story__cta" (click)="setFilter(group.lookbook.id)">
+                    <span>{{ group.lookbook.exploreCta }}</span>
+                    <span aria-hidden="true">→</span>
+                  </button>
+                }
               </aside>
 
               <!-- Products Column -->
@@ -73,14 +81,19 @@
                     <span class="collection-products-head__sub">{{ group.lookbook.productsSub }}</span>
                     <h3 class="collection-products-head__title">{{ group.lookbook.productsTitle }}</h3>
                   </div>
-                  <span class="collection-products-head__count">01 — {{ cardIndex(group.products.length) }}</span>
+                  <div class="collection-products-head__meta">
+                    <span class="collection-products-head__count">01 — {{ cardIndex(group.products.length) }}</span>
+                    <a routerLink="/products" [queryParams]="{ collection: group.lookbook.name }" class="collection-products-head__all-link">
+                      Xem toàn bộ BST →
+                    </a>
+                  </div>
                 </div>
 
                 <div class="collection-products-grid">
                   @if (!group.products.length) {
                     <div class="collections-empty-notice">
                       <p>Đang cập nhật các thiết kế tiêu biểu cho bộ sưu tập này.</p>
-                      <a [routerLink]="group.lookbook.categoryLink" class="btn btn--outline btn--sm">Xem sản phẩm cùng danh mục</a>
+                      <a routerLink="/products" [queryParams]="{ collection: group.lookbook.name }" class="btn btn--outline btn--sm">Xem sản phẩm BST trên Store</a>
                     </div>
                   } @else {
                     @for (product of group.products; track product.product_id; let i = $index) {

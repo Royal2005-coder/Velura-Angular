@@ -2,7 +2,7 @@ import { AfterViewInit, Component, ElementRef, Injector, OnDestroy, ViewChild, a
 import { Router, RouterLink } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
 import { COLLECTION_LOOKBOOKS } from '../../core/models/collection-lookbook';
-import { CategorySummary, ProductSummary } from '../../core/models/product.interface';
+import { CategorySummary, ProductSummary, isStorefrontProduct } from '../../core/models/product.interface';
 import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { BlogCatalogService } from '../../core/services/blog-catalog.service';
@@ -26,6 +26,7 @@ export interface HeroLook {
   looksCount: string;
   image: string;
   link: string;
+  productId?: string;
 }
 
 export const HERO_LOOKS: HeroLook[] = [
@@ -34,60 +35,65 @@ export const HERO_LOOKS: HeroLook[] = [
     collectionName: 'Soft Ceremony',
     title: 'Soft Ceremony.',
     eyebrow: 'VELURA',
-    season: 'SPRING / SUMMER 2027',
-    description: 'Những thiết kế mềm mại, tinh tế cho những dịp tiệc nhẹ, hẹn hò và các buổi gặp gỡ đặc biệt — sang trọng, hiện đại, dễ ứng dụng.',
+    season: 'SPRING / SUMMER',
+    description:
+      'Những thiết kế mềm mại, tinh tế cho những dịp tiệc nhẹ, hẹn hò và các buổi gặp gỡ đặc biệt — sang trọng, hiện đại, dễ ứng dụng.',
     badge: 'ELEGANT',
-    looksCount: '10 LOOKS',
-    image: '/assets/images/models/model_cutout_1.png',
-    link: '/products?category=dam-vay',
+    looksCount: '6 THIẾT KẾ',
+    image: '/assets/images/models/runway-soft-ceremony.png',
+    link: '/collections?id=soft-ceremony',
+  },
+  {
+    id: 'the-urban-rhythm',
+    collectionName: 'The Urban Rhythm',
+    title: 'The Urban Rhythm.',
+    eyebrow: 'VELURA',
+    season: 'EVERYDAY ICONS',
+    description:
+      'Phom dáng hiện đại, đường cắt sắc sảo — bảng màu beige, charcoal, olive dễ mix-and-match cho cả ngày làm việc bận rộn lẫn buổi dạo phố cuối tuần.',
+    badge: 'CASUAL',
+    looksCount: '22 THIẾT KẾ',
+    image: '/assets/images/models/runway-the-urban-rhythm.png',
+    link: '/collections?id=the-urban-rhythm',
   },
   {
     id: 'weekend-escape',
     collectionName: 'Weekend Escape',
     title: 'Weekend Escape.',
     eyebrow: 'VELURA',
-    season: 'SPRING / SUMMER 2027',
-    description: 'Phom dáng nhẹ nhàng, chất liệu thoáng mát — dạo phố, cà phê hay du lịch đều thoải mái, thanh lịch trong mọi hành trình.',
+    season: 'OFF-DUTY EASE',
+    description:
+      'Phom dáng nhẹ nhàng, chất liệu thoáng mát — dạo phố, cà phê hay du lịch đều thoải mái, thanh lịch trong mọi hành trình.',
     badge: 'TRAVEL',
-    looksCount: '14 LOOKS',
-    image: '/assets/images/models/model_cutout_2.png',
-    link: '/products?category=set-do',
-  },
-  {
-    id: 'in-bloom',
-    collectionName: 'The Afterglow',
-    title: 'In Bloom.',
-    eyebrow: 'VELURA',
-    season: 'SPRING / SUMMER 2027',
-    description: 'Bộ sưu tập mùa xuân lấy cảm hứng từ những đường cong mềm mại, chất liệu lụa và sắc màu hoa. Một câu chuyện về sự nữ tính hiện đại, thanh lịch nhưng vẫn rất gần gũi.',
-    badge: 'ELEGANT',
-    looksCount: '12 LOOKS',
-    image: '/assets/images/models/model_cutout_3.png',
-    link: '/collections',
-  },
-  {
-    id: 'urban-rhythm',
-    collectionName: 'The Urban Rhythm',
-    title: 'Urban Rhythm.',
-    eyebrow: 'VELURA',
-    season: 'SPRING / SUMMER 2027',
-    description: 'Phom dáng hiện đại, đường cắt sắc sảo — bảng màu beige, charcoal, olive dễ mix-and-match cho cả ngày làm việc bận rộn lẫn buổi dạo phố cuối tuần.',
-    badge: 'CASUAL',
-    looksCount: '16 LOOKS',
-    image: '/assets/images/models/model_cutout_4.png',
-    link: '/products?category=quan',
+    looksCount: '33 THIẾT KẾ',
+    image: '/assets/images/models/runway-weekend-escape.png',
+    link: '/collections?id=weekend-escape',
   },
   {
     id: 'midnight-mirage',
     collectionName: 'Midnight Mirage',
     title: 'Midnight Mirage.',
     eyebrow: 'VELURA',
-    season: 'SPRING / SUMMER 2027',
-    description: 'Street style Hàn Quốc — kết hợp nét cá tính, tối giản và hiện đại. Bảng màu trung tính pha pastel, trẻ trung và dễ phối đồ mọi ngày.',
+    season: 'AFTER-HOURS MUSE',
+    description:
+      'Street style Hàn Quốc — kết hợp nét cá tính, tối giản và hiện đại. Bảng màu trung tính pha pastel, trẻ trung và dễ phối đồ mọi ngày.',
     badge: 'STREET',
-    looksCount: '8 LOOKS',
-    image: '/assets/images/models/model_cutout_5.png',
-    link: '/products?category=ao',
+    looksCount: '5 THIẾT KẾ',
+    image: '/assets/images/models/runway-midnight-mirage.png',
+    link: '/collections?id=midnight-mirage',
+  },
+  {
+    id: 'the-afterglow',
+    collectionName: 'The Afterglow',
+    title: 'The Afterglow.',
+    eyebrow: 'VELURA',
+    season: 'MOMENTS TO KEEP',
+    description:
+      'Dư âm vương giả — lụa satin, corset tinh tế và sắc hồng tulle cùng xanh Sapphire tôn vinh vẻ đẹp kiêu sa, lộng lẫy như một tiểu thư vương giả.',
+    badge: 'COUTURE',
+    looksCount: '5 THIẾT KẾ',
+    image: '/assets/images/models/runway-the-afterglow.png',
+    link: '/collections?id=the-afterglow',
   },
 ];
 
@@ -134,14 +140,45 @@ export class HomePage implements AfterViewInit, OnDestroy {
   @ViewChild('categoriesTrack') private categoriesTrack?: ElementRef<HTMLElement>;
   @ViewChild('productsTrack') private productsTrack?: ElementRef<HTMLElement>;
 
-  readonly heroLooks = HERO_LOOKS;
-  readonly activeModelIndex = signal(2); // Model 3 (In Bloom) starts in center
+  readonly heroLooks = computed<HeroLook[]>(() => {
+    const catalog = this.catalogProducts();
+    return COLLECTION_LOOKBOOKS.map((lookbook) => {
+      const matching = catalog.filter(
+        (p) => (p.collection || '').trim().toLowerCase() === lookbook.name.trim().toLowerCase(),
+      );
+      const featured = matching.find((p) => p.is_featured) || matching[0];
+      const count = matching.length;
+      const countLabel = count > 0 ? `${count} THIẾT KẾ` : 'BỘ SƯU TẬP';
 
-  readonly activeLook = computed(() => this.heroLooks[this.activeModelIndex()]);
+      return {
+        id: lookbook.id,
+        collectionName: lookbook.name,
+        title: `${lookbook.name}.`,
+        eyebrow: 'VELURA',
+        season: lookbook.colNumber.includes('·')
+          ? lookbook.colNumber.split('·')[1].trim()
+          : 'SPRING / SUMMER',
+        description: lookbook.homeStory,
+        badge: lookbook.badge,
+        looksCount: countLabel,
+        image: `/assets/images/models/runway-${lookbook.id}.png`,
+        link: `/collections?id=${lookbook.id}`,
+        productId: featured?.product_id,
+      };
+    });
+  });
+  readonly activeModelIndex = signal(2); // Model 3 starts in center
+
+  readonly activeLook = computed(() => {
+    const looks = this.heroLooks();
+    const idx = Math.min(Math.max(0, this.activeModelIndex()), looks.length - 1);
+    return looks[idx] || HERO_LOOKS[0];
+  });
 
   readonly modelCounterLabel = computed(() => {
+    const totalCount = this.heroLooks().length;
     const num = (this.activeModelIndex() + 1).toString().padStart(2, '0');
-    const total = this.heroLooks.length.toString().padStart(2, '0');
+    const total = totalCount.toString().padStart(2, '0');
     return `${num} / ${total}`;
   });
 
@@ -199,7 +236,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   getModelDistance(index: number): number {
     const current = this.activeModelIndex();
-    const total = this.heroLooks.length;
+    const total = this.heroLooks().length || 1;
     let diff = index - current;
     while (diff > total / 2) diff -= total;
     while (diff < -total / 2) diff += total;
@@ -207,8 +244,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   onModelClick(index: number): void {
+    const looks = this.heroLooks();
     if (this.activeModelIndex() === index) {
-      const link = this.heroLooks[index].link;
+      const link = looks[index]?.link || '/collections';
       void this.router.navigateByUrl(link);
     } else {
       this.activeModelIndex.set(index);
@@ -217,13 +255,13 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   prevModel(): void {
     const current = this.activeModelIndex();
-    const total = this.heroLooks.length;
+    const total = this.heroLooks().length || 1;
     this.activeModelIndex.set((current - 1 + total) % total);
   }
 
   nextModel(): void {
     const current = this.activeModelIndex();
-    const total = this.heroLooks.length;
+    const total = this.heroLooks().length || 1;
     this.activeModelIndex.set((current + 1) % total);
   }
 
@@ -244,10 +282,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     }).subscribe({
       next: ({ categories, products }) => {
         this.categories.set(categories);
-        const catalog = products.filter((item) => {
-          const name = (item.name || '').toLowerCase();
-          return !name.includes('test') && !name.includes('validation') && !name.includes('commit');
-        });
+        const catalog = products.filter(isStorefrontProduct);
         this.catalogProducts.set(catalog);
         const activeFeatured = catalog
           .filter((item) => item.is_featured && (item.sold_count || 0) > 0)
@@ -313,7 +348,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private bindCarousels(): void {
     this.carouselCleanups.forEach((cleanup) => cleanup());
     this.carouselCleanups = [
-      bindHomeCarousel(this.categoriesTrack?.nativeElement, { label: 'Danh mục nổi bật', scrollRatio: 0.75 }),
+      bindHomeCarousel(this.categoriesTrack?.nativeElement, { label: 'Danh mục nổi bật', scrollRatio: 0.75, hideArrows: true }),
     ];
   }
 }

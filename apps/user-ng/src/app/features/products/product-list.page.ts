@@ -8,7 +8,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { matchesAllSearchWords, normalizeSearchText, OCCASION_VIETNAMESE_MAP } from '../../core/utils/search';
 import { productMaterial, productMaterialText } from '../../core/utils/material';
 import { catchError, finalize, of, switchMap, tap, type Subscription } from 'rxjs';
-import { ProductSummary } from '../../core/models/product.interface';
+import { ProductSummary, isStorefrontProduct } from '../../core/models/product.interface';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
@@ -35,6 +35,50 @@ const CATEGORY_QUERY_MAP: Record<string, string> = {
   set: 'set-do',
   accessories: 'phu-kien',
   shoes: 'giay-dep',
+};
+
+interface CategoryHeroInfo {
+  eyebrow: string;
+  title: string;
+  description: string;
+}
+
+const CATEGORY_HERO_MAP: Record<string, CategoryHeroInfo> = {
+  'dam-vay': {
+    eyebrow: 'VELURA ATELIER · ĐẦM & VÁY',
+    title: 'Đầm & Váy Thiết Kế',
+    description: 'Những đường nét mềm mại và chất liệu lụa cao cấp, tôn vinh nét nữ tính thanh lịch của nàng.',
+  },
+  ao: {
+    eyebrow: 'VELURA ATELIER · ÁO KIỂU & SƠ MI',
+    title: 'Áo Lụa & Sơ Mi Thanh Lịch',
+    description: 'Chất liệu thoáng mát, phom dáng chuẩn mực cho ngày công sở lẫn dạo phố cuối tuần.',
+  },
+  quan: {
+    eyebrow: 'VELURA ATELIER · QUẦN & SUITING',
+    title: 'Quần Dáng Suông & Suiting',
+    description: 'Cắt may tỉ mỉ, tôn dáng tự nhiên và mang lại cảm giác thoải mái suốt ngày dài.',
+  },
+  'ao-khoac': {
+    eyebrow: 'VELURA ATELIER · ÁO KHOÁC & BLAZER',
+    title: 'Áo Khoác & Blazer Sang Trọng',
+    description: 'Điểm nhấn quyền lực và tinh tế cho mọi bản phối trang phục đương đại.',
+  },
+  'set-do': {
+    eyebrow: 'VELURA ATELIER · SET TRANG PHỤC',
+    title: 'Set Đồ Phối Sẵn Thời Thượng',
+    description: 'Giải pháp thời trang hoàn hảo, đồng điệu về sắc thái và phong cách cho phái đẹp.',
+  },
+  'phu-kien': {
+    eyebrow: 'VELURA ATELIER · PHỤ KIỆN CAO CẤP',
+    title: 'Phụ Kiện Tinh Tế',
+    description: 'Những chi tiết nhỏ tạo nên dấu ấn phong cách riêng biệt và sang trọng.',
+  },
+  'giay-dep': {
+    eyebrow: 'VELURA ATELIER · GIÀY DÉP',
+    title: 'Giày Dép Êm Ái & Tôn Dáng',
+    description: 'Thiết kế nâng niu từng bước chân, đồng hành cùng bạn trên mọi hành trình.',
+  },
 };
 const CLOTHING_SIZES = ['XS', 'S', 'M', 'L', 'XL'];
 const SHOE_SIZES = ['35', '36', '37', '38', '39', '40', '41'];
@@ -239,8 +283,37 @@ export class ProductListPage implements AfterViewInit {
       ? toPublicAsset(product.images?.[0] || product.thumbnail_url, '/assets/images/placeholder.jpg')
       : null;
   });
+  /** Dynamic editorial banner copy matching the active category or search query in Vietnamese. */
+  readonly editorialHero = computed<CategoryHeroInfo>(() => {
+    const collection = this.selectedCollection().trim();
+    if (collection) {
+      return {
+        eyebrow: 'BỘ SƯU TẬP VELURA',
+        title: collection,
+        description: `Tuyển tập các thiết kế độc quyền thuộc bộ sưu tập ${collection}.`,
+      };
+    }
+    const query = this.searchQuery().trim();
+    if (query) {
+      return {
+        eyebrow: 'TÌM KIẾM THỜI TRANG',
+        title: `Kết quả: "${query}"`,
+        description: `Khám phá các thiết kế Velura phù hợp với từ khóa "${query}".`,
+      };
+    }
+    const slugs = this.selectedSlugs();
+    if (slugs.length === 1 && CATEGORY_HERO_MAP[slugs[0]]) {
+      return CATEGORY_HERO_MAP[slugs[0]];
+    }
+    return {
+      eyebrow: 'VELURA ATELIER',
+      title: 'Vẻ Đẹp Vượt Thời Gian',
+      description: 'Những lựa chọn tinh tế dành cho nhịp sống và phong cách riêng của bạn.',
+    };
+  });
   readonly categories = CATALOG_CATEGORIES;
   readonly selectedSlugs = signal<string[]>([]);
+  readonly selectedCollection = signal('');
   readonly searchQuery = signal('');
   readonly sort = signal('newest');
   readonly sidebarOpen = signal(false);
@@ -461,9 +534,23 @@ export class ProductListPage implements AfterViewInit {
       return { product, score };
     });
 
+    const coll = this.selectedCollection().trim().toLowerCase();
+    const normColl = normalizeSearchText(coll);
+
     let rows = scored.filter(({ product, score }) => {
       if (query && score <= 0) {
         return false;
+      }
+      if (coll) {
+        const prodColl = (product.collection || '').toLowerCase();
+        const normProdColl = normalizeSearchText(product.collection || '');
+        const matchesColl =
+          prodColl === coll ||
+          prodColl.includes(coll) ||
+          (normColl && normProdColl.includes(normColl));
+        if (!matchesColl) {
+          return false;
+        }
       }
       if (material && !matchesAllSearchWords(productMaterialText(product), material)) {
         return false;
@@ -563,6 +650,9 @@ export class ProductListPage implements AfterViewInit {
   });
   readonly showPagination = computed(() => this.productCount() > ITEMS_PER_PAGE);
   readonly activeCategoryLabel = computed(() => {
+    if (this.selectedCollection()) {
+      return `BST ${this.selectedCollection()}`;
+    }
     if (this.searchQuery()) {
       return `Kết quả tìm kiếm cho: "${this.searchQuery()}"`;
     }
@@ -592,6 +682,7 @@ export class ProductListPage implements AfterViewInit {
       const category = params.get('category') || '';
       const slug = CATEGORY_QUERY_MAP[category] || category;
       this.selectedSlugs.set(slug ? [slug] : []);
+      this.selectedCollection.set((params.get('collection') || '').trim());
       this.searchQuery.set((params.get('q') || '').trim());
       this.selectedMaterial.set((params.get('material') || '').trim());
       const matchIds = params.get('match_ids');
@@ -633,10 +724,7 @@ export class ProductListPage implements AfterViewInit {
       .subscribe({
         next: (rows) => {
           if (rows === null) return;
-          const catalog = rows.filter((item) => {
-            const name = (item.name || '').toLowerCase();
-            return !name.includes('test') && !name.includes('validation') && !name.includes('commit') && !/\buat\b/i.test(name);
-          });
+          const catalog = rows.filter(isStorefrontProduct);
           this.allProducts.set(catalog);
           const ceiling = Math.max(
             ...catalog.map((item) => item.sale_price || item.base_price || 0),
@@ -680,6 +768,7 @@ export class ProductListPage implements AfterViewInit {
    */
   clearFilters(): void {
     this.selectedSlugs.set([]);
+    this.selectedCollection.set('');
     this.minPrice.set(0);
     this.maxPrice.set(this.catalogMaxPrice());
     this.selectedColor.set('');
@@ -776,6 +865,17 @@ export class ProductListPage implements AfterViewInit {
     this.visualFeatured.set([]);
     void this.router.navigate(['/products'], {
       queryParams: { ...this.route.snapshot.queryParams, q: null, ai: null },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  /**
+   * Clears the active collection filter and updates route parameters.
+   */
+  clearCollection(): void {
+    this.selectedCollection.set('');
+    void this.router.navigate(['/products'], {
+      queryParams: { ...this.route.snapshot.queryParams, collection: null },
       queryParamsHandling: 'merge',
     });
   }

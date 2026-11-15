@@ -19,6 +19,18 @@ export interface AdminTableColumn {
   mono?: boolean;
   align?: 'left' | 'right' | 'center';
   width?: string;
+  /** Max cell width (e.g. '280px'); longer text is ellipsised and shown in full on hover/focus via title. */
+  truncate?: string;
+}
+
+/** A quick action shown at the end of a row, so routine next steps don't require opening the detail drawer. */
+export interface AdminTableRowAction {
+  /** Verb naming the action ("Duyệt", "Ẩn"), also used as the accessible name. */
+  label: string;
+  /** `primary` for the row's main next step, `danger` for destructive ones. */
+  tone?: 'primary' | 'ghost' | 'danger';
+  disabled?: boolean;
+  run: () => void;
 }
 
 /**
@@ -37,7 +49,11 @@ export interface AdminTableColumn {
         <button class="erp-btn erp-btn--primary" type="button" (click)="retry.emit()">Thử lại</button>
       </app-erp-empty-state>
     } @else if (!rows().length) {
-      <app-erp-empty-state [title]="emptyTitle()" [message]="emptyMessage()" icon="log" />
+      <app-erp-empty-state [title]="emptyTitle()" [message]="emptyMessage()" icon="log">
+        @if (emptyActionLabel()) {
+          <button class="erp-btn erp-btn--sm" type="button" (click)="emptyAction.emit()">{{ emptyActionLabel() }}</button>
+        }
+      </app-erp-empty-state>
     } @else {
       <div class="table-shell" [attr.aria-busy]="loading()">
         @if (loading()) {
@@ -61,10 +77,13 @@ export interface AdminTableColumn {
                   {{ column.label }}
                 </th>
               }
+              @if (rowActions()) {
+                <th scope="col" class="is-right col-actions"><span class="erp-sr-only">Thao tác</span></th>
+              }
             </tr>
           </thead>
           <tbody>
-            @for (row of rows(); track $index) {
+            @for (row of rows(); track trackRow(row, $index)) {
               <tr
                 [class.is-clickable]="clickable()"
                 [attr.tabindex]="clickable() ? 0 : null"
@@ -72,12 +91,17 @@ export interface AdminTableColumn {
                 (click)="select(row)"
                 (keydown.enter)="select(row)"
                 (keydown.space)="selectFromKeyboard($event, row)"
+                (keydown.arrowdown)="moveFocus($event, 1)"
+                (keydown.arrowup)="moveFocus($event, -1)"
               >
                 @for (column of columns(); track column.key) {
                   <td
                     [class.is-right]="column.align === 'right'"
                     [class.is-center]="column.align === 'center'"
                     [class.is-mono]="column.mono"
+                    [class.is-truncated]="!!column.truncate"
+                    [style.max-width]="column.truncate"
+                    [attr.title]="column.truncate ? column.value(row) : null"
                   >
                     @if (badgeFor(column, row); as badge) {
                       <app-erp-status-badge [label]="badge.label" [tone]="badge.tone" [dot]="true" />
@@ -89,6 +113,25 @@ export interface AdminTableColumn {
                     } @else {
                       {{ column.value(row) }}
                     }
+                  </td>
+                }
+                @if (rowActions(); as actionsFor) {
+                  <td class="is-right col-actions" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+                    <span class="row-actions">
+                      @for (action of actionsFor(row); track action.label) {
+                        <button
+                          type="button"
+                          class="erp-btn erp-btn--sm"
+                          [class.erp-btn--primary]="action.tone === 'primary'"
+                          [class.erp-btn--ghost]="!action.tone || action.tone === 'ghost'"
+                          [class.erp-btn--danger]="action.tone === 'danger'"
+                          [disabled]="action.disabled || loading()"
+                          (click)="action.run()"
+                        >
+                          {{ action.label }}
+                        </button>
+                      }
+                    </span>
                   </td>
                 }
               </tr>
@@ -187,6 +230,19 @@ export interface AdminTableColumn {
       .is-center {
         text-align: center;
       }
+      .is-truncated {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .col-actions {
+        width: 1%;
+        padding-block: 6px;
+      }
+      .row-actions {
+        display: inline-flex;
+        gap: 6px;
+        justify-content: flex-end;
+      }
       .is-mono {
         font-variant-numeric: tabular-nums;
       }
@@ -218,6 +274,13 @@ export class AdminErpDataTable {
   readonly emptyMessage = input('');
   readonly caption = input('Danh sách dữ liệu');
   readonly clickable = input(false);
+  /** Optional per-row quick actions (≤2 recommended); clicks never open the row drawer. */
+  readonly rowActions = input<((row: unknown) => readonly AdminTableRowAction[]) | null>(null);
+  /** Optional stable row id, so refreshing a page keeps focus/scroll on the same rows. */
+  readonly rowId = input<((row: unknown) => string) | null>(null);
+  /** Recovery button in the empty state, e.g. "Xoá bộ lọc" when filters produced no rows. */
+  readonly emptyActionLabel = input('');
+  readonly emptyAction = output<void>();
 
   readonly retry = output<void>();
   readonly rowSelected = output<unknown>();
@@ -235,6 +298,21 @@ export class AdminErpDataTable {
   imageFor(column: AdminTableColumn, row: unknown): string | null {
     const url = column.image ? column.image(row) : '';
     return url ? url : null;
+  }
+
+  /** Stable identity for row DOM: the table's `rowId`, falling back to position. */
+  trackRow(row: unknown, index: number): string | number {
+    return this.rowId()?.(row) ?? index;
+  }
+
+  /** Up/Down arrows move between rows, so a queue can be worked through from the keyboard. */
+  moveFocus(event: Event, step: 1 | -1): void {
+    const row = event.currentTarget as HTMLTableRowElement;
+    const next = (step === 1 ? row.nextElementSibling : row.previousElementSibling) as HTMLElement | null;
+    if (next) {
+      event.preventDefault();
+      next.focus();
+    }
   }
 
   /**

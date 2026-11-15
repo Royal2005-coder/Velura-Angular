@@ -94,7 +94,7 @@
   }
 </section>
 
-<app-erp-drawer [open]="selected() !== null" title="Chi tiết giá sản phẩm" size="md" (closed)="closeOverlays()">
+<app-erp-drawer [open]="selected() !== null" title="Chi tiết giá sản phẩm" size="md" [hasPrev]="hasPrev()" [hasNext]="hasNext()" (prev)="showPrev()" (next)="showNext()" (closed)="closeDetail()">
   @if (selected(); as product) {
     <div class="price-detail">
       <div class="price-detail__head">
@@ -123,47 +123,13 @@
     @if (canMutate() && selected()) {
       <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openChange()">Đổi giá</button>
     }
-    <button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="closeDetail()">Đóng</button>
   </div>
 </app-erp-drawer>
 
-<app-erp-modal [open]="actionOpen()" title="Đổi giá sản phẩm" size="sm" (closed)="closeOverlays()">
-  @if (selected(); as product) {
-    <form class="price-form" (submit)="submitPrice($event)">
-      <div class="price-form__product">
-        <strong>{{ product.name }}</strong>
-        <span>{{ product.sku || '—' }}</span>
-      </div>
-
-      <label class="erp-field">
-        <span>Giá gốc</span>
-        <input class="erp-input" name="basePrice" type="number" min="0" [value]="previewBase()" (input)="onPreviewInput($event, 'base')" required />
-      </label>
-      <label class="erp-field">
-        <span>Giá bán</span>
-        <input class="erp-input" name="salePrice" type="number" min="0" [value]="previewSale()" (input)="onPreviewInput($event, 'sale')" required />
-      </label>
-
-      <div class="price-form__preview">
-        <span>Giảm giá dự kiến: <strong>{{ previewPct() }}%</strong></span>
-        @if (previewInvalid()) {
-          <span class="erp-error">Giá bán cao hơn giá gốc.</span>
-        }
-      </div>
-
-      <label class="erp-field">
-        <span>Lý do (tối thiểu 10 ký tự)</span>
-        <textarea class="erp-input" name="reason" rows="3" required></textarea>
-      </label>
-
-      @if (actionError()) {
-        <p class="erp-error" role="alert">{{ actionError() }}</p>
-      }
-
-      <div class="price-form__actions">
-        <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
-        <button class="erp-btn erp-btn--primary" type="submit">Lưu giá</button>
-      </div>
-    </form>
-  }
-</app-erp-modal>
+<app-erp-price-change-form
+  [open]="priceTarget() !== null"
+  [product]="priceTarget()"
+  (closed)="closeChange()"
+  (saved)="onPriceSaved($event)"
+/>

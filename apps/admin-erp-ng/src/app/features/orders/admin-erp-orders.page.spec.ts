@@ -176,7 +176,7 @@ describe('AdminErpOrdersPage', () => {
     const fixture = await boot(() => of({ rows: [codOrder], count: 1 }));
     const page = fixture.componentInstance;
 
-    page.openRow(codOrder);
+    page.openRowAction(codOrder, 'call_confirm');
     expect(page.modal()?.kind).toBe('cod_call');
     expect(page.selected()?.order_id).toBe('o2');
     expect(page.requiresCallConfirmation()).toBe(true);

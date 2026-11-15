@@ -239,8 +239,14 @@ export class AdminErpContentPage {
     return `velura.vn/blog/${draft.slug}`;
   });
   readonly columns = computed<readonly AdminTableColumn[]>(() => [
-    { key: 'title', label: 'Bài viết', value: (row) => (row as AdminBlogRow).title },
-    { key: 'slug', label: 'Slug', value: (row) => (row as AdminBlogRow).slug || '—', mono: true },
+    {
+      key: 'title',
+      label: 'Bài viết',
+      value: (row) => (row as AdminBlogRow).title,
+      image: (row) => (row as AdminBlogRow).image_url || (row as AdminBlogRow).og_image_url || '',
+      truncate: '280px',
+    },
+    { key: 'slug', label: 'Slug', value: (row) => (row as AdminBlogRow).slug || '—', mono: true, truncate: '180px' },
     { key: 'category', label: 'Danh mục', value: (row) => this.categoryLabel((row as AdminBlogRow).category_slug) },
     {
       key: 'status',

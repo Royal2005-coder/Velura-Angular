@@ -235,7 +235,13 @@ export class AdminErpPromotionsPage {
   readonly issuedDiscount = computed(() => this.summary()?.issuedDiscount ?? 0);
 
   readonly campaignColumns: readonly AdminTableColumn[] = [
-    { key: 'name', label: 'Chiến dịch', value: (row) => this.campaignName(row as AdminPromotionRow) },
+    {
+      key: 'name',
+      label: 'Chiến dịch',
+      value: (row) => this.campaignName(row as AdminPromotionRow),
+      image: (row) => (row as AdminPromotionRow).banner_image_url || '',
+      truncate: '260px',
+    },
     { key: 'type', label: 'Loại', value: (row) => this.campaignType(row as AdminPromotionRow) },
     {
       key: 'status',

@@ -19,6 +19,17 @@ export function colorKeyFromImageUrl(url: string): string | null {
 }
 
 /**
+ * True when a file-name colour slug names a variant colour: equal keys, or every slug word is the start of a
+ * variant word ("slat-blue" and "burgundy" name "Slate Blue" and "Burgundy Wine").
+ */
+export function slugMatchesColor(slug: string, color: string): boolean {
+  const key = colorKey(color);
+  if (slug === key) return true;
+  const words = key.split("-");
+  return slug.split("-").every((part) => words.some((word) => word.startsWith(part)));
+}
+
+/**
  * Fills `image_colors` for images the operator did not map explicitly, using the colour in the file name
  * when it equals one of the product's variant colours. Explicit mappings always win.
  */
@@ -31,11 +42,13 @@ export function withInferredImageColors(
     imageColors && typeof imageColors === "object" && !Array.isArray(imageColors)
       ? { ...(imageColors as Record<string, string>) }
       : {};
-  const byKey = new Map(variantColors.filter(Boolean).map((name) => [colorKey(name), name]));
+  const names = variantColors.filter(Boolean);
   for (const image of Array.isArray(images) ? images : []) {
     if (typeof image !== "string" || result[image] !== undefined) continue;
     const key = colorKeyFromImageUrl(image);
-    const name = key ? byKey.get(key) : undefined;
+    const exact = key ? names.find((name) => colorKey(name) === key) : undefined;
+    const loose = key ? names.filter((name) => slugMatchesColor(key, name)) : [];
+    const name = exact ?? (loose.length === 1 ? loose[0] : undefined);
     if (name) result[image] = name;
   }
   return result;

@@ -295,19 +295,35 @@
             @if (poseProgress()) {
               <p class="pose-progress" aria-live="polite">{{ poseProgress() }}</p>
             }
-            <div class="pose-grid" role="list" aria-label="Kết quả thử đồ nhiều dáng">
+            <div class="pose-stage">
+              @if (previewedPose(); as shown) {
+                <img decoding="async" class="pose-stage__img" [src]="shown.src" [alt]="'Thử đồ - ' + shown.label" draggable="false" />
+                <span class="pose-stage__tag">{{ shown.label }}</span>
+                <button type="button" class="pose-stage__download" aria-label="Tải ảnh đang xem" title="Tải ảnh đang xem" (click)="downloadResult(shown)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Tải ảnh
+                </button>
+              } @else {
+                <div class="pose-stage__loading" role="status">
+                  <span class="spinner-inline" aria-hidden="true"></span> Đang tạo dáng đầu tiên…
+                </div>
+              }
+            </div>
+            <div class="pose-grid" role="list" aria-label="Các dáng đã thử đồ">
               @for (slot of poseSlots(); track slot.id) {
-                <figure class="pose-card" role="listitem">
+                <div class="pose-card" role="listitem" [class.pose-card--selected]="previewedPose()?.id === slot.id">
                   @if (slot.src) {
-                    <img loading="lazy" decoding="async" class="pose-card__img" [src]="slot.src" [alt]="'Thử đồ - ' + slot.label" draggable="false" />
+                    <button type="button" class="pose-card__select" [attr.aria-label]="'Xem ' + slot.label" [attr.aria-pressed]="previewedPose()?.id === slot.id" (click)="selectPose(slot)">
+                      <img loading="lazy" decoding="async" class="pose-card__img" [src]="slot.src" [alt]="'Thử đồ - ' + slot.label" draggable="false" />
+                    </button>
                     <button type="button" class="pose-card__download" [attr.aria-label]="'Tải ảnh ' + slot.label" title="Tải ảnh về máy" (click)="downloadResult(slot)">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                     </button>
                   } @else {
                     <span class="pose-card__skeleton" role="status" aria-label="Đang xử lý"></span>
                   }
-                  <figcaption class="pose-card__label">{{ slot.label }}</figcaption>
-                </figure>
+                  <span class="pose-card__label">{{ slot.label }}</span>
+                </div>
               }
             </div>
           } @else {

@@ -1,7 +1,7 @@
 <app-erp-page-header
   eyebrow="Marketing"
   title="Đánh giá khách hàng"
-  subtitle="Duyệt, ẩn và phản hồi đánh giá trên API hiện tại. AI chỉ gợi ý; người vận hành quyết định nội dung cuối."
+  subtitle="Kiểm duyệt, xếp hạng và phản hồi ý kiến đánh giá từ khách hàng."
 >
   <div actions>
     <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
@@ -69,6 +69,7 @@
       [clickable]="true"
       (retry)="reload()"
       (rowSelected)="openDetail($event)"
+      (imageClick)="openLightbox($event)"
     />
     <app-erp-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
   } @else {

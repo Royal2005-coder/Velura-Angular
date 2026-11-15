@@ -227,6 +227,8 @@ export class AiImageWorkbench {
   /** Studio 3D: blob URLs of the turntable frames, indexed by orbit angle. */
   readonly frames3d = signal<string[]>([]);
   readonly has3d = computed(() => this.frames3d().length >= 12);
+  /** Set when published frames could not be downloaded/decoded; the 2D try-on stays usable. */
+  readonly frames3dFailed = signal(false);
   readonly frameSrc = computed(() => {
     const frames = this.frames3d();
     if (!frames.length) return this.result();
@@ -281,53 +283,71 @@ export class AiImageWorkbench {
     );
   }
 
-  // --- AI RICH LOADING PROGRESS ---
-  readonly loadingSeconds = signal<number>(0);
-  /** Studio try-on runs the 360° stage after the photo, so the stepper has to admit it exists. */
-  readonly expects3d = computed(() => this.task() === 'virtual_try_on' && this.mode() === 'studio');
-  readonly loadingStep = computed(() => {
-    const s = this.loadingSeconds();
-    if (s < 6) return 1;
-    if (s < 18) return 2;
-    if (s < 34) return 3;
-    if (this.expects3d() && s >= 48) return 5;
-    return 4;
+  // --- LIFECYCLE (spec 3.1.8) — derived from real state, never from elapsed time ---
+  readonly lifecycleSteps = ['Chọn ảnh', 'Kiểm tra ảnh', 'Xác nhận', 'Đang xử lý', 'Kết quả'] as const;
+  /** 1-based current step: input → validation → preview/confirm → processing → result. */
+  readonly lifecycleStep = computed(() => {
+    const job = this.job();
+    if (this.result()) return 5;
+    if (job?.task === 'virtual_try_on' && (job.status === 'queued' || job.status === 'running')) return 4;
+    const hasInput = this.mode() === 'studio' ? !!this.studioImage() : !!this.preview();
+    if (!hasInput) return 1;
+    // Studio models are operator-verified, so they skip the photo quality gate.
+    return this.mode() === 'studio' || this.qualityPassed() ? 3 : 2;
   });
-  readonly loadingMessage = computed(() => {
+  /** Seconds since the current job started; shown against the 2-minute VTO-09 budget, not used to fake progress. */
+  readonly loadingSeconds = signal<number>(0);
+  /** Studio try-on requests the 360° add-on; personal photos stay 2D. */
+  readonly expects3d = computed(() => this.task() === 'virtual_try_on' && this.mode() === 'studio');
+  readonly processingTitle = computed(() =>
+    this.job()?.task === 'image_quality' ? 'Đang kiểm tra ảnh' : 'AI đang thử đồ',
+  );
+  readonly processingMessage = computed(() => {
+    const job = this.job();
+    if (!job) return 'Đang tải ảnh lên an toàn...';
+    if (job.status === 'queued') return 'Đang chờ đến lượt xử lý trên GPU...';
+    return job.task === 'image_quality'
+      ? 'Đang kiểm tra độ nét, ánh sáng và dáng người...'
+      : 'Đang phối trang phục lên ảnh — tối đa 2 phút.';
+  });
+  readonly elapsedLabel = computed(() => {
     const s = this.loadingSeconds();
-    if (s < 6) return 'Đang phân tích vóc dáng và đo lường tỷ lệ khung xương...';
-    if (s < 18) return 'Khớp mẫu trang phục, đo lường độ rủ và xếp nếp vải...';
-    if (s < 34) return 'Mô hình AI Diffusion đang render và hòa phối trang phục lên cơ thể...';
-    if (this.expects3d() && s >= 48) return 'Ảnh 2D đã xong. Đang dựng tuần tự 24 góc nhìn 360° trên GPU...';
-    return 'Tinh chỉnh ánh sáng, khử răng cưa và hoàn thiện chi tiết trang phục...';
+    const clock = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    return this.job()?.task === 'virtual_try_on' && this.job()?.status === 'running' ? `${clock} / 2:00` : clock;
+  });
+  /** Honest note about the 360° add-on once the 2D result is on screen. */
+  readonly stage3dNote = computed<{ tone: 'info' | 'warn'; text: string } | null>(() => {
+    const job = this.job();
+    if (!this.expects3d() || !this.result() || job?.task !== 'virtual_try_on' || this.has3d()) return null;
+    if (job.stage3d === 'pending') return { tone: 'info', text: 'Đang dựng góc nhìn 360° từ ảnh thử đồ...' };
+    if (job.stage3d === 'failed' || this.frames3dFailed())
+      return { tone: 'warn', text: 'Chưa dựng được góc nhìn 360°. Ảnh thử đồ vẫn dùng được.' };
+    return null;
   });
   private loadingTimer: number | undefined;
 
-  // --- REAL 3D 360-DEGREE ORBIT & MULTI-PERSPECTIVE VIEWER ---
-  readonly view3D = signal<boolean>(true);
+  // --- 360° TURNTABLE VIEWER: rotation = choosing a real frame; the scene itself never rotates ---
   readonly showOriginal = signal<boolean>(false);
   readonly orbitAngle = signal<number>(0);
-  readonly tiltAngle = signal<number>(0);
   readonly zoomLevel = signal<number>(1.0);
   readonly autoSpin = signal<boolean>(false);
+  /** Auto-spin is not offered to users who asked the OS for reduced motion. */
+  readonly reducedMotion =
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   private isDragging3D = false;
   private dragStartX = 0;
-  private dragStartY = 0;
   private dragStartAngle = 0;
-  private dragStartTilt = 0;
   private autoSpinFrame: number | undefined;
   private lastAutoSpinTime = 0;
 
   readonly normalizedAngle = computed(() => ((this.orbitAngle() % 360) + 360) % 360);
-
-  readonly isBackView = computed(() => {
-    const a = this.normalizedAngle();
-    return a >= 95 && a <= 265;
-  });
+  /** Drag/keyboard only make sense when real turntable frames are on screen. */
+  readonly spinnable = computed(() => this.has3d() && !this.showOriginal());
+  readonly roundedAngle = computed(() => Math.round(this.normalizedAngle()) % 360);
 
   readonly angleDisplayLabel = computed(() => {
-    const a = Math.round(((this.orbitAngle() % 360) + 360) % 360);
+    const a = this.roundedAngle();
     if (a <= 25 || a >= 335) return `${a}° · Mặt trước (Chính diện)`;
     if (a > 25 && a < 70) return `${a}° · Góc nghiêng 45° trái`;
     if (a >= 70 && a <= 110) return `${a}° · Cạnh trái (90°)`;
@@ -344,58 +364,20 @@ export class AiImageWorkbench {
     return this.has3d() ? this.frameSrc() : this.result();
   });
 
-  readonly roomTransform3D = computed(() => {
-    const a = this.orbitAngle();
-    const t = this.tiltAngle();
-    const z = this.zoomLevel();
-    return `scale3d(${z.toFixed(2)}, ${z.toFixed(2)}, ${z.toFixed(2)}) rotateX(${t.toFixed(1)}deg) rotateY(${(-a.toFixed(1))}deg)`;
-  });
-
-  readonly modelTransform3D = computed(() => {
-    const a = this.orbitAngle();
-    const t = this.tiltAngle();
-    const z = this.zoomLevel();
-    return `rotateX(${t.toFixed(1)}deg) rotateY(${a.toFixed(1)}deg) scale3d(${z.toFixed(2)}, ${z.toFixed(2)}, ${z.toFixed(2)})`;
-  });
-
-  readonly panoramaParallax = computed(() => {
-    const a = ((this.orbitAngle() % 360) + 360) % 360;
-    const px = (a / 360) * 120 - 60;
-    return `translateX(${px.toFixed(1)}px)`;
-  });
-
-  readonly podiumTransform3D = computed(() => {
-    const t = this.tiltAngle();
-    return `rotateX(${65 + t * 0.4}deg) translateZ(-40px)`;
-  });
-
-  readonly glareStyle = computed(() => {
-    const a = ((this.orbitAngle() % 360) + 360) % 360;
-    const rad = (a * Math.PI) / 180;
-    const x = 50 + Math.sin(rad) * 35;
-    const y = 35 - Math.cos(rad) * 15;
-    return `radial-gradient(circle at ${x.toFixed(1)}% ${y.toFixed(1)}%, rgba(255,255,255,0.3) 0%, transparent 60%)`;
-  });
-
   onStagePointerDown(event: PointerEvent): void {
-    if (!this.view3D() || this.busy()) return;
+    if (!this.spinnable() || this.busy()) return;
     this.isDragging3D = true;
     this.stopAutoSpin();
     this.dragStartX = event.clientX;
-    this.dragStartY = event.clientY;
     this.dragStartAngle = this.orbitAngle();
-    this.dragStartTilt = this.tiltAngle();
     (event.currentTarget as HTMLElement)?.setPointerCapture?.(event.pointerId);
   }
 
   onStagePointerMove(event: PointerEvent): void {
-    if (!this.isDragging3D || !this.view3D()) return;
+    if (!this.isDragging3D || !this.spinnable()) return;
     const deltaX = event.clientX - this.dragStartX;
-    const deltaY = event.clientY - this.dragStartY;
-    const newAngle = ((this.dragStartAngle - deltaX * 0.65) % 360 + 360) % 360;
-    const newTilt = Math.max(-20, Math.min(20, this.dragStartTilt + deltaY * 0.25));
-    this.orbitAngle.set(newAngle);
-    this.tiltAngle.set(newTilt);
+    // Same direction as auto-spin (angle grows), so dragging right continues the turn the user just watched.
+    this.orbitAngle.set(((this.dragStartAngle + deltaX * 0.65) % 360 + 360) % 360);
   }
 
   onStagePointerUp(event: PointerEvent): void {
@@ -406,15 +388,20 @@ export class AiImageWorkbench {
     } catch {}
   }
 
+  /** Arrow keys step exactly one published frame; Home returns to the front view. */
+  onStageKeydown(event: KeyboardEvent): void {
+    if (!this.spinnable()) return;
+    const step = 360 / this.frames3d().length;
+    if (event.key === 'ArrowLeft') this.setAnglePreset(this.orbitAngle() - step);
+    else if (event.key === 'ArrowRight') this.setAnglePreset(this.orbitAngle() + step);
+    else if (event.key === 'Home') this.setAnglePreset(0);
+    else return;
+    event.preventDefault();
+  }
+
   setAnglePreset(angle: number): void {
     this.stopAutoSpin();
     this.orbitAngle.set((angle % 360 + 360) % 360);
-    this.tiltAngle.set(0);
-  }
-
-  setTiltPreset(tilt: number): void {
-    this.stopAutoSpin();
-    this.tiltAngle.set(Math.max(-20, Math.min(20, tilt)));
   }
 
   toggleAutoSpin(): void {
@@ -427,6 +414,7 @@ export class AiImageWorkbench {
 
   private startAutoSpin(): void {
     this.stopAutoSpin();
+    if (this.reducedMotion || !this.spinnable()) return;
     this.autoSpin.set(true);
     this.lastAutoSpinTime = performance.now();
     const step = (now: number) => {
@@ -459,15 +447,7 @@ export class AiImageWorkbench {
   reset3DView(): void {
     this.stopAutoSpin();
     this.orbitAngle.set(0);
-    this.tiltAngle.set(0);
     this.zoomLevel.set(1.0);
-  }
-
-  toggleView3D(): void {
-    this.view3D.update((v) => !v);
-    if (!this.view3D()) {
-      this.stopAutoSpin();
-    }
   }
 
   toggleShowOriginal(): void {
@@ -535,8 +515,7 @@ export class AiImageWorkbench {
     this.studio.set(id);
     this.consent.set(false);
     this.studioLoading.set(false);
-    this.release(this.result());
-    this.result.set('');
+    this.clearResult();
     this.job.set(null);
     if (!id || !this.capabilities()?.studio_assets?.some((asset) => asset.id === id)) return;
     this.studioLoading.set(true);
@@ -557,8 +536,7 @@ export class AiImageWorkbench {
   chooseMode(mode: 'personal' | 'studio'): void {
     if (this.busy()) return;
     this.mode.set(mode);
-    this.release(this.result());
-    this.result.set('');
+    this.clearResult();
     this.job.set(null);
     this.qualityWarning.set(null);
     if (mode === 'studio' && !this.studio() && this.filteredStudioAssets().length) {
@@ -586,15 +564,21 @@ export class AiImageWorkbench {
   statusLabel(job: AiJob): string {
     if (job.status === 'queued') return 'Đang xếp hàng tính toán trên GPU';
     if (job.status === 'running') return 'AI đang phối đồ và render theo góc chụp...';
-    if (job.status === 'success')
-      return job.task === 'image_quality'
-        ? job.gate?.valid === true
+    if (job.status === 'success') {
+      if (job.task === 'image_quality')
+        return job.gate?.valid === true
           ? 'Ảnh đạt tiêu chuẩn thử đồ.'
-          : 'Ảnh có lưu ý nhỏ nhưng vẫn có thể tiếp tục thử đồ.'
-        : 'Thử đồ thành công! Xem góc nhìn 3D bên dưới.';
+          : 'Ảnh có lưu ý nhỏ nhưng vẫn có thể tiếp tục thử đồ.';
+      return job.frames3d?.length ? 'Thử đồ thành công! Kéo ảnh để xoay 360°.' : 'Thử đồ thành công!';
+    }
     if (job.status === 'validation_failed')
       return 'Ảnh chưa nhận diện được dáng người. Bạn nên chọn Người mẫu Studio bên dưới.';
-    return job.status === 'cancelled' ? 'Đã hủy' : 'Chưa xử lý được ảnh. Vui lòng thử lại.';
+    if (job.status === 'cancelled') return 'Đã hủy';
+    // VTO-09 Timeout and VTO-10 Retry: the server records the deadline as AI_JOB_TIMEOUT on a failed job.
+    if (job.error === 'AI_JOB_TIMEOUT') return 'Quá 2 phút xử lý nên hệ thống đã dừng chờ. Bạn có thể thử lại.';
+    if (job.error === 'VTO_PRODUCT_UNAVAILABLE')
+      return 'Sản phẩm hoặc biến thể không còn hỗ trợ thử đồ. Vui lòng quay lại trang sản phẩm.';
+    return 'Chưa xử lý được ảnh. Vui lòng thử lại.';
   }
 
   /** Converts measured gate codes to actionable guidance without blocking users. */
@@ -636,9 +620,8 @@ export class AiImageWorkbench {
          this.clearTimer();
          this.stopLoadingTimer();
          this.stopAutoSpin();
-         this.release(this.result());
+         this.clearResult();
          this.preview.set('');
-         this.result.set('');
          this.job.set(null);
          this.busy.set(false);
          this.consent.set(false);
@@ -681,7 +664,7 @@ export class AiImageWorkbench {
          this.clearTimer();
          this.stopLoadingTimer();
          this.stopAutoSpin();
-         this.result.set('');
+         this.clearResult();
          this.job.set(null);
          this.busy.set(false);
          this.clearStudio();
@@ -696,7 +679,7 @@ export class AiImageWorkbench {
       this.stopLoadingTimer();
       this.stopAutoSpin();
       this.release(this.preview());
-      this.release(this.result());
+      this.clearResult();
       this.clearStudio();
     });
   }
@@ -710,6 +693,13 @@ export class AiImageWorkbench {
     }
      const dialog = this.dialog()?.nativeElement;
      if (dialog && !dialog.open) dialog.showModal?.();
+     // A reopen must not stack a second poll loop: while a job is in flight its own loop keeps running and nothing
+     // is resumed; otherwise any leftover (e.g. a 360° watch) is stopped and the saved job is resumed once.
+     const resumable = !this.busy();
+     if (resumable) {
+       this.clearTimer();
+       this.generation++;
+     }
      const epoch = this.generation;
      this.capabilities.set(null);
      this.error.set('');
@@ -727,7 +717,7 @@ export class AiImageWorkbench {
         }
         const savedId = sessionStorage.getItem(this.storageKey());
           const savedPending = sessionStorage.getItem(`${this.storageKey()}_pending`);
-          if (savedId || savedPending) {
+          if (resumable && (savedId || savedPending)) {
             try {
               const recovered = await firstValueFrom(savedId ? this.model.job(savedId) : this.model.recover(savedPending!));
               const job = recovered.job;
@@ -780,9 +770,8 @@ export class AiImageWorkbench {
        return;
      }
     this.release(this.preview());
-    this.release(this.result());
+    this.clearResult();
     this.preview.set(URL.createObjectURL(file));
-    this.result.set('');
     this.file = file;
     this.asset = '';
     this.pendingKey = '';
@@ -794,26 +783,43 @@ export class AiImageWorkbench {
     this.error.set('');
   }
 
-  /** Requires explicit confirmation to generate try-on. */
-   /** Fetch turntable frames as blob URLs; a missing 3D stage simply leaves them empty. */
+  /** Fetch and decode every turntable frame before showing any, so dragging never hits a half-loaded frame. */
   private async load3dArtifacts(job: AiJob): Promise<void> {
     this.frames3d().forEach((url) => URL.revokeObjectURL(url));
     this.frames3d.set([]);
+    this.frames3dFailed.set(false);
     const names = (job.frames3d ?? []).map((path) => path.split('/').pop() ?? '');
     if (!names.length) return;
     const epoch = this.generation;
+    let urls: string[] = [];
     try {
       const blobs = await Promise.all(
         names.map((name) => firstValueFrom(this.model.resultFile(job.id, name))),
       );
-      if (epoch !== this.generation) {
-        blobs.forEach((b) => URL.revokeObjectURL(URL.createObjectURL(b)));
-        return;
-      }
-      this.frames3d.set(blobs.map((b) => URL.createObjectURL(b)));
+      urls = blobs.map((b) => URL.createObjectURL(b));
+      await Promise.all(urls.map((src) => Object.assign(new Image(), { src }).decode()));
+      if (epoch !== this.generation) throw new Error('STALE');
+      this.frames3d.set(urls);
+      this.orbitAngle.set(0);
     } catch {
-      // The 2D result stays valid; the viewer falls back to the tilt presentation.
+      urls.forEach((url) => URL.revokeObjectURL(url));
+      if (epoch === this.generation) this.frames3dFailed.set(true);
     }
+  }
+
+  /** VTO-08: after the try-on is shown, keep following the 360° add-on until it publishes frames or reports failure. */
+  private watchStage3d(epoch: number, id: string): void {
+    this.timer = window.setTimeout(async () => {
+      try {
+        const { job } = await firstValueFrom(this.model.job(id));
+        if (epoch !== this.generation) return;
+        this.job.set(job);
+        if (job.stage3d === 'pending') this.watchStage3d(epoch, id);
+        else await this.load3dArtifacts(job);
+      } catch {
+        if (epoch === this.generation) this.frames3dFailed.set(true);
+      }
+    }, 2000);
   }
 
    async generate(): Promise<void> {
@@ -1000,11 +1006,11 @@ export class AiImageWorkbench {
       this.release(this.result());
       this.result.set(URL.createObjectURL(blob));
       this.showOriginal.set(false);
-      await this.load3dArtifacts(current);
+      if (current.stage3d === 'pending') this.watchStage3d(epoch, current.id);
+      else await this.load3dArtifacts(current);
     } catch {
       if (epoch !== this.generation) return;
-      this.release(this.result());
-      this.result.set('');
+      this.clearResult();
       this.error.set('Không thể tải kết quả thử đồ hoặc sản phẩm không còn khả dụng. Vui lòng thử lại.');
     }
   }
@@ -1020,6 +1026,16 @@ export class AiImageWorkbench {
   private clearTimer(): void {
     window.clearTimeout(this.timer);
     this.timer = undefined;
+  }
+
+  /** Drop the 2D result AND its 360° frames together, so a new selection never shows the previous one's frames. */
+  private clearResult(): void {
+    this.release(this.result());
+    this.result.set('');
+    this.frames3d().forEach((url) => URL.revokeObjectURL(url));
+    this.frames3d.set([]);
+    this.frames3dFailed.set(false);
+    this.orbitAngle.set(0);
   }
 
    private release(url: string): void {

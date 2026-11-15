@@ -265,51 +265,39 @@
         </div>
       }
 
-      <!-- RICH AI LOADING EXPERIENCE OVERLAY -->
+      <!-- LIFECYCLE STEPPER (spec 3.1.8): follows real state — input, validation, confirm, processing, result -->
+      @if (task() === 'virtual_try_on') {
+        <div class="stepper" role="list" aria-label="Tiến trình thử đồ">
+          @for (label of lifecycleSteps; track label; let i = $index) {
+            @if (i > 0) {
+              <div class="step__line" [class.step__line--active]="lifecycleStep() > i" aria-hidden="true"></div>
+            }
+            <div
+              class="step"
+              role="listitem"
+              [class.step--active]="lifecycleStep() >= i + 1"
+              [class.step--current]="lifecycleStep() === i + 1"
+              [attr.aria-current]="lifecycleStep() === i + 1 ? 'step' : null"
+            >
+              <div class="step__num">{{ i + 1 }}</div>
+              <div class="step__text">{{ label }}</div>
+            </div>
+          }
+        </div>
+      }
+
       @if (busy()) {
         <div class="ai-loading-panel" aria-live="polite">
           <div class="ai-loading-panel__header">
             <div class="pulse-sparkle" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5V7A2.5 2.5 0 1 0 9.5 4.5"></path><path d="M12 8.5 3.6 14.1a1 1 0 0 0 .58 1.82h15.64a1 1 0 0 0 .58-1.82L12 8.5Z"></path></svg></div>
-            <div class="ai-loading-panel__title">AI Đang Render Thử Đồ</div>
-            <div class="ai-loading-panel__timer">{{ loadingSeconds() }}s</div>
+            <div class="ai-loading-panel__title">{{ processingTitle() }}</div>
+            <div class="ai-loading-panel__timer">{{ elapsedLabel() }}</div>
           </div>
-
-          <!-- 4-STEP AI PROGRESS BAR -->
-          <div class="stepper">
-            <div class="step" [class.step--active]="loadingStep() >= 1" [class.step--current]="loadingStep() === 1">
-              <div class="step__num">1</div>
-              <div class="step__text">Quét dáng</div>
-            </div>
-            <div class="step__line" [class.step__line--active]="loadingStep() >= 2"></div>
-            <div class="step" [class.step--active]="loadingStep() >= 2" [class.step--current]="loadingStep() === 2">
-              <div class="step__num">2</div>
-              <div class="step__text">Đo vải</div>
-            </div>
-            <div class="step__line" [class.step__line--active]="loadingStep() >= 3"></div>
-            <div class="step" [class.step--active]="loadingStep() >= 3" [class.step--current]="loadingStep() === 3">
-              <div class="step__num">3</div>
-              <div class="step__text">Diffusion</div>
-            </div>
-            <div class="step__line" [class.step__line--active]="loadingStep() >= 4"></div>
-            <div class="step" [class.step--active]="loadingStep() >= 4" [class.step--current]="loadingStep() === 4">
-              <div class="step__num">4</div>
-              <div class="step__text">Hoàn thiện</div>
-            </div>
-            @if (expects3d()) {
-              <div class="step__line" [class.step__line--active]="loadingStep() >= 5"></div>
-              <div class="step" [class.step--active]="loadingStep() >= 5" [class.step--current]="loadingStep() === 5">
-                <div class="step__num">5</div>
-                <div class="step__text">360°</div>
-              </div>
-            }
-          </div>
-
           <div class="ai-loading-panel__message">
-            <span class="shimmer-text">{{ loadingMessage() }}</span>
+            <span class="shimmer-text">{{ processingMessage() }}</span>
           </div>
-
           <div class="ai-loading-panel__hint">
-            Hệ thống đang chạy mạng nơ-ron sinh ảnh trên GPU RTX 4060. Vui lòng không đóng cửa sổ.
+            Bạn có thể đóng cửa sổ này — yêu cầu vẫn được xử lý và kết quả được giữ trong phiên đăng nhập.
           </div>
         </div>
       }
@@ -367,7 +355,7 @@
         </div>
       }
 
-      <!-- RESULTS SECTION WITH INTERACTIVE 3D PERSPECTIVE VIEWER -->
+      <!-- RESULT: 2D try-on, plus a real 360° turntable when the add-on stage published frames -->
       @if (result()) {
         <div class="result-section">
           <div class="result-toolbar">
@@ -375,32 +363,13 @@
               <button
                 type="button"
                 class="view-btn"
-                [class.view-btn--active]="view3D()"
-                (click)="toggleView3D()"
-                title="Bật/Tắt hiệu ứng góc nhìn 3D"
-              >
-                <span class="view-btn__icon" aria-hidden="true">
-                  @if (view3D()) {
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7.5v9L12 21l8-4.5v-9Z"></path><path d="M12 12 4 7.5M12 12l8-4.5M12 12v9"></path></svg>
-                  } @else {
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="m5 17 4.5-5 3.5 3.5L16 12l3 3"></path><circle cx="9" cy="9" r="1.4"></circle></svg>
-                  }
-                </span>
-                <span>{{ view3D() ? 'Góc nhìn 3D: Đang bật' : 'Góc nhìn 2D tĩnh' }}</span>
-              </button>
-              <button
-                type="button"
-                class="view-btn"
                 [class.view-btn--active]="showOriginal()"
+                [attr.aria-pressed]="showOriginal()"
                 (click)="toggleShowOriginal()"
                 title="So sánh với ảnh gốc"
               >
                 <span class="view-btn__icon" aria-hidden="true">
-                  @if (showOriginal()) {
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  } @else {
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5V7A2.5 2.5 0 1 0 9.5 4.5"></path><path d="M12 8.5 3.6 14.1a1 1 0 0 0 .58 1.82h15.64a1 1 0 0 0 .58-1.82L12 8.5Z"></path></svg>
-                  }
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                 </span>
                 <span>{{ showOriginal() ? 'Đang xem: Ảnh gốc' : 'Đang xem: Đã thử đồ' }}</span>
               </button>
@@ -413,16 +382,23 @@
             </div>
           </div>
 
-          @if (view3D() && !showOriginal()) {
+          @if (stage3dNote(); as note) {
+            <div class="stage-360__note" [class.stage-360__note--warn]="note.tone === 'warn'" role="status">
+              @if (note.tone === 'info') {
+                <span class="spinner-inline" aria-hidden="true"></span>
+              }
+              <span>{{ note.text }}</span>
+            </div>
+          }
+          @if (spinnable()) {
             <div class="hint-3d">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-4M12 8h.01"></path></svg>
-              <span><strong>Chế độ 3D:</strong> Rê chuột trên ảnh (hoặc vuốt cảm ứng) để xoay chuyển góc nhìn tương tác với ánh sáng nổi.</span>
+              <span><strong>360°:</strong> Kéo ngang trên ảnh hoặc dùng phím ← → để xoay quanh người mẫu.</span>
             </div>
           }
 
-          <!-- REAL-TIME 3D SCENARIO SELECTOR -->
           <div class="result-scenario-bar">
-            <span class="scenario-bar-title">Bối cảnh 3D:</span>
+            <span class="scenario-bar-title">Bối cảnh:</span>
             <div class="scene-pills scene-pills--result">
               @for (sc of availableScenarios; track sc.id) {
                 <button
@@ -437,208 +413,68 @@
             </div>
           </div>
 
-          <!-- REAL 3D 360 SPATIAL ENVIRONMENT ROOM -->
           <div
             class="stage-360-container"
+            [class.stage-360-container--interactive]="spinnable()"
+            [style.background]="activeScenario().wallBackTexture"
+            [attr.tabindex]="spinnable() ? 0 : null"
+            [attr.role]="spinnable() ? 'slider' : null"
+            [attr.aria-label]="spinnable() ? 'Xoay góc nhìn 360°' : null"
+            [attr.aria-valuemin]="spinnable() ? 0 : null"
+            [attr.aria-valuemax]="spinnable() ? 359 : null"
+            [attr.aria-valuenow]="spinnable() ? roundedAngle() : null"
+            [attr.aria-valuetext]="spinnable() ? angleDisplayLabel() : null"
             (pointerdown)="onStagePointerDown($event)"
             (pointermove)="onStagePointerMove($event)"
             (pointerup)="onStagePointerUp($event)"
             (pointercancel)="onStagePointerUp($event)"
+            (keydown)="onStageKeydown($event)"
           >
-            <!-- 3D WORLD ROOM (Rotates and tilts in true 3D spatial perspective) -->
-            <div class="room-3d" [style.transform]="view3D() ? roomTransform3D() : 'none'">
-              <!-- 3D SPATIAL FLOOR PLANE -->
-              <div class="room-3d__floor" [style.background]="activeScenario().floorTexture" aria-hidden="true">
-                <div class="floor-grid-overlay"></div>
-                <div class="floor-center-pedestal" [style.background]="activeScenario().podiumStyle"></div>
-              </div>
-
-              <!-- 3D BACK WALL -->
-              <div class="room-3d__wall room-3d__wall--back" [style.background]="activeScenario().wallBackTexture" aria-hidden="true">
-                <div class="wall-ambient-glow" [style.background]="activeScenario().lightingTone"></div>
-              </div>
-
-              <!-- 3D LEFT WALL -->
-              <div class="room-3d__wall room-3d__wall--left" [style.background]="activeScenario().wallSideTexture" aria-hidden="true"></div>
-
-              <!-- 3D RIGHT WALL -->
-              <div class="room-3d__wall room-3d__wall--right" [style.background]="activeScenario().wallSideTexture" aria-hidden="true"></div>
-
-              <!-- 3D CEILING -->
-              <div class="room-3d__ceiling" [style.background]="activeScenario().ceilingTexture" aria-hidden="true">
-                <div class="ceiling-spotlight-fixture"></div>
-              </div>
-
-              <!-- VOLUMETRIC SPOTLIGHT CONE -->
-              <div class="room-3d__spotlight" [style.background]="activeScenario().spotlightBeam" aria-hidden="true"></div>
-
-              <!-- 3D VOLUMETRIC MODEL FIGURE IN CENTER (0, 0, 0) -->
-              <div class="model-3d-cluster">
-                <!-- FRONT BODICE PANEL (+14px Z) -->
-                <div class="model-face model-face--front" [class.model-face--hidden]="view3D() && isBackView()">
-                  <img
-                    class="perspective-card__img"
-                    [src]="currentDisplayImage()"
-                    alt="Mặt trước thử đồ AI"
-                    draggable="false"
-                  />
-                  <span class="perspective-card__tag" [class.perspective-card__tag--ai]="!showOriginal()">
-                    {{ showOriginal() ? 'Ảnh gốc' : 'Mặt trước (0°)' }}
-                  </span>
-                </div>
-
-                <!-- BACK BODICE PANEL (-14px Z, rotateY 180deg) -->
-                @if (view3D()) {
-                  <div class="model-face model-face--back" [class.model-face--active]="isBackView()">
-                    <div class="model-back-silhouette">
-                      <img
-                        class="perspective-card__img perspective-card__img--back"
-                        [src]="currentDisplayImage()"
-                        alt="Mặt sau trang phục"
-                        draggable="false"
-                      />
-                      <div class="tailored-back-overlay" aria-hidden="true">
-                        <div class="tailored-spine-seam"></div>
-                        <div class="tailored-waist-darts"></div>
-                        <div class="tailored-back-zipper"></div>
-                      </div>
-                    </div>
-                    <span class="perspective-card__tag perspective-card__tag--ai">
-                      Mặt sau (180°) · Phom dáng lưng
-                    </span>
-                  </div>
-                }
-
-                <!-- 3D DEPTH RIBS (Left & Right side thickness) -->
-                @if (view3D()) {
-                  <div class="model-depth-rib model-depth-rib--left" aria-hidden="true"></div>
-                  <div class="model-depth-rib model-depth-rib--right" aria-hidden="true"></div>
-                }
-
-                <!-- SPECULAR GLARE LIGHT EFFECT -->
-                @if (view3D()) {
-                  <div class="stage-360-glare" [style.background]="glareStyle()" aria-hidden="true"></div>
-                }
-
-                <!-- 3D TURNTABLE PODIUM -->
-                <div class="turntable-podium" [style.transform]="podiumTransform3D()" aria-hidden="true">
-                  <div class="turntable-top"></div>
-                  <div class="turntable-rim"></div>
-                  <div class="turntable-shadow" [style.background]="activeScenario().podiumStyle"></div>
-                </div>
-              </div>
+            <div class="stage-360__floor" [style.background]="activeScenario().floorTexture" aria-hidden="true"></div>
+            <span class="stage-360__tag">
+              {{ showOriginal() ? 'Ảnh gốc' : has3d() ? '360° · ' + frames3d().length + ' góc' : 'Ảnh thử đồ AI' }}
+            </span>
+            <div class="stage-360__figure" [style.transform]="'scale(' + zoomLevel() + ')'">
+              <img
+                class="stage-360__img"
+                [src]="currentDisplayImage()"
+                [alt]="showOriginal() ? 'Ảnh gốc trước khi thử đồ' : 'Kết quả thử đồ AI'"
+                draggable="false"
+              />
             </div>
-
-            <!-- 360 HUD: ANGLE INDICATOR & SCENARIO CHIP -->
-            <div class="stage-360-hud">
-              <span class="angle-indicator-pill">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                {{ angleDisplayLabel() }}
-              </span>
-              <span class="scenic-tag-badge">{{ activeScenario().label }} · {{ activeScenario().badge }}</span>
-            </div>
+            <div class="stage-360__shadow" aria-hidden="true"></div>
+            @if (spinnable()) {
+              <div class="stage-360-hud">
+                <span class="angle-indicator-pill">{{ angleDisplayLabel() }}</span>
+                <span class="scenic-tag-badge">{{ activeScenario().label }}</span>
+              </div>
+            }
           </div>
 
-          <!-- 3D 360 INTERACTIVE TOOLBAR -->
           <div class="orbit-controls-bar">
-            <div class="orbit-controls-group">
-              <button
-                type="button"
-                class="orbit-btn"
-                [class.orbit-btn--active]="normalizedAngle() <= 20 || normalizedAngle() >= 340"
-                (click)="setAnglePreset(0)"
-                title="Góc nhìn mặt trước"
-              >
-                Trước (0°)
-              </button>
-              <button
-                type="button"
-                class="orbit-btn"
-                [class.orbit-btn--active]="normalizedAngle() >= 30 && normalizedAngle() <= 65"
-                (click)="setAnglePreset(45)"
-                title="Góc nghiêng 45 độ"
-              >
-                Nghiêng (45°)
-              </button>
-              <button
-                type="button"
-                class="orbit-btn"
-                [class.orbit-btn--active]="normalizedAngle() >= 75 && normalizedAngle() <= 105"
-                (click)="setAnglePreset(90)"
-                title="Cạnh hông trái (90 độ)"
-              >
-                Cạnh (90°)
-              </button>
-              <button
-                type="button"
-                class="orbit-btn"
-                [class.orbit-btn--active]="normalizedAngle() >= 160 && normalizedAngle() <= 200"
-                (click)="setAnglePreset(180)"
-                title="Góc nhìn sau lưng"
-              >
-                Sau lưng (180°)
-              </button>
-              <button
-                type="button"
-                class="orbit-btn"
-                [class.orbit-btn--active]="tiltAngle() >= 12"
-                (click)="setTiltPreset(16)"
-                title="Nhìn từ trên xuống"
-              >
-                Nhìn trên
-              </button>
-              <button
-                type="button"
-                class="orbit-btn"
-                [class.orbit-btn--active]="tiltAngle() <= -12"
-                (click)="setTiltPreset(-16)"
-                title="Nhìn từ dưới lên"
-              >
-                Nhìn dưới
-              </button>
-              <button
-                type="button"
-                class="orbit-btn"
-                [class.orbit-btn--active]="autoSpin()"
-                (click)="toggleAutoSpin()"
-                title="Bật/Tắt tự động xoay 360 độ"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                <span>{{ autoSpin() ? 'Dừng xoay' : 'Tự xoay 360°' }}</span>
-              </button>
-            </div>
+            @if (spinnable()) {
+              <div class="orbit-controls-group">
+                <button type="button" class="orbit-btn" [class.orbit-btn--active]="normalizedAngle() <= 20 || normalizedAngle() >= 340" (click)="setAnglePreset(0)">Trước (0°)</button>
+                <button type="button" class="orbit-btn" [class.orbit-btn--active]="normalizedAngle() >= 30 && normalizedAngle() <= 65" (click)="setAnglePreset(45)">Nghiêng (45°)</button>
+                <button type="button" class="orbit-btn" [class.orbit-btn--active]="normalizedAngle() >= 75 && normalizedAngle() <= 105" (click)="setAnglePreset(90)">Cạnh (90°)</button>
+                <button type="button" class="orbit-btn" [class.orbit-btn--active]="normalizedAngle() >= 160 && normalizedAngle() <= 200" (click)="setAnglePreset(180)">Sau lưng (180°)</button>
+                @if (!reducedMotion) {
+                  <button type="button" class="orbit-btn" [class.orbit-btn--active]="autoSpin()" [attr.aria-pressed]="autoSpin()" (click)="toggleAutoSpin()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                    <span>{{ autoSpin() ? 'Dừng xoay' : 'Tự xoay 360°' }}</span>
+                  </button>
+                }
+              </div>
+            }
             <div class="orbit-zoom-group">
-              <button
-                type="button"
-                class="zoom-btn"
-                (click)="zoomOut()"
-                [disabled]="zoomLevel() <= 1.0"
-                title="Thu nhỏ"
-              >
-                −
-              </button>
+              <button type="button" class="zoom-btn" (click)="zoomOut()" [disabled]="zoomLevel() <= 1.0" aria-label="Thu nhỏ">−</button>
               <span class="zoom-label">{{ (zoomLevel() * 100).toFixed(0) }}%</span>
-              <button
-                type="button"
-                class="zoom-btn"
-                (click)="zoomIn()"
-                [disabled]="zoomLevel() >= 1.8"
-                title="Phóng to"
-              >
-                +
-              </button>
-              <button
-                type="button"
-                class="zoom-btn zoom-btn--reset"
-                (click)="reset3DView()"
-                title="Đặt lại góc nhìn"
-              >
-                Đặt lại
-              </button>
+              <button type="button" class="zoom-btn" (click)="zoomIn()" [disabled]="zoomLevel() >= 1.8" aria-label="Phóng to">+</button>
+              <button type="button" class="zoom-btn zoom-btn--reset" (click)="reset3DView()">Đặt lại</button>
             </div>
           </div>
           <p class="result-disclaimer">
-            * Ảnh kết quả được AI mô phỏng theo tỷ lệ trang phục; nếp vải và ánh sáng phản chiếu chân thực theo góc nhìn.
+            * Ảnh do AI mô phỏng. Góc nhìn 360° được dựng lại từ ảnh thử đồ nên chi tiết mặt sau là ước lượng.
           </p>
         </div>
       }

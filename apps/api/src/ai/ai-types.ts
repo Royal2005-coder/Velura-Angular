@@ -36,6 +36,11 @@ export interface AiJobView {
   result_url?: string;
   /** KAN-66 VTO 3D: strict-name turntable frames published from the job directory. */
   frames3d?: string[];
+  /**
+   * 360° add-on progress after a Success try-on: `pending` while the turntable is being built, `failed` when it
+   * could not be built. Absent when no 360° was requested or once `frames3d` is published (ready).
+   */
+  stage3d?: "pending" | "failed";
   gate?: Record<string, unknown>;
   error?: string;
   matches?: Array<{ product_id: string; score: number }>;

@@ -163,6 +163,23 @@ test("ShopAiCatalog rejects accessories, shoes, combo, and unmapped variants eve
   assert.equal(foreignSupport.variant_supported, false);
 });
 
+test("VTO-02: a sold-out product stays tryable, while hidden and discontinued products do not", async () => {
+  const productId = "11111111-1111-4111-8111-111111111111";
+  const variantA = "22222222-2222-4222-8222-222222222222";
+  process.env.AI_CATALOG_IMAGE_HOSTS = "images.shop.test";
+  process.env.AI_VTO_PRODUCTS = JSON.stringify({
+    [productId]: { verified: true, photo_type: "flat-lay", category: "upper_body", variant_images: { [variantA]: "https://images.shop.test/a.png" } },
+  });
+  const withStatus = (status: string) => new ShopAiCatalog({
+    async product() { return { status, is_combo: false, category: { slug: "ao" } }; },
+    async variant(_pid, vid) { return { variant_id: vid, product_id: productId, stock_quantity: 0 }; },
+    async fetchImage() { throw new Error("Must not download"); },
+  });
+  assert.equal((await withStatus("out_of_stock").support(productId, variantA)).variant_supported, true);
+  assert.equal((await withStatus("hidden").support(productId, variantA)).product_supported, false);
+  assert.equal((await withStatus("discontinued").support(productId, variantA)).product_supported, false);
+});
+
 test("handleAiRoute rejects guest uploads and try-on jobs before processing or image reads", async () => {
   const mockReq: HttpRequest = {
     method: "POST",

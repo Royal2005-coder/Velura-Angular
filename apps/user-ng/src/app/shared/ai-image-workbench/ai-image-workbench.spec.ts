@@ -440,40 +440,53 @@ describe('AiImageWorkbench', () => {
       expect(p.activeScenario().id).toBe('autumn');
       expect(p.result()).toBe('blob:active-tryon-result');
     });
-    it('handles 3D angle presets, normalized angle, and isBackView boundary', () => {
+    it('steps exactly one real frame per arrow key and returns to the front on Home', () => {
       const p = page();
-      p.setAnglePreset(0);
-      expect(p.normalizedAngle()).toBe(0);
-      expect(p.isBackView()).toBe(false);
-
-      p.setAnglePreset(45);
-      expect(p.normalizedAngle()).toBe(45);
-      expect(p.isBackView()).toBe(false);
-
-      p.setAnglePreset(180);
-      expect(p.normalizedAngle()).toBe(180);
-      expect(p.isBackView()).toBe(true);
-
-      p.orbitAngle.set(-90);
-      expect(p.normalizedAngle()).toBe(270);
-      expect(p.isBackView()).toBe(false);
-
-      p.orbitAngle.set(180);
-      expect(p.isBackView()).toBe(true);
+      p.frames3d.set(Array.from({ length: 24 }, (_, i) => `blob:frame-${i}`));
+      const key = (k: string) => p.onStageKeydown(new KeyboardEvent('keydown', { key: k }));
+      key('ArrowRight');
+      expect(p.normalizedAngle()).toBe(15);
+      expect(p.currentDisplayImage()).toBe('blob:frame-1');
+      key('ArrowLeft');
+      key('ArrowLeft');
+      expect(p.normalizedAngle()).toBe(345);
+      expect(p.currentDisplayImage()).toBe('blob:frame-23');
+      key('Home');
+      expect(p.currentDisplayImage()).toBe('blob:frame-0');
     });
 
-    it('starts and stops autoSpin lifecycle and cancels on close', () => {
+    it('does not rotate a flat 2D result: drag, keys and auto-spin need real turntable frames', () => {
       const p = page();
+      p.result.set('blob:flat');
+      p.onStageKeydown(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+      p.toggleAutoSpin();
+      expect(p.normalizedAngle()).toBe(0);
+      expect(p.autoSpin()).toBe(false);
+      expect(p.currentDisplayImage()).toBe('blob:flat');
+    });
+
+    it('starts and stops autoSpin on real frames and cancels on close', () => {
+      const p = page();
+      p.frames3d.set(Array.from({ length: 12 }, (_, i) => `blob:frame-${i}`));
       p.toggleAutoSpin();
       expect(p.autoSpin()).toBe(true);
-
       p.toggleAutoSpin();
       expect(p.autoSpin()).toBe(false);
-
       p.toggleAutoSpin();
-      expect(p.autoSpin()).toBe(true);
       p.close();
       expect(p.autoSpin()).toBe(false);
+    });
+
+    it('tells the shopper the 360° view is still being built, or that it failed while the 2D result stays', () => {
+      const p = page();
+      p.mode.set('studio');
+      p.result.set('blob:tryon');
+      const done = { ...quality, task: 'virtual_try_on' as const, status: 'success' as const };
+      p.job.set({ ...done, stage3d: 'pending' });
+      expect(p.stage3dNote()?.tone).toBe('info');
+      p.job.set({ ...done, stage3d: 'failed' });
+      expect(p.stage3dNote()?.tone).toBe('warn');
+      expect(p.result()).toBe('blob:tryon');
     });
 
     it('clamps zoom levels within bounds and resets view', () => {
@@ -495,12 +508,11 @@ describe('AiImageWorkbench', () => {
       p.zoomOut();
       expect(p.zoomLevel()).toBe(1.0);
 
+      p.frames3d.set(Array.from({ length: 12 }, (_, i) => `blob:frame-${i}`));
       p.setAnglePreset(180);
-      p.tiltAngle.set(12);
       p.zoomIn();
       p.reset3DView();
       expect(p.orbitAngle()).toBe(0);
-      expect(p.tiltAngle()).toBe(0);
       expect(p.zoomLevel()).toBe(1.0);
       expect(p.autoSpin()).toBe(false);
     });

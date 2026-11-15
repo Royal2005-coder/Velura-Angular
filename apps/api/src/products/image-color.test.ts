@@ -18,3 +18,12 @@ test("infers colours from catalog file names and keeps explicit mappings", () =>
   });
   assert.deepEqual(withInferredImageColors([gray], {}, ["Black"]), {});
 });
+
+test("matches abbreviated file-name colours to full variant names", () => {
+  const files = ["https://cdn/x/ao_x_beige_01.jpg", "https://cdn/x/ao_x_slat-blue_02.jpg", "https://cdn/x/ao_x_burgundy_04.jpg"];
+  assert.deepEqual(withInferredImageColors(files, {}, ["Burgundy Wine", "Slate Blue", "Soft Beige"]), {
+    [files[0]]: "Soft Beige",
+    [files[1]]: "Slate Blue",
+    [files[2]]: "Burgundy Wine",
+  });
+});

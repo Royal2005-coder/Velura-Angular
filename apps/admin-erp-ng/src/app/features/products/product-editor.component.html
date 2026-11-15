@@ -13,12 +13,12 @@
   @if (section() === 'info') {
     <div class="editor-grid">
       <label class="erp-field editor-span">
-        <span>Tên sản phẩm</span>
+        <span>Tên sản phẩm <span class="erp-required" aria-hidden="true">*</span></span>
         <input class="erp-input" type="text" [value]="name()" (input)="setText('name', $event)" maxlength="255" required />
       </label>
 
       <label class="erp-field">
-        <span>SKU sản phẩm</span>
+        <span>SKU sản phẩm@if (isCreate()) { <span class="erp-required" aria-hidden="true">*</span> }</span>
         <input
           class="erp-input"
           type="text"
@@ -29,7 +29,7 @@
         />
       </label>
       <label class="erp-field">
-        <span>Slug</span>
+        <span>Slug@if (isCreate()) { <span class="erp-required" aria-hidden="true">*</span> }</span>
         <input class="erp-input" type="text" [value]="slug()" (input)="setText('slug', $event)" [disabled]="!isCreate()" />
       </label>
 
@@ -44,7 +44,7 @@
       }
 
       <label class="erp-field">
-        <span>Danh mục</span>
+        <span>Danh mục <span class="erp-required" aria-hidden="true">*</span></span>
         <select class="erp-select" [value]="categoryId()" (change)="setCategory($event)" required>
           @for (option of categoryOptions(); track option.value) {
             <option [value]="option.value">{{ option.label }}</option>
@@ -62,11 +62,11 @@
 
       @if (isCreate()) {
         <label class="erp-field">
-          <span>Giá mặc định (niêm yết)</span>
+          <span>Giá mặc định (niêm yết) <span class="erp-required" aria-hidden="true">*</span></span>
           <input class="erp-input" type="number" min="0" step="1000" [value]="basePrice()" (input)="setNumber('basePrice', $event)" placeholder="0 đ" />
         </label>
         <label class="erp-field">
-          <span>Giá bán cho khách hàng</span>
+          <span>Giá bán cho khách hàng <span class="erp-required" aria-hidden="true">*</span></span>
           <input class="erp-input" type="number" min="0" step="1000" [value]="salePrice()" (input)="setNumber('salePrice', $event)" placeholder="0 đ" />
         </label>
         <label class="erp-field">

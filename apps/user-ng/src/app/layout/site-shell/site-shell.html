@@ -14,7 +14,7 @@
       </svg>
     </button>
     <div class="quiz-modal__image-side">
-      <img src="/assets/images/quiz-illustration.png" alt="Style Quiz Illustration" />
+      <img loading="lazy" decoding="async" src="/assets/images/quiz-illustration.png" alt="Style Quiz Illustration" />
     </div>
     <div class="quiz-modal__content-side">
       <div class="quiz-modal__header">
@@ -53,7 +53,7 @@
       @for (banner of banners(); track banner.promo_id) {
         <a class="hot-offer-widget__item" [routerLink]="'/offers'" [queryParams]="{ offer: banner.promo_id }">
           @if (banner.banner_image_url) {
-            <img [src]="banner.banner_image_url" [alt]="banner.title" />
+            <img loading="lazy" decoding="async" [src]="banner.banner_image_url" [alt]="banner.title" />
           }
           <span>
             <strong>{{ banner.title }}</strong>
@@ -81,7 +81,7 @@
     <div class="chatbot-header">
       <div class="chatbot-header__info">
         <div class="chatbot-header__avatar">
-          <img src="/assets/images/chatbot/bot-avatar.png" alt="Velura Assistant" />
+          <img loading="lazy" decoding="async" src="/assets/images/chatbot/bot-avatar.png" alt="Velura Assistant" />
           <span class="chatbot-header__status"></span>
         </div>
         <div>

@@ -9,14 +9,14 @@
         </p>
       </div>
       <figure class="blog-intro__media" aria-label="Không gian thời trang Velura Journal">
-        <img src="/assets/images/velura-journal-banner.png" alt="Người mẫu trong chiến dịch Velura" />
+        <img loading="lazy" decoding="async" src="/assets/images/velura-journal-banner.png" alt="Người mẫu trong chiến dịch Velura" />
       </figure>
     </div>
 
     @if (featured(); as post) {
       <section class="featured-post">
         <div class="featured-post__image">
-          <img [src]="post.image" [alt]="post.title" />
+          <img loading="lazy" decoding="async" [src]="post.image" [alt]="post.title" />
         </div>
         <div class="featured-post__content">
           <span class="blog-badge">{{ post.badge }}</span>
@@ -62,7 +62,7 @@
       @for (post of posts(); track post.slug) {
         <article class="article-card">
           <div class="article-card__image">
-            <img [src]="post.image" [alt]="post.title" />
+            <img loading="lazy" decoding="async" [src]="post.image" [alt]="post.title" />
           </div>
           <div class="article-card__content">
             <span class="blog-badge">{{ post.badge }}</span>

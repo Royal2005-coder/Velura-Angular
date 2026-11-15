@@ -57,7 +57,7 @@
     <div class="product-detail-layout">
       <div class="product-detail__gallery">
         <div class="gallery-main" (click)="openImageZoom()">
-          <img [src]="imageUrl()" [alt]="product()?.name || ''" class="gallery-main__img product-detail__main-img" />
+          <img loading="lazy" decoding="async" [src]="imageUrl()" [alt]="product()?.name || ''" class="gallery-main__img product-detail__main-img" />
           <button
             type="button"
             class="gallery-expand-btn"
@@ -85,7 +85,7 @@
         <div class="gallery-thumbs">
           @for (image of gallery(); track image; let i = $index) {
             <button type="button" class="gallery-thumbs__btn" [class.active]="activeImage() === i" (click)="selectImage(i)">
-              <img [src]="gallerySrc(image)" [alt]="product()?.name || ''" />
+              <img loading="lazy" decoding="async" [src]="gallerySrc(image)" [alt]="product()?.name || ''" />
             </button>
           }
         </div>
@@ -147,7 +147,7 @@
                 <div class="combo-component-item">
                   <div class="combo-component-item__header">
                     <a [routerLink]="['/products', component.slug || component.product_id]" target="_blank" class="combo-component-item__img-link" title="Xem sản phẩm riêng lẻ">
-                      <img [src]="comboImage(component)" [alt]="component.name" class="combo-component-item__img" />
+                      <img loading="lazy" decoding="async" [src]="comboImage(component)" [alt]="component.name" class="combo-component-item__img" />
                     </a>
                     <div class="combo-component-item__info">
                       <span class="combo-component-item__category">{{ component.category_name }}</span>
@@ -868,7 +868,7 @@
               <div class="velura-review-lightbox" (click)="closeReviewImageLightbox()" role="dialog" aria-label="Xem ảnh đánh giá">
                 <div class="velura-review-lightbox__inner" (click)="$event.stopPropagation()">
                   <button type="button" class="velura-review-lightbox__close" (click)="closeReviewImageLightbox()" aria-label="Đóng">✕</button>
-                  <img [src]="previewReviewImage()!" alt="Ảnh thực tế đánh giá sản phẩm" />
+                  <img loading="lazy" decoding="async" [src]="previewReviewImage()!" alt="Ảnh thực tế đánh giá sản phẩm" />
                 </div>
               </div>
             }
@@ -987,8 +987,7 @@
               class="gallery-zoom-modal__canvas"
               [style.transform]="'translate(' + panX() + 'px, ' + panY() + 'px) scale(' + zoomScale() + ')'"
             >
-              <img
-                [src]="imageUrl()"
+              <img loading="lazy" decoding="async" [src]="imageUrl()"
                 [alt]="product()?.name || ''"
                 class="gallery-zoom-modal__img"
                 draggable="false"
@@ -1070,7 +1069,7 @@
                   (click)="selectImage(i); resetZoom()"
                   [attr.aria-label]="'Xem góc chụp ' + (i + 1)"
                 >
-                  <img [src]="gallerySrc(image)" [alt]="product()?.name || ''" />
+                  <img loading="lazy" decoding="async" [src]="gallerySrc(image)" [alt]="product()?.name || ''" />
                 </button>
               }
             </div>

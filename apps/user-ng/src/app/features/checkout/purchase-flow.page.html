@@ -291,7 +291,7 @@
                 </p>
               }
               @if (qrImage()) {
-                <img class="qr-code" [src]="qrImage()" alt="Mã QR {{ gatewayProviderLabel() }} cho đơn {{ order()?.id }}" width="220" height="220" />
+                <img loading="lazy" decoding="async" class="qr-code" [src]="qrImage()" alt="Mã QR {{ gatewayProviderLabel() }} cho đơn {{ order()?.id }}" width="220" height="220" />
               } @else if (gateway().qrPayload) {
                 <p role="note">Chưa hiển thị được mã QR trên thiết bị này. Bạn vẫn có thể mở trang thanh toán để trả bằng ví/ngân hàng.</p>
               }
@@ -397,7 +397,7 @@
               class="line"
               [style.background]="$index === 0 && stockProblem() ? '#fff0ec' : ''"
             >
-              <img [src]="image(line.product_image)" [alt]="line.product_name" />
+              <img loading="lazy" decoding="async" [src]="image(line.product_image)" [alt]="line.product_name" />
               <div>
                 <h3>{{ line.product_name }}</h3>
                 @if (line.is_combo) {
@@ -418,7 +418,7 @@
                       <div class="checkout-combo-grid">
                         @for (sub of line.sub_items; track sub.product_id) {
                           <div class="checkout-combo-card">
-                            <img [src]="image(sub.product_image)" [alt]="sub.product_name" class="checkout-combo-card__img" />
+                            <img loading="lazy" decoding="async" [src]="image(sub.product_image)" [alt]="sub.product_name" class="checkout-combo-card__img" />
                             <div class="checkout-combo-card__body">
                               <span class="checkout-combo-card__name" [title]="sub.product_name">
                                 {{ sub.product_name }}

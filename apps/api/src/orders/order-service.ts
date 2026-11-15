@@ -32,6 +32,7 @@ import {
   orderStatusLabel,
   type OrderStatus
 } from "./order-state-machine.js";
+import { notifyOrderDelivered } from "./order-notifications.js";
 
 /** Hoàn tiền qua cổng thanh toán; tách ra để kiểm thử không gọi Stripe thật. */
 export interface OrderRefundGateway {
@@ -273,6 +274,10 @@ export function createOrderService({
 
       const refund = result?.refund_required && refunds ? await refunds.refund(orderId) : null;
       const fresh = await this.get(context, orderId);
+      const freshObj = fresh as JsonObject | undefined;
+      if (freshObj && (asString(freshObj.status) === "delivered" || asString(freshObj.status) === "completed")) {
+        void notifyOrderDelivered(orderId);
+      }
       return { order: fresh, refund };
     },
 
@@ -323,6 +328,7 @@ export function createOrderService({
         } catch (e: unknown) {
           console.warn("[CARRIER_SIMULATOR_PROOF_ERROR]", e);
         }
+        void notifyOrderDelivered(orderId);
       }
       return this.get(context, orderId);
     },

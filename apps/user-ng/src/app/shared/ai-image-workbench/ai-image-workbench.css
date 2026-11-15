@@ -396,7 +396,7 @@
 .pose-progress { margin: 0; color: var(--vto-maroon); font: 700 .78rem var(--velura-font-ui, "Inter", sans-serif); }
 .pose-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
   gap: .6rem;
 }
 .pose-card {
@@ -446,16 +446,31 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.pose-card--selected { border-color: var(--vto-maroon); box-shadow: 0 0 0 1px var(--vto-maroon); background: var(--vto-blush); }
+.pose-card__select { display: block; padding: 0; border: 0; background: none; cursor: pointer; }
+.pose-card__select:focus-visible { outline: 2px solid var(--vto-maroon); outline-offset: 2px; border-radius: 8px; }
+.pose-card__download { width: 26px; height: 26px; top: .45rem; right: .45rem; }
+.pose-stage__download {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .45rem .8rem;
+  border: 1px solid var(--vto-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .95);
+  color: var(--vto-maroon);
+  font: 700 .74rem var(--velura-font-ui, "Inter", sans-serif);
+  cursor: pointer;
+}
+.pose-stage__download:hover { border-color: var(--vto-maroon); }
 @keyframes pose-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) {
   .pose-card__skeleton { animation: none; }
 }
-@media (max-width: 900px) {
-  .pose-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-@media (max-width: 520px) {
-  .pose-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+
 .result-disclaimer { margin: 0; color: var(--vto-muted); font-size: .7rem; text-align: center; }
 
 .spinner-inline {

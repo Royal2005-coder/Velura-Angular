@@ -162,6 +162,19 @@ export async function handleAiRoute(
     res.end(image.bytes);
     return true;
   }
+  if (action === "garment" && parts.length === offset + 1 && req.method === "GET") {
+    const query = new URL(req.url || "/", "http://localhost").searchParams;
+    const image = await service.garmentPreview(query.get("product_id") ?? "", query.get("variant_id") ?? "");
+    res.writeHead(200, {
+      ...headers,
+      "content-type": image.mime,
+      "cache-control": "private, no-store",
+      "content-disposition": 'inline; filename="garment-preview"',
+      "x-content-type-options": "nosniff",
+    });
+    res.end(image.bytes);
+    return true;
+  }
   recovery ??= service.recover();
   await recovery;
   if (req.method === "POST") {

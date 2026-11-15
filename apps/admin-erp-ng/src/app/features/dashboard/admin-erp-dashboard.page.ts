@@ -125,6 +125,14 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
   private readonly sessionService = inject(AdminErpSessionService);
   private pollingSub?: Subscription;
   private toastTimer?: ReturnType<typeof setTimeout>;
+  private syncInterval?: ReturnType<typeof setInterval>;
+
+  /** Whether a star-schema background rollup is currently in progress. */
+  readonly syncingAnalytics = signal(false);
+  /** Seconds remaining on the 10-second sync cooldown timer. */
+  readonly syncCooldown = signal(0);
+  /** Whether the active operator has update permission on the dashboard resource. */
+  readonly canSync = computed(() => this.sessionService.can('update', 'dashboard'));
 
   /** Empty-state copy exposed to the template. */
   readonly noDataSource = NO_DATA_SOURCE;
@@ -354,6 +362,9 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.pollingSub?.unsubscribe();
     clearTimeout(this.toastTimer);
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+    }
   }
 
   /**
@@ -505,6 +516,52 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
       this.loadInventoryAlerts();
       this.loadModuleHealth();
     }
+  }
+
+  /**
+   * Triggers the server-side star-schema background rollup and reloads the fresh analytics snapshot.
+   */
+  syncAnalytics(): void {
+    if (this.syncingAnalytics() || this.syncCooldown() > 0 || !this.canSync()) {
+      return;
+    }
+    this.syncingAnalytics.set(true);
+    this.api.refreshDashboard().subscribe({
+      next: () => {
+        this.syncingAnalytics.set(false);
+        this.showToast('Đồng bộ số liệu thành công. Đang tải lại dữ liệu mới nhất…');
+        this.startSyncCooldown(10);
+        this.reload();
+      },
+      error: (error: unknown) => {
+        this.syncingAnalytics.set(false);
+        const status = (error as { status?: number })?.status;
+        if (status === 429) {
+          this.showToast('Hệ thống đang tổng hợp số liệu. Vui lòng chờ 10 giây trước khi thử lại.');
+          this.startSyncCooldown(10);
+        } else {
+          this.showToast(adminErrorMessage(error, 'Đồng bộ số liệu chưa thành công. Thử lại sau.'));
+        }
+      },
+    });
+  }
+
+  private startSyncCooldown(seconds: number): void {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+    }
+    this.syncCooldown.set(seconds);
+    this.syncInterval = setInterval(() => {
+      const next = this.syncCooldown() - 1;
+      if (next <= 0) {
+        this.syncCooldown.set(0);
+        if (this.syncInterval) {
+          clearInterval(this.syncInterval);
+        }
+      } else {
+        this.syncCooldown.set(next);
+      }
+    }, 1000);
   }
 
   drillProduct(productId: string | undefined): void {

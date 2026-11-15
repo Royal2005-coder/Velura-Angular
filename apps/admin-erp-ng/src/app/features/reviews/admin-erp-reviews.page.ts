@@ -14,7 +14,7 @@ import {
 } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { REVIEW_STATUS_LABELS, statusLabelFrom } from '../../core/admin-erp-status-labels';
-import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
+import { AdminErpDataTable, AdminTableColumn, AdminTableRowAction } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
 import { AdminErpLoadingOverlay } from '../../shared/ui/admin-loading-overlay';
 import { AdminErpFilterBar } from '../../shared/ui/admin-filter-bar';
@@ -132,19 +132,41 @@ export class AdminErpReviewsPage {
 
   readonly reviewColumns: readonly AdminTableColumn[] = [
     {
-      key: 'review',
-      label: 'Đánh giá',
-      value: (row) => this.commentOf(row as AdminReviewRow),
-    },
-    {
       key: 'product',
       label: 'Sản phẩm',
       value: (row) => this.productName(row as AdminReviewRow),
+      truncate: '180px',
+    },
+    {
+      key: 'rating',
+      label: 'Đánh giá',
+      value: (row) => `${(row as AdminReviewRow).rating || 5} ★`,
+      badge: (row) => {
+        const r = (row as AdminReviewRow).rating || 5;
+        const tone = r <= 2 ? 'danger' : (r === 3 ? 'warning' : 'success');
+        return { label: `${r} ★`, tone };
+      },
+    },
+    {
+      key: 'review',
+      label: 'Nội dung',
+      value: (row) => this.commentOf(row as AdminReviewRow),
+      truncate: '280px',
+    },
+    {
+      key: 'media',
+      label: 'Ảnh đính kèm',
+      value: (row) => ((row as AdminReviewRow).images?.length ? `${(row as AdminReviewRow).images!.length} ảnh` : '—'),
+      badge: (row) =>
+        (row as AdminReviewRow).images?.length
+          ? { label: `📷 ${(row as AdminReviewRow).images!.length} ảnh`, tone: 'neutral' as const }
+          : null,
     },
     {
       key: 'customer',
       label: 'Khách hàng',
       value: (row) => this.customerLabel(row as AdminReviewRow),
+      truncate: '150px',
     },
     {
       key: 'status',
@@ -152,7 +174,6 @@ export class AdminErpReviewsPage {
       value: (row) => this.statusLabel((row as AdminReviewRow).status),
       badge: (row) => ({ label: this.statusLabel((row as AdminReviewRow).status), tone: this.statusTone((row as AdminReviewRow).status) }),
     },
-    { key: 'date', label: 'Ngày tạo', value: (row) => this.date((row as AdminReviewRow).submitted_at) },
     {
       key: 'urgent',
       label: 'Ưu tiên',
@@ -160,7 +181,42 @@ export class AdminErpReviewsPage {
       badge: (row) =>
         (row as AdminReviewRow).is_flagged_urgent ? { label: 'Gấp', tone: 'danger' as const } : null,
     },
+    { key: 'date', label: 'Ngày tạo', value: (row) => this.date((row as AdminReviewRow).submitted_at) },
   ];
+
+  readonly reviewRowId = (row: unknown): string => {
+    return (row as AdminReviewRow).review_id || '';
+  };
+
+  readonly reviewRowActions = (row: unknown): readonly AdminTableRowAction[] => {
+    const r = row as AdminReviewRow;
+    const actions: AdminTableRowAction[] = [];
+    if (this.canMutate()) {
+      if (r.status !== 'approved') {
+        actions.push({
+          label: 'Duyệt',
+          tone: 'ghost',
+          run: () => this.openActionFor('approve', r),
+        });
+      }
+      if (r.status !== 'rejected') {
+        actions.push({
+          label: 'Ẩn',
+          tone: 'danger',
+          run: () => this.openActionFor('hide', r),
+        });
+      }
+    }
+    return actions;
+  };
+
+  /**
+   * Opens the moderation action modal for a specific review row.
+   */
+  openActionFor(type: Exclude<ReviewAction, null>, row: AdminReviewRow): void {
+    this.selected.set(row);
+    this.openAction(type);
+  }
 
   readonly logColumns: readonly AdminTableColumn[] = [
     { key: 'time', label: 'Thời gian', value: (row) => this.date((row as AdminAuditRow).timestamp) },

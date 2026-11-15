@@ -59,6 +59,8 @@
       caption="Danh sách đánh giá"
       [columns]="reviewColumns"
       [rows]="rows()"
+      [rowId]="reviewRowId"
+      [rowActions]="reviewRowActions"
       [loading]="loading()"
       [error]="loadError() || ''"
       errorTitle="Không tải được đánh giá"

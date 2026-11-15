@@ -1,5 +1,9 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, input, output, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, inject, input, output, viewChild } from '@angular/core';
+import { AdminErpConfirmService } from '../../core/admin-erp-confirm.service';
 import { lockBodyScroll } from '../../core/body-scroll-lock';
+import { isTopOverlay, pushOverlay } from '../../core/overlay-stack';
+
+let modalSequence = 0;
 
 /**
  * Accessible modal shell: backdrop close, Escape, initial focus and a Tab trap.
@@ -16,13 +20,14 @@ import { lockBodyScroll } from '../../core/body-scroll-lock';
           [class]="'modal-panel--' + size()"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="erp-modal-title"
+          [attr.aria-labelledby]="titleId"
+          [attr.aria-busy]="busy()"
           tabindex="-1"
           (keydown)="onPanelKeydown($event)"
         >
           <header class="modal-head">
-            <h2 id="erp-modal-title">{{ title() }}</h2>
-            <button class="erp-icon-btn" type="button" aria-label="Đóng" (click)="close()">×</button>
+            <h2 [id]="titleId">{{ title() }}</h2>
+            <button class="erp-icon-btn" type="button" aria-label="Đóng" [disabled]="busy()" (click)="close()">×</button>
           </header>
           <div class="modal-body"><ng-content /></div>
           <footer class="modal-foot"><ng-content select="[footer]" /></footer>
@@ -43,9 +48,11 @@ import { lockBodyScroll } from '../../core/body-scroll-lock';
       }
       .modal-panel {
         display: grid;
+        /* Head and footer stay put; only the body scrolls, so Save is always reachable. */
+        grid-template-rows: auto minmax(0, 1fr) auto;
         width: min(100%, 560px);
         max-height: min(86vh, 760px);
-        overflow: auto;
+        overflow: hidden;
         border: 1px solid var(--erp-line);
         border-radius: var(--erp-radius-xl);
         background: var(--erp-surface);
@@ -76,6 +83,7 @@ import { lockBodyScroll } from '../../core/body-scroll-lock';
         color: var(--erp-ink);
       }
       .modal-body {
+        overflow-y: auto;
         padding: 20px 24px;
       }
       .modal-foot {
@@ -96,6 +104,12 @@ export class AdminErpModal {
   readonly open = input(false);
   readonly title = input.required<string>();
   readonly size = input<'sm' | 'md' | 'lg' | 'xl'>('md');
+  /** Unsaved edits inside: closing asks "Bỏ thay đổi?" first. */
+  readonly dirty = input(false);
+  /** A save is in flight: closing is blocked so a half-finished write can't be abandoned. */
+  readonly busy = input(false);
+  readonly titleId = `erp-modal-title-${++modalSequence}`;
+  private readonly confirm = inject(AdminErpConfirmService);
   readonly closed = output<void>();
   private readonly panel = viewChild<ElementRef<HTMLElement>>('panel');
   private lastFocused: HTMLElement | null = null;
@@ -107,9 +121,11 @@ export class AdminErpModal {
       }
       this.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const releaseScroll = lockBodyScroll();
+      const releaseOverlay = pushOverlay(this);
       queueMicrotask(() => this.panel()?.nativeElement.focus());
       onCleanup(() => {
         releaseScroll();
+        releaseOverlay();
         const target = this.lastFocused;
         this.lastFocused = null;
         if (target?.isConnected) {
@@ -120,9 +136,11 @@ export class AdminErpModal {
   }
 
   /**
-   * Emits close so the owner decides whether to keep the modal mounted.
+   * Asks the owner to close, honouring the busy/dirty guards; the owner decides whether to unmount.
    */
-  close(): void {
+  async close(): Promise<void> {
+    if (this.busy()) return;
+    if (this.dirty() && !(await this.confirm.discardChanges())) return;
     this.closed.emit();
   }
 
@@ -159,9 +177,10 @@ export class AdminErpModal {
     }
   }
 
+  /** Escape closes only the topmost overlay (a nested confirm closes before its parent). */
   @HostListener('document:keydown.escape')
   onEscape(): void {
-    if (this.open()) {
+    if (this.open() && isTopOverlay(this)) {
       this.close();
     }
   }

@@ -1,11 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { catchError, of } from 'rxjs';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute, Router, type ParamMap } from '@angular/router';
 import {
   AdminAuditRow,
   AdminErpApiService,
   AdminPriceHistoryRow,
   AdminProductRow,
 } from '../../core/admin-erp-api.service';
+import { PRODUCT_STATUSES } from '../../core/admin-erp-catalog';
+import { type ListQuery, choiceParam, queryMatches, textParam, watchQueryParams, writeQueryParams } from '../../core/admin-erp-deep-link';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
 import {
   adminErrorMessage,
@@ -16,27 +18,29 @@ import {
 } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
-import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
+import { AdminErpDataTable, AdminTableColumn, AdminTableRowAction } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
 import { AdminErpFilterBar } from '../../shared/ui/admin-filter-bar';
 import { AdminErpIcon } from '../../shared/ui/admin-erp-icon';
 import { AdminErpKpiCard } from '../../shared/ui/admin-kpi-card';
-import { AdminErpModal } from '../../shared/ui/admin-modal';
 import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
 import { AdminErpPagination } from '../../shared/ui/admin-pagination';
 import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
+import { PriceChangeFormComponent } from './price-change-form.component';
 
 type PricingTab = 'prices' | 'history' | 'logs';
 type PriceState = '' | 'discount' | 'invalid' | 'missing';
 
-const EMPTY_PRODUCTS = { rows: [] as AdminProductRow[], count: 0 };
-const EMPTY_HISTORY = { rows: [] as AdminPriceHistoryRow[], count: 0 };
-const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
+const PRICING_TABS: readonly string[] = ['prices', 'history', 'logs'];
+const PRICE_STATES: readonly string[] = ['discount', 'invalid', 'missing'];
+const PAGE_SIZES: readonly number[] = [10, 20, 50];
+const DEFAULT_PAGE_SIZE = 10;
 
 /**
  * Price workspace. Reads the catalog price list and history; writes only through
- * `change-price` with expectedVersion and an operator reason.
+ * `change-price` with expectedVersion and an operator reason (shared {@link PriceChangeFormComponent}).
+ * Tab, filters, page and page size live in the URL so Back, refresh and shared links keep the view.
  */
 @Component({
   selector: 'app-admin-erp-pricing-page',
@@ -48,9 +52,9 @@ const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
     AdminErpDataTable,
     AdminErpPagination,
     AdminErpDrawer,
-    AdminErpModal,
     AdminErpStatusBadge,
     AdminErpIcon,
+    PriceChangeFormComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-erp-pricing.page.html',
@@ -59,6 +63,11 @@ const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
 export class AdminErpPricingPage {
   private readonly api = inject(AdminErpApiService);
   private readonly session = inject(AdminErpSessionService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
+  /** The first URL has been applied; later identical URLs are our own echoes. */
+  private urlApplied = false;
 
   readonly tab = signal<PricingTab>('prices');
   readonly products = signal<AdminProductRow[]>([]);
@@ -71,15 +80,16 @@ export class AdminErpPricingPage {
   readonly loadError = signal<string | null>(null);
   readonly page = signal(1);
   readonly logsPage = signal(1);
-  readonly pageSize = 10;
+  readonly pageSize = signal(DEFAULT_PAGE_SIZE);
+  readonly pageSizes = PAGE_SIZES;
   readonly total = signal(0);
   readonly historyCount = signal(0);
   readonly logsCount = signal(0);
+  /** Product shown in the detail drawer. */
   readonly selected = signal<AdminProductRow | null>(null);
-  readonly actionOpen = signal(false);
-  readonly actionError = signal<string | null>(null);
-  readonly previewBase = signal(0);
-  readonly previewSale = signal(0);
+  /** Product whose price form is open (from the drawer or straight from a row action). */
+  readonly priceTarget = signal<AdminProductRow | null>(null);
+  readonly selectedLog = signal<AdminAuditRow | null>(null);
   readonly canMutate = computed(() => this.session.can('update', 'pricing'));
 
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
@@ -95,12 +105,21 @@ export class AdminErpPricingPage {
     return this.history().filter((row) => row.changed_at && new Date(row.changed_at).toDateString() === today).length;
   });
   readonly filtered = computed(() => this.products());
-  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
-  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
-  readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, 'sản phẩm'));
-  readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize, 'nhật ký'));
-  readonly previewPct = computed(() => this.discountFromPrices(this.previewBase(), this.previewSale()));
-  readonly previewInvalid = computed(() => this.previewSale() > this.previewBase());
+  readonly hasFilters = computed(() => Boolean(this.query() || this.status() || this.priceState()));
+  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
+  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize())));
+  readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize(), 'sản phẩm'));
+  readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize(), 'nhật ký'));
+  /** Position of the drawer's product in the visible page, for ‹ › / J K navigation. */
+  private readonly selectedIndex = computed(() => {
+    const id = this.selected()?.product_id;
+    return id ? this.products().findIndex((row) => row.product_id === id) : -1;
+  });
+  readonly hasPrev = computed(() => this.selectedIndex() > 0);
+  readonly hasNext = computed(() => {
+    const index = this.selectedIndex();
+    return index >= 0 && index < this.products().length - 1;
+  });
   readonly statusOptions = [
     { value: '', label: 'Tất cả trạng thái' },
     { value: 'on_sale', label: 'Đang bán' },
@@ -119,6 +138,7 @@ export class AdminErpPricingPage {
     {
       key: 'product',
       label: 'Sản phẩm',
+      truncate: '280px',
       value: (row) => {
         const product = row as AdminProductRow;
         return `${product.name}${product.sku ? ' · ' + product.sku : ''}`;
@@ -148,10 +168,10 @@ export class AdminErpPricingPage {
 
   readonly historyColumns: readonly AdminTableColumn[] = [
     { key: 'date', label: 'Thời gian', value: (row) => this.date((row as AdminPriceHistoryRow).changed_at) },
-    { key: 'product', label: 'Sản phẩm', value: (row) => this.historyProductName(row as AdminPriceHistoryRow) },
+    { key: 'product', label: 'Sản phẩm', truncate: '240px', value: (row) => this.historyProductName(row as AdminPriceHistoryRow) },
     { key: 'base', label: 'Giá gốc', value: (row) => `${this.money((row as AdminPriceHistoryRow).old_base_price)} → ${this.money((row as AdminPriceHistoryRow).new_base_price)}` },
     { key: 'sale', label: 'Giá bán', value: (row) => `${this.money((row as AdminPriceHistoryRow).old_sale_price)} → ${this.money((row as AdminPriceHistoryRow).new_sale_price)}` },
-    { key: 'reason', label: 'Lý do', value: (row) => (row as AdminPriceHistoryRow).reason || '—' },
+    { key: 'reason', label: 'Lý do', truncate: '260px', value: (row) => (row as AdminPriceHistoryRow).reason || '—' },
     { key: 'actor', label: 'Người thao tác', value: (row) => (row as AdminPriceHistoryRow).changed_by || '—' },
   ];
 
@@ -159,11 +179,18 @@ export class AdminErpPricingPage {
     { key: 'time', label: 'Thời gian', value: (row) => this.date((row as AdminAuditRow).timestamp) },
     { key: 'actor', label: 'Người thao tác', value: (row) => this.actor(row as AdminAuditRow) },
     { key: 'action', label: 'Hành động', value: (row) => (row as AdminAuditRow).action_label || (row as AdminAuditRow).action || '—' },
-    { key: 'target', label: 'Đối tượng', value: (row) => (row as AdminAuditRow).target_label || (row as AdminAuditRow).target_id || '—' },
+    { key: 'target', label: 'Đối tượng', truncate: '280px', value: (row) => (row as AdminAuditRow).target_label || (row as AdminAuditRow).target_id || '—' },
   ];
 
+  /** Stable row identity so a reload keeps keyboard focus on the same product. */
+  readonly productRowId = (row: unknown): string => (row as AdminProductRow).product_id;
+
+  /** One-click "Đổi giá" per row: opens the shared price form without the drawer. */
+  readonly priceRowActions = (row: unknown): readonly AdminTableRowAction[] =>
+    this.canMutate() ? [{ label: 'Đổi giá', run: () => this.openChangeFor(row as AdminProductRow) }] : [];
+
   constructor() {
-    this.reload();
+    watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
     useWorkspaceRefresh(() => this.reload());
   }
 
@@ -184,8 +211,8 @@ export class AdminErpPricingPage {
     const params: Record<string, string> = {
       q: this.query(),
       status: this.status(),
-      limit: String(this.pageSize),
-      offset: adminOffset(this.page(), this.pageSize),
+      limit: String(this.pageSize()),
+      offset: adminOffset(this.page(), this.pageSize()),
     };
     const state = this.priceState();
     if (state === 'discount') params['price_state'] = 'discounted';
@@ -209,10 +236,11 @@ export class AdminErpPricingPage {
   }
 
   /**
-   * Loads recent price history.
+   * Loads recent price history (the API returns the 50 latest changes).
    */
   loadHistory(): void {
     this.loading.set(true);
+    this.loadError.set(null);
     this.api.listPriceHistory({ limit: '50' }).subscribe({
       next: (payload) => {
         this.history.set(adminListRows(payload));
@@ -221,6 +249,7 @@ export class AdminErpPricingPage {
       },
       error: (error: unknown) => {
         this.loadError.set(adminErrorMessage(error, 'Không tải được lịch sử giá.'));
+        this.history.set([]);
         this.loading.set(false);
       },
     });
@@ -231,7 +260,8 @@ export class AdminErpPricingPage {
    */
   loadLogs(): void {
     this.loading.set(true);
-    this.api.listPricingAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize) }).subscribe({
+    this.loadError.set(null);
+    this.api.listPricingAuditLogs({ limit: String(this.pageSize()), offset: adminOffset(this.logsPage(), this.pageSize()) }).subscribe({
       next: (payload) => {
         this.logs.set(adminListRows(payload));
         this.logsCount.set(adminListCount(payload));
@@ -239,21 +269,27 @@ export class AdminErpPricingPage {
       },
       error: (error: unknown) => {
         this.loadError.set(adminErrorMessage(error, 'Không tải được nhật ký giá.'));
+        this.logs.set([]);
+        this.logsCount.set(0);
         this.loading.set(false);
       },
     });
   }
 
   /**
-   * Switches pricing tabs.
+   * Switches pricing tabs, starting the new tab at page 1.
    */
   setTab(tab: string): void {
     if (this.loading()) return;
-    if (!['prices', 'history', 'logs'].includes(tab)) {
+    if (!PRICING_TABS.includes(tab)) {
       return;
     }
     this.tab.set(tab as PricingTab);
-    this.closeOverlays();
+    this.page.set(1);
+    this.logsPage.set(1);
+    this.closeDetail();
+    this.selectedLog.set(null);
+    this.syncUrl();
     this.reload();
   }
 
@@ -262,17 +298,19 @@ export class AdminErpPricingPage {
    */
   applyFilters(): void {
     this.page.set(1);
+    this.syncUrl();
     this.reload();
   }
 
   /**
-   * Clears product filters.
+   * Clears every product filter.
    */
   resetFilters(): void {
     this.query.set('');
     this.status.set('');
     this.priceState.set('');
     this.page.set(1);
+    this.syncUrl();
     this.reload();
   }
 
@@ -281,6 +319,7 @@ export class AdminErpPricingPage {
    */
   goPage(page: number): void {
     this.page.set(Math.max(1, page));
+    this.syncUrl();
     this.reload();
   }
 
@@ -289,7 +328,22 @@ export class AdminErpPricingPage {
    */
   goLogsPage(page: number): void {
     this.logsPage.set(Math.max(1, page));
+    this.syncUrl();
     this.loadLogs();
+  }
+
+  /**
+   * Changes rows per page for the price list and the audit list, restarting at page 1.
+   */
+  setPageSize(size: number): void {
+    if (!PAGE_SIZES.includes(size)) {
+      return;
+    }
+    this.pageSize.set(size);
+    this.page.set(1);
+    this.logsPage.set(1);
+    this.syncUrl();
+    this.reload();
   }
 
   /**
@@ -297,70 +351,82 @@ export class AdminErpPricingPage {
    */
   openDetail(row: unknown): void {
     this.selected.set(row as AdminProductRow);
-    this.actionOpen.set(false);
   }
 
   /**
-   * Opens the change-price modal.
+   * Moves the drawer to the previous product of the visible page.
+   */
+  showPrev(): void {
+    const row = this.products()[this.selectedIndex() - 1];
+    if (row) this.selected.set(row);
+  }
+
+  /**
+   * Moves the drawer to the next product of the visible page.
+   */
+  showNext(): void {
+    const row = this.products()[this.selectedIndex() + 1];
+    if (row) this.selected.set(row);
+  }
+
+  /**
+   * Opens the change-price form for the drawer's product.
    */
   openChange(): void {
     const row = this.selected();
-    if (!this.canMutate() || !row) {
-      return;
-    }
-    this.previewBase.set(Number(row.base_price || 0));
-    this.previewSale.set(Number(row.sale_price ?? row.base_price ?? 0));
-    this.actionOpen.set(true);
-    this.actionError.set(null);
+    if (row) this.openChangeFor(row);
   }
 
   /**
-   * Closes drawer and modal.
+   * Opens the change-price form for one product (drawer button or row action).
    */
-  closeOverlays(): void {
+  openChangeFor(row: AdminProductRow): void {
+    if (!this.canMutate()) {
+      return;
+    }
+    this.priceTarget.set(row);
+  }
+
+  /**
+   * Closes only the price form; the drawer behind it stays on the same product.
+   */
+  closeChange(): void {
+    this.priceTarget.set(null);
+  }
+
+  /**
+   * Shows the saved prices in the open drawer and refreshes the list and KPIs.
+   */
+  onPriceSaved(updated: AdminProductRow): void {
+    const targetId = this.priceTarget()?.product_id;
+    this.priceTarget.set(null);
+    const current = this.selected();
+    if (current && current.product_id === targetId) {
+      this.selected.set({ ...current, ...updated });
+    }
+    this.reload();
+  }
+
+  /**
+   * Closes the drawer (and a price form opened from it).
+   */
+  closeDetail(): void {
     this.selected.set(null);
-    this.actionOpen.set(false);
-    this.actionError.set(null);
+    this.priceTarget.set(null);
   }
 
   /**
-   * Updates the live price preview.
+   * Opens one pricing audit row.
    */
-  onPreviewInput(event: Event, field: 'base' | 'sale'): void {
-    const value = Number((event.target as HTMLInputElement).value || 0);
-    if (field === 'base') this.previewBase.set(value);
-    else this.previewSale.set(value);
+  openLog(row: unknown): void {
+    this.selectedLog.set(row as AdminAuditRow);
   }
 
   /**
-   * Submits a price change with expectedVersion and reason.
+   * Closes the audit detail.
    */
-  submitPrice(event: Event): void {
-    event.preventDefault();
-    const row = this.selected();
-    if (!row || !row.version) {
-      this.actionError.set('Thiếu phiên bản sản phẩm để cập nhật giá.');
-      return;
-    }
-    const form = event.target as HTMLFormElement;
-    const newBasePrice = Number(this.field(form, 'basePrice').value);
-    const newSalePrice = Number(this.field(form, 'salePrice').value);
-    const reason = this.field(form, 'reason').value.trim();
-    if (newSalePrice > newBasePrice) {
-      this.actionError.set('Giá bán không được cao hơn giá gốc.');
-      return;
-    }
-    if (reason.length < 10) {
-      this.actionError.set('Lý do cần tối thiểu 10 ký tự.');
-      return;
-    }
-    this.api.changePrice(row.product_id, { newBasePrice, newSalePrice, reason, expectedVersion: row.version }).subscribe({
-      next: () => {
-        this.closeOverlays();
-        this.reload();
-      },
-      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
-    });
+  closeLog(): void {
+    this.selectedLog.set(null);
   }
 
   /**
@@ -378,7 +444,7 @@ export class AdminErpPricingPage {
   }
 
   /**
-   * Updates the client-side price-state filter for the current page.
+   * Updates the server-side price-state filter.
    */
   onPriceStateChange(event: Event): void {
     this.priceState.set((event.target as HTMLSelectElement).value as PriceState);
@@ -404,7 +470,9 @@ export class AdminErpPricingPage {
    * Discount percent.
    */
   discountPct(product: AdminProductRow): number {
-    return this.discountFromPrices(Number(product.base_price || 0), Number(product.sale_price ?? product.base_price ?? 0));
+    const basePrice = Number(product.base_price || 0);
+    const salePrice = Number(product.sale_price ?? product.base_price ?? 0);
+    return basePrice > salePrice && basePrice > 0 ? Math.round(((basePrice - salePrice) * 100) / basePrice) : 0;
   }
 
   /**
@@ -465,11 +533,50 @@ export class AdminErpPricingPage {
     return row.actor_label || row.actor_name || row.actor_id || 'Hệ thống';
   }
 
-  private discountFromPrices(basePrice: number, salePrice: number): number {
-    return basePrice > salePrice && basePrice > 0 ? Math.round(((basePrice - salePrice) * 100) / basePrice) : 0;
+  /**
+   * Pretty-printed audit payload.
+   */
+  json(value: unknown): string {
+    if (!value || (typeof value === 'object' && Object.keys(value as object).length === 0)) {
+      return 'Trống';
+    }
+    return JSON.stringify(value, null, 2);
   }
 
-  private field(form: HTMLFormElement, name: string): HTMLInputElement {
-    return (form.elements.namedItem(name) as HTMLInputElement | null) ?? document.createElement('input');
+  /**
+   * The URL is the source of truth for tab, filters, page and page size; our own writes echo back
+   * here and are skipped.
+   */
+  private applyDeepLink(params: ParamMap): void {
+    if (this.urlApplied && queryMatches(params, this.currentQuery())) return;
+    this.urlApplied = true;
+    this.tab.set(choiceParam(params, 'tab', PRICING_TABS, 'prices') as PricingTab);
+    this.query.set(textParam(params, 'q'));
+    this.status.set(choiceParam(params, 'status', PRODUCT_STATUSES));
+    this.priceState.set(choiceParam(params, 'price', PRICE_STATES) as PriceState);
+    this.pageSize.set(Number(choiceParam(params, 'size', PAGE_SIZES.map(String), String(DEFAULT_PAGE_SIZE))));
+    const page = Math.max(1, Number.parseInt(params.get('page') || '1', 10) || 1);
+    this.page.set(this.tab() === 'prices' ? page : 1);
+    this.logsPage.set(this.tab() === 'logs' ? page : 1);
+    this.closeDetail();
+    this.selectedLog.set(null);
+    this.reload();
+  }
+
+  /** Every filter plus tab, page (of the active tab) and page size, neutral values blank. */
+  private currentQuery(): ListQuery {
+    const page = this.tab() === 'logs' ? this.logsPage() : this.tab() === 'prices' ? this.page() : 1;
+    return {
+      tab: this.tab() === 'prices' ? '' : this.tab(),
+      q: this.query(),
+      status: this.status(),
+      price: this.priceState(),
+      page: page > 1 ? page : '',
+      size: this.pageSize() === DEFAULT_PAGE_SIZE ? '' : this.pageSize(),
+    };
+  }
+
+  private syncUrl(): void {
+    writeQueryParams(this.router, this.route, this.currentQuery());
   }
 }

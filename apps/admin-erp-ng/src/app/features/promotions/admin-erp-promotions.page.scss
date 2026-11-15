@@ -178,10 +178,16 @@
   gap: 12px;
 }
 
-.promo-form__actions {
+/* Drawer footer: destructive left, secondary + primary right. */
+.promo-drawer-actions {
   display: flex;
-  justify-content: flex-end;
+  flex: 1;
+  align-items: center;
   gap: 8px;
+}
+
+.promo-drawer-actions__spacer {
+  flex: 1;
 }
 
 .promo-banner-field {

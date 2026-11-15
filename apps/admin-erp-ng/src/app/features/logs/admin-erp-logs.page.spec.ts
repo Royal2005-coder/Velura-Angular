@@ -3,7 +3,7 @@ import { provideRouter } from '@angular/router';
 import { Observable, of, throwError } from 'rxjs';
 import { AdminAuditRow, AdminErpApiService } from '../../core/admin-erp-api.service';
 import { AdminListPayload } from '../../core/admin-erp-http';
-import { AdminErpLogsPage } from './admin-erp-logs.page';
+import { AdminErpLogsPage, auditRecordLinks } from './admin-erp-logs.page';
 
 const rows: AdminAuditRow[] = [
   {
@@ -140,5 +140,44 @@ describe('AdminErpLogsPage', () => {
     page.clearTarget();
     const cleared = calls.filter((params) => params?.['limit'] !== '1');
     expect(cleared.at(-1)?.['targetId']).toBe('');
+  });
+
+  it('moves to the next and previous row inside the drawer', async () => {
+    const fixture = await boot(listWithCounts);
+    const page = fixture.componentInstance;
+
+    page.openRow(page.rows()[0]);
+    expect(page.hasPrev()).toBe(false);
+    expect(page.hasNext()).toBe(true);
+    page.openNext();
+    expect(page.selected()?.audit_id).toBe('a2');
+    expect(page.hasNext()).toBe(false);
+    page.openPrev();
+    expect(page.selected()?.audit_id).toBe('a1');
+  });
+
+  it('sends the chosen page size and restarts from the first page', async () => {
+    const calls: Array<Record<string, string> | undefined> = [];
+    const fixture = await boot(listWithCounts, calls);
+    const page = fixture.componentInstance;
+
+    page.goPage(3);
+    page.setPageSize(50);
+
+    const listCall = calls.filter((params) => params?.['limit'] !== '1').at(-1);
+    expect(page.page()).toBe(1);
+    expect(listCall?.['limit']).toBe('50');
+    expect(listCall?.['offset']).toBe('0');
+  });
+
+  it('links audit rows to the record, order and customer in their own workspaces', () => {
+    expect(auditRecordLinks(rows[0])).toEqual([{ label: 'Mở đơn hàng', commands: ['/orders'], query: { focus: 'order-1' } }]);
+    expect(auditRecordLinks(rows[1])).toEqual([{ label: 'Mở sản phẩm', commands: ['/products'], query: { focus: 'product-1' } }]);
+    const returnRow: AdminAuditRow = { module: 'returns', target_id: 'ret-1', new_value: { order_id: 'order-9', user_id: 'user-3' } };
+    expect(auditRecordLinks(returnRow).map((link) => [link.commands[0], link.query['focus']])).toEqual([
+      ['/returns', 'ret-1'],
+      ['/orders', 'order-9'],
+      ['/members', 'user-3'],
+    ]);
   });
 });

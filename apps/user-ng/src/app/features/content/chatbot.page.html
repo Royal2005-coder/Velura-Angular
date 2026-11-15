@@ -173,7 +173,7 @@
                 }
                 @if (message.moderation_status === 'visible' && message.metadata?.attachment?.data) {
                   <div class="chatbot-message__attachment u-inline-36ca0aff10">
-                    <img [src]="message.metadata?.attachment?.data" alt="" class="u-inline-766073a166" />
+                    <img loading="lazy" decoding="async" [src]="message.metadata?.attachment?.data" alt="" class="u-inline-766073a166" />
                   </div>
                 }
                 @if (productsFor(message).length) {
@@ -208,7 +208,7 @@
                       @for (blog of blogsFor(message); track blog.blog_id) {
                         <article class="chat-blog-card u-inline-80dffa6b58">
                           <a [routerLink]="['/blog', blog.slug]" class="u-inline-d01a704622">
-                            <img [src]="blogImage(blog)" [alt]="blog.title" class="u-inline-4a466668db" />
+                            <img loading="lazy" decoding="async" [src]="blogImage(blog)" [alt]="blog.title" class="u-inline-4a466668db" />
                           </a>
                           <div class="u-inline-801160c3ea">
                             <h4 class="u-inline-e1a6bb2945">{{ blog.title }}</h4>
@@ -228,7 +228,7 @@
         <div class="chatbot-footer-sticky-wrap">
           @if (previewUrl()) {
             <div class="chatbot-image-preview u-inline-4d4f5c30e3">
-              <img class="chatbot-image-preview-img u-inline-fb4a57a3f9" [src]="previewUrl()" alt="" />
+              <img loading="lazy" decoding="async" class="chatbot-image-preview-img u-inline-fb4a57a3f9" [src]="previewUrl()" alt="" />
               <span class="chatbot-image-preview-filename">{{ previewName() }}</span>
               <button type="button" class="chatbot-image-preview-remove" (click)="clearPreview()">✕</button>
             </div>

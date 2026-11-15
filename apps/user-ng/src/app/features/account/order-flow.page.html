@@ -232,7 +232,7 @@
                 <div class="order-card__items-preview">
                   @for (line of item.items.slice(0, 2); track line.variant_id) {
                     <div class="order-card__item-row">
-                      <img [src]="image(line.product_image)" [alt]="line.product_name" class="order-card__item-thumb" />
+                      <img loading="lazy" decoding="async" [src]="image(line.product_image)" [alt]="line.product_name" class="order-card__item-thumb" />
                       <div class="order-card__item-info">
                         <span class="order-card__item-name">{{ line.product_name }}</span>
                         <span class="order-card__item-meta">{{ displaySize(line.size) }} / {{ line.color }} · x{{ line.quantity }}</span>
@@ -370,7 +370,7 @@
                   <div class="order-card__items-preview">
                     @for (line of item.items.slice(0, 2); track line.variant_id) {
                       <div class="order-card__item-row">
-                        <img [src]="image(line.product_image)" [alt]="line.product_name" class="order-card__item-thumb" />
+                        <img loading="lazy" decoding="async" [src]="image(line.product_image)" [alt]="line.product_name" class="order-card__item-thumb" />
                         <div class="order-card__item-info">
                           <span class="order-card__item-name">{{ line.product_name }}</span>
                           <span class="order-card__item-meta">{{ displaySize(line.size) }} / {{ line.color }} · x{{ line.quantity }}</span>
@@ -512,7 +512,7 @@
               }
               @for (line of item.items; track line.variant_id) {
                 <article class="line">
-                  <img [src]="image(line.product_image)" [alt]="line.product_name" />
+                  <img loading="lazy" decoding="async" [src]="image(line.product_image)" [alt]="line.product_name" />
                   <div>
                     <h3>
                       {{ line.product_name }}
@@ -730,7 +730,7 @@
                   [class.is-selected]="!!selections()[line.variant_id]"
                   [class.is-locked]="line.availableQuantity < 1"
                 >
-                  <img [src]="image(line.product_image)" [alt]="line.product_name" />
+                  <img loading="lazy" decoding="async" [src]="image(line.product_image)" [alt]="line.product_name" />
                   <div>
                     <div class="return-line-card__head">
                       <label class="check u-inline-ff227d0632">
@@ -955,7 +955,7 @@
                     @if (file.file.type.startsWith('video/')) {
                       <video [src]="file.url" controls [attr.aria-label]="file.name"></video>
                     } @else {
-                      <img [src]="file.url" [alt]="file.name" />
+                      <img loading="lazy" decoding="async" [src]="file.url" [alt]="file.name" />
                     }<button
                       class="secondary"
                       (click)="removeImage($index)"

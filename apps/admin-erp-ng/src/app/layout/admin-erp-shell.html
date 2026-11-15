@@ -10,7 +10,7 @@
   >
     <div class="sidebar__brand">
       <a class="brand" routerLink="/dashboard" aria-label="Velura ERP — Tổng quan">
-        <img src="/admin-assets/images/logo.png" alt="" />
+        <img loading="lazy" decoding="async" src="/admin-assets/images/logo.png" alt="" />
         <span class="brand__copy">
           <strong>Velura</strong>
           <small>ERP</small>
@@ -107,7 +107,7 @@
         @if (session.session()?.passwordLogin) {
           <a class="topbar__avatar" routerLink="/change-password" [attr.aria-label]="'Tài khoản ' + session.displayName()">
             @if (session.avatarUrl()) {
-              <img [src]="session.avatarUrl()" alt="" />
+              <img loading="lazy" decoding="async" [src]="session.avatarUrl()" alt="" />
             } @else {
               {{ session.initials() }}
             }
@@ -115,7 +115,7 @@
         } @else {
           <span class="topbar__avatar" [attr.aria-label]="'Tài khoản ' + session.displayName()">
             @if (session.avatarUrl()) {
-              <img [src]="session.avatarUrl()" alt="" />
+              <img loading="lazy" decoding="async" [src]="session.avatarUrl()" alt="" />
             } @else {
               {{ session.initials() }}
             }

@@ -45,7 +45,7 @@
     @if (preview()) {
       <div class="vs-preview-wrapper">
         <figure class="preview">
-          <img [src]="preview()" alt="Ảnh trang phục tìm kiếm" />
+          <img loading="lazy" decoding="async" [src]="preview()" alt="Ảnh trang phục tìm kiếm" />
           <div class="lens-frame" aria-hidden="true">
             <span class="lens-corner lens-corner--tl"></span>
             <span class="lens-corner lens-corner--tr"></span>

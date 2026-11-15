@@ -52,8 +52,7 @@
       <!-- Left Editorial Column -->
       <div class="hero__content">
         <!-- Delicate branch artwork floating behind/next to title -->
-        <img
-          class="hero__decor-branch"
+        <img loading="lazy" decoding="async" class="hero__decor-branch"
           src="/assets/images/models/nhanhhoa1.png"
           alt=""
           aria-hidden="true"
@@ -116,8 +115,7 @@
               [attr.aria-label]="look.title + (dist === 0 ? ' (Đang ở trung tâm, nhấn để xem sản phẩm)' : ' (Nhấn để đưa về trung tâm)')"
             >
               <div class="runway-model__shadow" aria-hidden="true"></div>
-              <img
-                class="runway-model__image"
+              <img loading="lazy" decoding="async" class="runway-model__image"
                 [src]="look.image"
                 [alt]="look.title"
                 draggable="false"
@@ -169,14 +167,12 @@
       </div>
       <div class="categories-section__wrap">
         <!-- Botanical accents matching demo concept -->
-        <img
-          src="/assets/images/nhanhhoa1.png"
+        <img loading="lazy" decoding="async" src="/assets/images/nhanhhoa1.png"
           alt=""
           aria-hidden="true"
           class="categories-accent categories-accent--left"
         />
-        <img
-          src="/assets/images/nhanhhoa1.png"
+        <img loading="lazy" decoding="async" src="/assets/images/nhanhhoa1.png"
           alt=""
           aria-hidden="true"
           class="categories-accent categories-accent--right"
@@ -198,7 +194,7 @@
             @for (category of categories(); track category.category_id) {
               <a class="category-card" routerLink="/products" [queryParams]="{ category: category.slug }">
                 <div class="category-card__icon">
-                  <img [src]="categoryIcon(category.slug)" [alt]="category.name" class="category-card__icon-img" />
+                  <img loading="lazy" decoding="async" [src]="categoryIcon(category.slug)" [alt]="category.name" class="category-card__icon-img" />
                 </div>
                 <span class="category-card__name">{{ category.name }}</span>
                 <span class="category-card__count">{{ category.product_count || 0 }} sản phẩm</span>
@@ -439,7 +435,7 @@
       <!-- Left Arts Column -->
       <div class="quiz-popup__left">
         <div class="quiz-popup__bg-circle"></div>
-        <img src="/assets/images/quiz-illustration.png" alt="Velura AI Style Quiz" class="quiz-popup__illustration" />
+        <img loading="lazy" decoding="async" src="/assets/images/quiz-illustration.png" alt="Velura AI Style Quiz" class="quiz-popup__illustration" />
       </div>
 
       <!-- Right Information Column -->

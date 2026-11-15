@@ -250,7 +250,7 @@
 
         <label class="desk-check">
           <input type="checkbox" [checked]="confirmed()" (change)="setConfirmed($event)" />
-          Tôi đã đọc lại nội dung và xác nhận quyết định này (bắt buộc).
+          Tôi đã đọc lại nội dung và xác nhận quyết định này <span class="erp-required" aria-hidden="true">*</span>
         </label>
 
         <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="!canMutate() || !reviewReady()" (click)="submitReview()">

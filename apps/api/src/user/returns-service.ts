@@ -7,6 +7,7 @@ import { returnWindowOpen } from "./return-window.js";
 import { asJsonObject, asNumber, asString, type HttpRequest, type JsonObject, type UserProfile } from "../types.js";
 import { selectOne } from "../supabase.js";
 import type { UserReturnsRepository } from "./returns-repository.js";
+import { sendReturnIntakeEmail } from "../returns/return-email.js";
 
 /** A customer may withdraw a request only while no parcel has been handed to the carrier. */
 const CUSTOMER_CANCELLABLE_STATUSES: readonly string[] = ["REQUESTED", "CONTACTING", "WAITING_RETURN"];
@@ -450,6 +451,10 @@ async function createForOrder(repository: UserReturnsRepository, order: JsonObje
     evidence_images: evidence.images, evidence_videos: evidence.videos,
     ...bank
   }, items);
+  // Gửi email tiếp nhận và tạo chuông thông báo (non-blocking)
+  void sendReturnIntakeEmail(asString(created.return_id)).catch((err) => {
+    console.warn(`[RETURN_INTAKE] Error triggering intake notification: ${err}`);
+  });
   return customerReturnView(repository, created, order, await hydratedReturnItems(repository, created.return_id));
 }
 

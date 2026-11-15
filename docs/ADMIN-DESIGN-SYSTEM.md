@@ -39,7 +39,16 @@ A warm, quiet operations console: cocoa-brown navigation rail, blush-white canva
 Sidebar 250px (76px icon rail when collapsed, persisted in `localStorage['velura-erp-sidebar-collapsed']`), header 60px, content max-width 1480px with 24–26px gutters. Page = header (eyebrow, title, one-line purpose, actions right) → KPI row → one workspace card (tabs + filter band + table + pagination). Below 920px the rail becomes an off-canvas drawer; all grids collapse; no horizontal page scroll (tables scroll inside their card).
 
 ## 6. Motion & Interaction
-transform/opacity only, 100–140 ms ease; hover lift −1px on cards; `prefers-reduced-motion` removes transitions. Keyboard: visible focus everywhere, ⌘K search, tablists with arrow keys.
+transform/opacity only, 100–140 ms ease; hover lift −1px on cards; `prefers-reduced-motion` removes transitions. Keyboard: visible focus everywhere, ⌘K search, `/` focuses the page's first filter, tablists with arrow keys, ↑/↓ between table rows, Enter opens a row, J/K previous/next record in a drawer, Escape closes only the top-most overlay.
+
+**Operator actions** (shared in `shared/ui` + `core`, never re-implemented per page):
+- One primary button per screen and per modal footer. Modal/drawer footers stay visible while the body scrolls.
+- Filters: selects, checkboxes and dates apply on change; text search applies after a 450 ms pause or Enter. Every filter, tab, page and the open record (`focus`) live in the URL (`writeQueryParams`), so Back, refresh and shared links reopen the same view.
+- Consequential writes ask through `AdminErpConfirmService`: the button names the verb ("Khoá tài khoản", never "Xác nhận"); destructive ones use danger tone; audit-relevant ones require a written reason.
+- Every write disables its button while running (no double submit) and reports through `AdminErpToastService`; the record drawer stays open with refreshed data unless the workflow ends.
+- Forms with unsaved edits pass `[dirty]` to their modal/drawer; closing asks "Bỏ thay đổi?". Cancelling a sub-modal never closes the parent drawer.
+- Load errors render inside the table with a retry, never as a banner on top of "no results". A filtered-to-empty table offers "Xoá bộ lọc".
+- Frequent next steps are row quick-actions (≤2 per row); bulk actions only where the API has a bulk endpoint.
 
 ## 7. Anti-Patterns (Banned)
 No fabricated metrics or demo records in production screens — a panel without a data source shows an empty state. No emojis. No pure black. No neon or gradient text. No more than one accent. No serif UI text. No raw hex in components (use tokens). No "Super Admin" style placeholder copy where the real operator name is known.

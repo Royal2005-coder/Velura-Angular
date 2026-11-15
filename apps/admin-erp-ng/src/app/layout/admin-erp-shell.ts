@@ -15,8 +15,10 @@ import {
   adminErpNavMatchesSearch,
 } from '../core/admin-erp-navigation';
 import { useBodyClass } from '../core/body-class';
+import { AdminErpConfirmHost } from '../shared/ui/admin-confirm';
 import { AdminErpIcon } from '../shared/ui/admin-erp-icon';
 import { AdminErpModal } from '../shared/ui/admin-modal';
+import { AdminErpToastHost } from '../shared/ui/admin-toast';
 
 type ShellNavGroup = Omit<AdminErpNavGroup, 'items'> & {
   items: AdminErpNavItem[];
@@ -46,7 +48,7 @@ function writeSidebarCollapsed(collapsed: boolean): void {
  */
 @Component({
   selector: 'app-admin-erp-shell',
-  imports: [RouterLink, RouterOutlet, AdminErpIcon, AdminErpModal],
+  imports: [RouterLink, RouterOutlet, AdminErpIcon, AdminErpModal, AdminErpToastHost, AdminErpConfirmHost],
   templateUrl: './admin-erp-shell.html',
   styleUrl: './admin-erp-shell.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -174,6 +176,7 @@ export class AdminErpShell {
       .subscribe(() => this.mobileNavOpen.set(false));
   }
 
+  /** ⌘K / Ctrl+K opens module search; "/" jumps to the current page's first filter field (list convention). */
   @HostListener('document:keydown', ['$event'])
   onGlobalKeydown(event: KeyboardEvent): void {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
@@ -182,6 +185,17 @@ export class AdminErpShell {
         this.closeSearch();
       } else {
         this.openSearch();
+      }
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    const typing = !!target?.closest('input, textarea, select, [contenteditable="true"]');
+    if (event.key === '/' && !typing && !event.isComposing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const field = document.querySelector<HTMLInputElement>('app-erp-filter-bar input:not([type="checkbox"]):not([type="radio"])');
+      if (field) {
+        event.preventDefault();
+        field.focus();
+        field.select();
       }
     }
   }

@@ -304,7 +304,7 @@
   line-height: 1.4;
   min-width: unset;
   border: 1px solid var(--erp-line);
-  background: #fff;
+  background: var(--erp-surface);
   border-radius: var(--erp-radius-sm);
   transition: transform 0.15s ease, background 0.15s ease;
   &:hover {

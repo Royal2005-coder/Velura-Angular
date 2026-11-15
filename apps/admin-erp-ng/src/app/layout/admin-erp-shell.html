@@ -13,12 +13,14 @@
         <img src="/admin-assets/images/logo.png" alt="" />
         <span class="brand__copy">
           <strong>Velura</strong>
-          <small>ERP Workspace</small>
+          <small>ERP</small>
         </span>
       </a>
-      <button class="rail-toggle" type="button" [attr.aria-label]="menuLabel()" (click)="toggleSidebar()">
-        <span></span><span></span><span></span>
-      </button>
+      @if (isMobile()) {
+        <button class="sidebar__close" type="button" aria-label="Đóng menu" (click)="closeMobileNav()">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+        </button>
+      }
     </div>
 
     <nav class="sidebar__nav">
@@ -71,16 +73,27 @@
 
   <div class="main">
     <header class="topbar">
-      <button class="topbar__menu" type="button" [attr.aria-label]="menuLabel()" (click)="toggleSidebar()">
-        <app-erp-icon name="settings" [size]="'18'" />
+      <button
+        class="topbar__menu"
+        type="button"
+        aria-controls="erp-sidebar"
+        [attr.aria-label]="menuLabel()"
+        [attr.aria-expanded]="isMobile() ? mobileNavOpen() : !sidebarCollapsed()"
+        (click)="toggleSidebar()"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2.5" />
+          <path d="M9 4v16" />
+          <path [attr.d]="sidebarCollapsed() && !isMobile() ? 'M13 10l2 2-2 2' : 'M16 10l-2 2 2 2'" />
+        </svg>
       </button>
-      <div class="topbar__title">
+      <nav class="topbar__title" aria-label="Breadcrumb">
         @if (workspaceLabel()) {
           <span class="topbar__workspace">{{ workspaceLabel() }}</span>
           <span class="topbar__sep" aria-hidden="true">/</span>
         }
         <strong class="topbar__page">{{ pageTitle() }}</strong>
-      </div>
+      </nav>
       <div class="topbar__actions">
         <button class="topbar__search" type="button" (click)="openSearch()" aria-label="Tìm kiếm nhanh phân hệ">
           <app-erp-icon name="search" [size]="'14'" />

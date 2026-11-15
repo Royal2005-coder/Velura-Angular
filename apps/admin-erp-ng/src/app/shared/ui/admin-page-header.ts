@@ -38,23 +38,23 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       }
       .page-head__eyebrow {
         color: var(--erp-accent);
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.1em;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
       }
       h1 {
-        font-family: var(--erp-font);
-        font-size: clamp(22px, 2.2vw, 28px);
-        font-weight: 700;
-        letter-spacing: -0.025em;
-        line-height: 1.2;
+        font-family: var(--erp-display);
+        font-size: clamp(22px, 2vw, 26px);
+        font-weight: 600;
+        letter-spacing: -0.015em;
+        line-height: 1.15;
         color: var(--erp-ink);
       }
       p {
         max-width: 76ch;
         color: var(--erp-muted);
-        font-size: 13px;
+        font-size: 14px;
         line-height: 1.5;
       }
       .page-head__actions {

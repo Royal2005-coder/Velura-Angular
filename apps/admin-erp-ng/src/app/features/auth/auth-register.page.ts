@@ -34,20 +34,21 @@ import { AuthFrame } from './auth-frame';
         margin-bottom: 22px;
       }
       .register-head span {
-        color: var(--erp-accent-strong);
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.14em;
+        color: var(--erp-accent);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
       }
       .register-head h2 {
         font-family: var(--erp-display);
-        font-size: 26px;
+        font-size: 24px;
+        font-weight: 600;
         color: var(--erp-ink);
       }
       .register-head p {
         color: var(--erp-muted);
-        font-size: 12.5px;
+        font-size: 14px;
         line-height: 1.65;
       }
       .register-actions {

@@ -1,56 +1,82 @@
-/* Velura ERP — Feminine Luxury Design System Tokens + Shared Primitives
-   Aligned strictly with docs/ADMIN-DESIGN-SYSTEM.md (Burgundy 700 / Blush Pink / Warm Canvas).
-   App-level tokens only; feature styling stays in component styles. */
+/* Velura ERP — design tokens + shared primitives.
+   Warm canvas, white surfaces, maroon accent, cocoa-brown sidebar.
+   Tokens are defined only here; every component consumes var(--erp-*). */
 
 :root {
-  /* Brand / Luxury Velvet Rose & Modern Bright Palette (Shadcn Dashboard & Stageshow Standard) */
-  --erp-bg: #F8FAFC;                  /* Slate 50: Modern crisp, bright, luminous canvas */
-  --erp-surface: #FFFFFF;             /* Pure Surface */
-  --erp-surface-muted: #F1F5F9;       /* Slate 100: Soft container */
-  --erp-surface-selected: #FFE4E6;    /* Rose 100: Selected container */
-  --erp-line: #E2E8F0;                /* Slate 200: Crisp 1px structural border */
-  --erp-line-strong: #CBD5E1;         /* Slate 300: Active / hover border */
-  --erp-line-subtle: #F1F5F9;         /* Slate 100: Subtle inner divider */
-  --erp-ink: #0F172A;                 /* Slate 900: Primary authoritative ink */
-  --erp-text: #0F172A;                /* Slate 900: Primary text */
-  --erp-muted: #64748B;               /* Slate 500: Secondary text */
-  --erp-soft: #94A3B8;                /* Slate 400: Muted caption */
-  --erp-accent: #BE185D;              /* Luxury Rose (Pink 700): Sophisticated feminine brand accent */
-  --erp-accent-strong: #9D174D;       /* Deep Rose (Hover/Pressed) */
-  --erp-accent-soft: #FFF1F3;         /* Rose 50: Soft blush tint */
-  --erp-accent-border: #FECDD3;       /* Rose 200: Soft rose border */
-  --erp-sidebar: #FFFFFF;             /* Modern Crisp Light Sidebar (Shadcn Dashboard Inspired) */
-  --erp-sidebar-raised: #F8FAFC;      /* Raised sidebar container */
-  --erp-sidebar-text: #334155;        /* Slate 700: High-contrast legible nav text */
-  --erp-sidebar-muted: #94A3B8;       /* Slate 400: Group headers & badges */
-  --erp-sidebar-active: #BE185D;      /* Luxury Rose active item text */
-  --erp-sidebar-active-bg: #FFE4E6;   /* Rose 100 active pill background */
-  --erp-sidebar-border: #E2E8F0;      /* Slate 200: Crisp 1px right border */
+  /* Surfaces & lines */
+  --erp-bg: #FAF5F7;
+  --erp-surface: #FFFFFF;
+  --erp-surface-muted: #FDF2F4;
+  --erp-surface-selected: #FBE7EC;
+  --erp-line: #F0DDE2;
+  --erp-line-strong: #E6C4CE;
+  --erp-line-subtle: #F7ECEF;
+  --erp-input-border: #A97886;
 
-  /* Semantic Status Tokens (Clean, legible modern pastels) */
-  --erp-success: #059669;             /* Emerald 600 */
-  --erp-success-soft: #ECFDF5;        /* Emerald 50 surface */
-  --erp-warning: #D97706;             /* Amber 600 */
-  --erp-warning-soft: #FFFBEB;        /* Amber 50 surface */
-  --erp-danger: #E11D48;              /* Rose 600 */
-  --erp-danger-soft: #FFF1F2;         /* Rose 50 surface */
-  --erp-info: #2563EB;                /* Blue 600 */
-  --erp-info-soft: #EFF6FF;           /* Blue 50 surface */
-  --erp-processing: #BE185D;          /* Luxury Rose */
-  --erp-processing-soft: #FFF1F3;     /* Rose 50 surface */
+  /* Text */
+  --erp-ink: #2A1A1D;
+  --erp-text: #351D25;
+  --erp-muted: #7A5A62;
+  --erp-soft: #806870;
 
-  /* Radii & Elevations (Clean, restrained, diffused shadows per stageshow/craft) */
-  --erp-radius-sm: 6px;               /* badge, tag, icon */
-  --erp-radius-md: 8px;               /* button, input, dropdown */
-  --erp-radius-lg: 12px;              /* card, table panel */
-  --erp-radius-xl: 16px;              /* modal, drawer */
-  --erp-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --erp-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.05);
-  --erp-shadow-modal: 0 20px 40px rgba(15, 23, 42, 0.12);
+  /* Brand */
+  --erp-accent: #7A283C;
+  --erp-accent-strong: #631F30;
+  --erp-accent-soft: #FDF2F4;
+  --erp-accent-border: #F2C2CF;
+  --erp-rose: #C94F70;
+  --erp-focus-ring: 0 0 0 3px rgba(201, 79, 112, .28);
+
+  /* Sidebar (cocoa brown) */
+  --erp-sidebar: #3A2622;
+  --erp-sidebar-raised: #46302B;
+  --erp-sidebar-border: #4A332E;
+  --erp-sidebar-text: #EBDCD8;
+  --erp-sidebar-muted: #C9B3AD;
+  --erp-sidebar-active: #FFFFFF;
+  --erp-sidebar-active-bg: rgba(201, 79, 112, .22);
+  --erp-sidebar-hover-bg: rgba(255, 255, 255, .06);
+  --erp-sidebar-accent: #F2C2CF;
+
+  /* Status (text on its soft background) */
+  --erp-success: #42624D;
+  --erp-success-soft: #F1F5E8;
+  --erp-warning: #8A5523;
+  --erp-warning-soft: #FBF0E4;
+  --erp-danger: #B4233E;
+  --erp-danger-soft: #FCE9ED;
+  --erp-info: #6F4A62;
+  --erp-info-soft: #F5EEF3;
+  --erp-processing: #7A283C;
+  --erp-processing-soft: #FDF2F4;
+
+  /* Aliases used by feature styles */
+  --erp-text-muted: var(--erp-muted);
+  --erp-border: var(--erp-line);
+  --erp-accent-text: var(--erp-accent);
+  --erp-danger-text: var(--erp-danger);
+  --erp-danger-line: #F2B8C4;
+  --erp-warning-text: var(--erp-warning);
+  --erp-warning-line: #EBCFAE;
+
+  /* Shape, depth, type */
+  --erp-radius-sm: 6px;
+  --erp-radius-md: 10px;
+  --erp-radius-lg: 14px;
+  --erp-radius-xl: 20px;
+  --erp-shadow-sm: 0 1px 2px rgba(74, 31, 42, .05);
+  --erp-shadow-md: 0 6px 18px rgba(74, 31, 42, .08);
+  --erp-shadow-modal: 0 24px 48px rgba(58, 20, 32, .18);
   --erp-sidebar-w: 250px;
   --erp-topbar-h: 60px;
-  --erp-font: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --erp-display: 'Be Vietnam Pro', sans-serif;
+  /* Be Vietnam Pro: grotesk drawn for Vietnamese diacritics (legible at 13–14px, tabular figures). */
+  --erp-font: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --erp-font-ui: var(--erp-font);
+  /* Numbers that operators compare (KPIs, codes) read best in a monospace. */
+  --erp-font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --erp-display: var(--erp-font);
+  /* Wordmark only (logo). Serif is never used for dashboard UI text. */
+  --erp-brand: "Cormorant Garamond", Georgia, serif;
 }
 
 *,
@@ -72,6 +98,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -96,8 +123,13 @@ p {
 }
 
 :focus-visible {
-  outline: 2px solid var(--erp-accent);
+  outline: 2px solid transparent;
   outline-offset: 2px;
+  box-shadow: var(--erp-focus-ring);
+}
+
+table {
+  font-variant-numeric: tabular-nums;
 }
 
 ::selection {
@@ -141,6 +173,8 @@ p {
   background: var(--erp-surface);
   color: var(--erp-accent);
   font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
   font-weight: 600;
   cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 100ms ease;
@@ -161,21 +195,20 @@ p {
   border-color: var(--erp-accent);
   background: var(--erp-accent);
   color: #fff;
-  box-shadow: 0 1px 2px rgba(190, 24, 93, 0.2);
+  box-shadow: var(--erp-shadow-sm);
 }
 
 .erp-btn--primary:hover:not(:disabled) {
   border-color: var(--erp-accent-strong);
   background: var(--erp-accent-strong);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(157, 23, 77, 0.25);
-  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(122, 40, 60, .22);
 }
 
 .erp-btn--primary:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(190, 24, 93, 0.2);
+  box-shadow: var(--erp-shadow-sm);
 }
+
 .erp-btn--ghost {
   border-color: transparent;
   background: transparent;
@@ -194,7 +227,8 @@ p {
 }
 
 .erp-btn--danger:hover:not(:disabled) {
-  background: #961b31;
+  border-color: var(--erp-accent-strong);
+  background: var(--erp-accent-strong);
 }
 
 .erp-btn--sm {
@@ -242,12 +276,22 @@ p {
   width: 100%;
   min-height: 40px;
   padding: 8px 12px;
-  border: 1px solid var(--erp-line);
+  border: 1px solid var(--erp-input-border);
   border-radius: var(--erp-radius-md);
   background: var(--erp-surface);
   color: var(--erp-text);
-  font-size: 13px;
+  font-size: 14px;
   transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.erp-input,
+.erp-select {
+  height: 40px;
+}
+
+.erp-input::placeholder,
+.erp-textarea::placeholder {
+  color: var(--erp-soft);
 }
 
 .erp-input:focus,
@@ -255,7 +299,7 @@ p {
 .erp-textarea:focus {
   border-color: var(--erp-accent);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(190, 24, 93, 0.12);
+  box-shadow: var(--erp-focus-ring);
 }
 
 .erp-hint {
@@ -287,7 +331,7 @@ p {
 
 .erp-skeleton {
   border-radius: var(--erp-radius-sm);
-  background: linear-gradient(90deg, #efe9e3 25%, #f8f5f2 37%, #efe9e3 63%);
+  background: linear-gradient(90deg, var(--erp-surface-muted) 25%, var(--erp-surface) 37%, var(--erp-surface-muted) 63%);
   background-size: 400% 100%;
   animation: erp-shimmer 1.4s ease infinite;
 }

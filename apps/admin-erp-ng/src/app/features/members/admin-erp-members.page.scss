@@ -46,9 +46,9 @@
   gap: 8px;
   margin: 12px 16px;
   padding: 10px 12px;
-  border: 1px solid var(--erp-danger-line, #e5b4ab);
+  border: 1px solid var(--erp-danger-line);
   border-radius: var(--erp-radius-sm);
-  background: var(--erp-danger-soft, #fdf1ee);
+  background: var(--erp-danger-soft);
   font-size: 0.85rem;
 }
 
@@ -58,8 +58,8 @@
 }
 
 .member-banner--warn {
-  border-color: var(--erp-warning-line, #e5d3a7);
-  background: var(--erp-warning-soft, #fdf8ea);
+  border-color: var(--erp-warning-line);
+  background: var(--erp-warning-soft);
 }
 
 .member-notice {
@@ -218,7 +218,7 @@
 }
 
 .member-trail__amount--negative {
-  color: var(--erp-danger-text, #b3261e);
+  color: var(--erp-danger-text);
 }
 
 .member-trail__balance,
@@ -240,7 +240,7 @@
 
 .member-trail__zero {
   margin: 6px 0 0;
-  color: var(--erp-warning-text, #7a5b00);
+  color: var(--erp-warning-text);
   font-size: 0.78rem;
 }
 
@@ -253,7 +253,7 @@
 
 .member-link {
   font-size: 0.8rem;
-  color: var(--erp-accent-text, #1d5d8f);
+  color: var(--erp-accent-text);
   text-decoration: underline;
 }
 
@@ -284,7 +284,7 @@
   border: 1px solid var(--erp-line);
   border-radius: var(--erp-radius-md);
   background: var(--erp-surface);
-  box-shadow: var(--erp-shadow-sm, 0 1px 3px rgba(0,0,0,.04));
+  box-shadow: var(--erp-shadow-sm);
 }
 
 .spending-policy-head h3 {

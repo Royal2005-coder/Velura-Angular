@@ -33,8 +33,8 @@ export type AdminKpiTone = 'neutral' | 'accent' | 'success' | 'warning' | 'dange
       .kpi {
         position: relative;
         display: grid;
-        gap: 8px;
-        padding: 18px 20px;
+        gap: 6px;
+        padding: 14px 16px;
         background: var(--erp-surface);
         border: 1px solid var(--erp-line);
         border-radius: var(--erp-radius-lg);
@@ -59,8 +59,8 @@ export type AdminKpiTone = 'neutral' | 'accent' | 'success' | 'warning' | 'dange
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 32px;
-        height: 32px;
+        width: 28px;
+        height: 28px;
         border-radius: 8px;
         background: var(--erp-surface-muted);
         color: var(--erp-muted);
@@ -70,40 +70,41 @@ export type AdminKpiTone = 'neutral' | 'accent' | 'success' | 'warning' | 'dange
         transform: scale(1.05);
       }
       .kpi--accent .kpi__icon {
-        background: #FFF1F3;
-        color: #BE185D;
+        background: var(--erp-accent-soft);
+        color: var(--erp-accent);
       }
       .kpi--success .kpi__icon {
-        background: #ECFDF5;
-        color: #059669;
+        background: var(--erp-success-soft);
+        color: var(--erp-success);
       }
       .kpi--warning .kpi__icon {
-        background: #FFFBEB;
-        color: #D97706;
+        background: var(--erp-warning-soft);
+        color: var(--erp-warning);
       }
       .kpi--danger .kpi__icon {
-        background: #FFF1F2;
-        color: #E11D48;
+        background: var(--erp-danger-soft);
+        color: var(--erp-danger);
       }
       .kpi--info .kpi__icon {
-        background: #EFF6FF;
-        color: #2563EB;
+        background: var(--erp-info-soft);
+        color: var(--erp-info);
       }
       .kpi--neutral .kpi__icon {
-        background: #F8FAFC;
-        color: #64748B;
+        background: var(--erp-surface-muted);
+        color: var(--erp-muted);
       }
       strong {
-        font-family: var(--erp-font);
-        font-size: 26px;
-        font-weight: 700;
-        line-height: 1.1;
+        font-family: var(--erp-font-mono);
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.15;
         font-variant-numeric: tabular-nums;
         color: var(--erp-ink);
       }
       small {
         color: var(--erp-muted);
-        font-size: 11px;
+        font-size: 12px;
       }
       .kpi__skeleton {
         width: 70%;

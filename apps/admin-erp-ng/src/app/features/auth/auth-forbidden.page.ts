@@ -34,19 +34,20 @@ import { AdminErpSessionService } from '../../core/admin-erp-session.service';
         padding: 32px;
       }
       .forbidden__code {
-        color: var(--erp-accent-strong);
-        font-size: 11px;
-        font-weight: 700;
+        color: var(--erp-accent);
+        font-size: 12px;
+        font-weight: 600;
         letter-spacing: 0.16em;
       }
       h1 {
         font-family: var(--erp-display);
-        font-size: 28px;
+        font-size: 26px;
+        font-weight: 600;
         color: var(--erp-ink);
       }
       p {
         color: var(--erp-muted);
-        font-size: 13px;
+        font-size: 14px;
         line-height: 1.6;
       }
       .erp-btn {

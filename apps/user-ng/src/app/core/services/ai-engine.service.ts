@@ -82,6 +82,13 @@ export class AiEngineService {
       responseType: 'blob',
     });
   }
+  /** Retrieves the exact garment photo of the selected colour/size SKU for the pre-consent studio preview. */
+  garmentPreview(productId: string, variantId: string): Observable<Blob> {
+    return this.http.get(`${this.base}/api/user/ai/garment`, {
+      params: { product_id: productId, variant_id: variantId },
+      responseType: 'blob',
+    });
+  }
   /** Recovers an owner-private submission after the create response was lost. */
   recover(key: string): Observable<{ job: AiJob }> {
     return this.http.get<{ job: AiJob }>(

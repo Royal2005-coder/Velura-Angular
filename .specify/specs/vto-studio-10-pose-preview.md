@@ -43,3 +43,18 @@ task + capability, Dockerfile lines, requirements and bootstrap entries only use
 - Workbench spec: studio shows 10 thumbnails, switching changes preview; no 360 UI strings.
 - `npx tsc --noEmit` (api), `ng build user-ng`, API + workbench tests green; grep finds no `3d`/`360`/`turntable`
   in `apps/api/src/ai`, workbench, ai-worker (outside git history).
+
+## EGM review decisions (binding)
+- Orchestration is API-side: the pump loops `worker.run` once per pose in `jobs/<id>/poses/<poseId>/` (own `job.json`
+  with `request_id = job.id`, `person.image`, `garment.image`); `AiWorker` interface keeps only `run`/`ready`.
+- Pose ids are frozen at create in `job.worker.pose_ids` (licensed + file exists, same filter as `capabilities()`);
+  the first one is the standing model and runs first; its failure fails the job without running the rest.
+- Per-pose 120 s timer. A 429 retries that pose (4 tries, 2.5 s backoff); once any pose is published the job is never
+  requeued. A non-standing pose that still fails is skipped. Abort/cancel is rethrown.
+- Each finished pose is published with `repo.transition(id, ["running"], { poses })`; null result (cancel) stops the loop.
+- `poses` is visible only while `running`/`success`; pose route requires the same. `expires_at` is reset to now+TTL
+  when a studio job finishes. Restart recovery keeps current behaviour (running -> failed/AI_JOB_INTERRUPTED).
+- `poses` item is `{ id, label }` (no `pose` field: production `AI_STUDIO_ASSETS` env has none).
+- Fingerprint ignores legacy `studio_asset_id`/`render3d`.
+- Worker weights manifest / requirements / k8s provisioning are NOT edited (receipt hash would disable 2D); only code,
+  files, Dockerfile COPY lines and tests for TripoSR are removed.

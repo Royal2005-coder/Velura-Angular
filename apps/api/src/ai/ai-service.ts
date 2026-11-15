@@ -186,6 +186,23 @@ export class AiService {
       );
     return { bytes, mime };
   }
+  /** The garment the studio job will really try on (this exact colour/size SKU), shown to the customer before consent. */
+  async garmentPreview(productId: string, variantId: string): Promise<{ bytes: Buffer; mime: string }> {
+    if (!UUID.test(productId) || !UUID.test(variantId))
+      throw new HttpError(400, "INVALID_PRODUCT", "Chọn sản phẩm và biến thể hợp lệ.");
+    const garment = await this.catalog.garment(productId, variantId);
+    const head = garment.bytes.subarray(0, 12);
+    const mime = head.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      ? "image/png"
+      : head[0] === 255 && head[1] === 216 && head[2] === 255
+        ? "image/jpeg"
+        : head.subarray(0, 4).toString("latin1") === "RIFF" && head.subarray(8, 12).toString("latin1") === "WEBP"
+          ? "image/webp"
+          : undefined;
+    if (!mime || garment.bytes.length > 8 * 1024 * 1024)
+      throw new HttpError(415, "INVALID_GARMENT_IMAGE", "Ảnh trang phục không hợp lệ.");
+    return { bytes: garment.bytes, mime };
+  }
   private enabled(task?: AiTask): void {
     const capabilities = this.capabilities();
     if (

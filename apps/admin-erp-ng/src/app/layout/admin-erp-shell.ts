@@ -21,6 +21,9 @@ type ShellNavGroup = Omit<AdminErpNavGroup, 'items'> & {
   items: AdminErpNavItem[];
 };
 
+/** localStorage key holding the desktop sidebar rail state (`'true'` = collapsed). */
+export const SIDEBAR_COLLAPSED_STORAGE_KEY = 'velura-erp-sidebar-collapsed';
+
 /**
  * ERPNext-inspired workspace shell: grouped sidebar, compact topbar and routable workspaces.
  */

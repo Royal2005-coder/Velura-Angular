@@ -274,73 +274,66 @@
         </div>
       }
 
-      <!-- RESULT: single try-on image, or for studio jobs a large preview plus one thumbnail per pose -->
+      <!-- RESULT: one image for a personal try-on; for studio jobs a grid with one card per pose -->
       @if (result() || showPoses()) {
         <div class="result-section">
-          <div class="result-toolbar">
-            <div class="result-toolbar__left">
-              <button
-                type="button"
-                class="view-btn"
-                [class.view-btn--active]="showOriginal()"
-                [attr.aria-pressed]="showOriginal()"
-                (click)="toggleShowOriginal()"
-                title="So sánh với ảnh gốc"
-              >
-                <span class="view-btn__icon" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                </span>
-                <span>{{ showOriginal() ? 'Đang xem: Ảnh gốc' : 'Đang xem: Đã thử đồ' }}</span>
-              </button>
-            </div>
-            <div class="result-toolbar__right">
-              <button type="button" class="btn-download" [disabled]="!downloadSrc()" (click)="downloadResult()" title="Tải ảnh về máy">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                Tải ảnh
-              </button>
-            </div>
-          </div>
-
-          <div class="pose-stage">
-            @if (currentDisplayImage()) {
-              <img loading="lazy" decoding="async" class="pose-stage__img"
-                [src]="currentDisplayImage()"
-                [alt]="showOriginal() ? 'Ảnh gốc trước khi thử đồ' : 'Kết quả thử đồ AI'"
-                draggable="false"
-              />
-            } @else {
-              <div class="pose-stage__loading" role="status">
-                <span class="spinner-inline" aria-hidden="true"></span> Đang tạo ảnh thử đồ…
-              </div>
-            }
-            @if (stageTag()) {
-              <span class="pose-stage__tag">{{ stageTag() }}</span>
-            }
-          </div>
-
           @if (showPoses()) {
             @if (poseProgress()) {
               <p class="pose-progress" aria-live="polite">{{ poseProgress() }}</p>
             }
-            <div class="pose-strip" role="group" aria-label="Các dáng người mẫu">
+            <div class="pose-grid" role="list" aria-label="Kết quả thử đồ 10 dáng">
               @for (slot of poseSlots(); track slot.id) {
+                <figure class="pose-card" role="listitem">
+                  @if (slot.src) {
+                    <img loading="lazy" decoding="async" class="pose-card__img" [src]="slot.src" [alt]="'Thử đồ - ' + slot.label" draggable="false" />
+                    <button type="button" class="pose-card__download" [attr.aria-label]="'Tải ảnh ' + slot.label" title="Tải ảnh về máy" (click)="downloadResult(slot)">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    </button>
+                  } @else {
+                    <span class="pose-card__skeleton" role="status" aria-label="Đang xử lý"></span>
+                  }
+                  <figcaption class="pose-card__label">{{ slot.label }}</figcaption>
+                </figure>
+              }
+            </div>
+          } @else {
+            <div class="result-toolbar">
+              <div class="result-toolbar__left">
                 <button
                   type="button"
-                  class="pose-thumb"
-                  [class.pose-thumb--selected]="!showOriginal() && previewedPose()?.id === slot.id"
-                  [disabled]="!slot.src"
-                  [attr.aria-pressed]="!showOriginal() && previewedPose()?.id === slot.id"
-                  [attr.aria-label]="slot.src ? 'Xem dáng ' + slot.label : slot.label + ' đang xử lý'"
-                  (click)="selectPose(slot.id)"
+                  class="view-btn"
+                  [class.view-btn--active]="showOriginal()"
+                  [attr.aria-pressed]="showOriginal()"
+                  (click)="toggleShowOriginal()"
+                  title="So sánh với ảnh gốc"
                 >
-                  @if (slot.src) {
-                    <img loading="lazy" decoding="async" class="pose-thumb__img" [src]="slot.src" [alt]="slot.label" draggable="false" />
-                  } @else {
-                    <span class="pose-thumb__skeleton" aria-hidden="true"></span>
-                  }
-                  <span class="pose-thumb__label">{{ slot.label }}</span>
+                  <span class="view-btn__icon" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  </span>
+                  <span>{{ showOriginal() ? 'Đang xem: Ảnh gốc' : 'Đang xem: Đã thử đồ' }}</span>
                 </button>
+              </div>
+              <div class="result-toolbar__right">
+                <button type="button" class="btn-download" [disabled]="!result()" (click)="downloadResult()" title="Tải ảnh về máy">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Tải ảnh
+                </button>
+              </div>
+            </div>
+
+            <div class="pose-stage">
+              @if (currentDisplayImage()) {
+                <img loading="lazy" decoding="async" class="pose-stage__img"
+                  [src]="currentDisplayImage()"
+                  [alt]="showOriginal() ? 'Ảnh gốc trước khi thử đồ' : 'Kết quả thử đồ AI'"
+                  draggable="false"
+                />
+              } @else {
+                <div class="pose-stage__loading" role="status">
+                  <span class="spinner-inline" aria-hidden="true"></span> Đang tạo ảnh thử đồ…
+                </div>
               }
+              <span class="pose-stage__tag">{{ stageTag() }}</span>
             </div>
           }
           <p class="result-disclaimer">

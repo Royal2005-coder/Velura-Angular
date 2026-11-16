@@ -110,14 +110,20 @@
               [attr.data-offset]="dist"
               (click)="onModelClick(i)"
               role="button"
-              [tabindex]="0"
+              [tabindex]="dist === 0 ? 0 : -1"
               (keydown.enter)="onModelClick(i)"
+              (keydown.space)="$event.preventDefault(); onModelClick(i)"
               [attr.aria-label]="look.title + (dist === 0 ? ' (Đang ở trung tâm, nhấn để xem sản phẩm)' : ' (Nhấn để đưa về trung tâm)')"
             >
               <div class="runway-model__shadow" aria-hidden="true"></div>
-              <img loading="lazy" decoding="async" class="runway-model__image"
+              <img
+                [loading]="dist === 0 ? 'eager' : 'lazy'"
+                [attr.fetchpriority]="dist === 0 ? 'high' : 'auto'"
+                decoding="async"
+                class="runway-model__image"
                 [src]="look.image"
                 [alt]="look.title"
+                (error)="onModelImgError($event, look.image)"
                 draggable="false"
               />
               @if (dist === 0) {

@@ -1,12 +1,12 @@
 <app-erp-page-header
   eyebrow="Khách hàng"
   title="Thành viên & điểm"
-  subtitle="Quản lý thành viên, tài khoản ví điểm và lịch sử tích lũy Velura Loyalty."
+  subtitle="Thành viên, điểm và lịch sử cộng/trừ điểm."
 >
   <div actions class="member-header-actions">
     <button class="erp-btn erp-btn--sm" type="button" (click)="openPolicyModal()">
       <app-erp-icon name="tag" [size]="'14'" />
-      Chính sách dùng điểm
+      Dùng điểm
     </button>
     <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
       <app-erp-icon name="refresh" [size]="'14'" />
@@ -19,31 +19,31 @@
   <app-erp-kpi-card
     label="Thành viên"
     [value]="overview().members ?? 0"
-    hint="Tài khoản vai trò member"
+    hint="Số thành viên"
     tone="neutral"
     icon="users"
     [loading]="loading() && !hasLoadedOnce()"
   />
   <app-erp-kpi-card
-    label="Điểm đang giữ"
+    label="Tổng điểm"
     [value]="overview().total_points_milli === undefined ? null : pointsLabelOf(overview().total_points_milli)"
-    [hint]="overview().total_points_milli ? ('Tương đương ' + walletValue(overview().total_points_milli, 0)) : 'Tổng số dư trừ nợ điểm'"
+    [hint]="overview().total_points_milli ? ('Tương đương ' + walletValue(overview().total_points_milli, 0)) : 'Điểm còn lại'"
     tone="success"
     icon="star"
     [loading]="loading() && !hasLoadedOnce()"
   />
   <app-erp-kpi-card
-    label="Ví nợ điểm"
+    label="Nợ điểm"
     [value]="overview().negative_accounts ?? 0"
-    hint="Số dư âm sau thu hồi"
+    hint="Đang âm điểm"
     tone="warning"
     icon="alert"
     [loading]="loading() && !hasLoadedOnce()"
   />
   <app-erp-kpi-card
-    label="Khoá tích luỹ"
+    label="Bị khóa"
     [value]="overview().locked_accounts ?? 0"
-    hint="Đang dừng cộng điểm"
+    hint="Không được cộng điểm"
     tone="danger"
     icon="log"
     [loading]="loading() && !hasLoadedOnce()"
@@ -51,7 +51,7 @@
   <app-erp-kpi-card
     label="Giới thiệu chờ"
     [value]="overview().referrals_pending ?? 0"
-    hint="Chưa có đơn giao thành công"
+    hint="Chờ đơn đầu tiên"
     tone="accent"
     icon="tag"
     [loading]="loading() && !hasLoadedOnce()"
@@ -73,23 +73,22 @@
   <section class="erp-card member-panel" aria-labelledby="members-title">
     <div class="member-panel__head">
       <div>
-        <span class="member-eyebrow">Loyalty</span>
-        <h2 id="members-title">Sổ thành viên</h2>
+        <h2 id="members-title">Danh sách thành viên</h2>
       </div>
       <app-erp-tabs [tabs]="tabs()" [active]="wallet()" [busy]="loading()" (changed)="setWallet($event)" />
     </div>
 
     <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
       <label class="erp-field member-search">
-        <span>Tên, email, điện thoại, mã giới thiệu</span>
-        <input class="erp-input" type="search" [value]="search()" (input)="onSearchInput($event)" placeholder="ví dụ: 0900 hoặc VLR" />
+        <span>Tìm thành viên</span>
+        <input class="erp-input" type="search" [value]="search()" (input)="onSearchInput($event)" placeholder="Tên, email, SĐT, mã giới thiệu" />
       </label>
       <label class="erp-field">
         <span>Sắp xếp</span>
         <select class="erp-select" [value]="sort()" (change)="onSortChange($event)">
           <option value="balance">Số dư cao trước</option>
           <option value="name">Tên A → Z</option>
-          <option value="recent">Bút toán mới nhất</option>
+          <option value="recent">Hoạt động gần nhất</option>
         </select>
       </label>
     </app-erp-filter-bar>
@@ -111,7 +110,7 @@
       [rows]="rows()"
       [loading]="loading()"
       emptyTitle="Không có thành viên khớp bộ lọc"
-      emptyMessage="Đổi tab hoặc xoá từ khoá tìm kiếm để xem lại toàn bộ sổ."
+      emptyMessage="Thử đổi bộ lọc."
       [clickable]="true"
       (rowSelected)="openDetailFromRow($event)"
       (retry)="reload()"
@@ -151,7 +150,7 @@
         </p>
       </div>
       <div class="member-profile__badges">
-        <app-erp-status-badge [label]="member.user.is_active ? 'Đang hoạt động' : 'Bị khoá'" [tone]="member.user.is_active ? 'success' : 'danger'" [dot]="true" />
+        <app-erp-status-badge [label]="member.user.is_active ? 'Đang hoạt động' : 'Bị khóa'" [tone]="member.user.is_active ? 'success' : 'danger'" [dot]="true" />
         <app-erp-status-badge [label]="detailState().label" [tone]="detailState().tone" [dot]="true" />
       </div>
     </div>
@@ -188,23 +187,21 @@
         <div class="member-banner member-banner--warn" role="status">{{ warning }}</div>
       }
     } @else {
-      <div class="member-banner member-banner--info" role="status">
-        Thành viên chưa có ví điểm: các đơn đã giao chưa phát sinh tích luỹ, hoặc chưa từng đủ điều kiện.
-      </div>
+      <div class="member-banner member-banner--info" role="status">Chưa có điểm.</div>
     }
 
     @if (member.totals.zero_entries > 0) {
       <div class="member-banner member-banner--warn" role="status">
-        Có {{ member.totals.zero_entries }} bút toán 0 điểm trong lịch sử. Đây là dấu hiệu dữ liệu cũ cần rà soát, không phải giao dịch hợp lệ.
+        {{ member.totals.zero_entries }} dòng 0 điểm (dữ liệu cũ, cần kiểm tra).
       </div>
     }
 
     @if (canUpdate()) {
       <section class="member-lock" aria-labelledby="member-lock-title">
-        <h3 id="member-lock-title">Khoá / mở tích luỹ</h3>
-        <p class="member-lock__hint">Lý do được ghi vào nhật ký cùng người thao tác. Số dư và bút toán không thay đổi.</p>
+        <h3 id="member-lock-title">Khóa / mở tích lũy</h3>
+        <p class="member-lock__hint">Lý do sẽ được lưu vào nhật ký.</p>
         <label class="erp-field">
-          <span>Lý do (tối thiểu {{ lockReasonMin }} ký tự)</span>
+          <span>Lý do <span class="erp-required" aria-hidden="true">*</span></span>
           <textarea class="erp-input" rows="2" required minlength="8" [value]="lockReason()" (input)="onLockReason($event)" placeholder="ví dụ: xác minh với khách qua hotline 25/10"></textarea>
         </label>
         @if (lockError()) {
@@ -213,27 +210,24 @@
         <div class="member-lock__actions">
           @if (member.account?.accrual_locked) {
             <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="lockBusy()" (click)="saveLock(false)">
-              {{ lockBusy() ? 'Đang lưu…' : 'Mở khoá tích luỹ' }}
+              {{ lockBusy() ? 'Đang lưu…' : 'Mở khóa tích lũy' }}
             </button>
           } @else {
             <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" [disabled]="lockBusy()" (click)="saveLock(true)">
-              {{ lockBusy() ? 'Đang lưu…' : 'Khoá tích luỹ' }}
+              {{ lockBusy() ? 'Đang lưu…' : 'Khóa tích lũy' }}
             </button>
           }
         </div>
       </section>
       <section class="member-lock" aria-labelledby="member-adjust-title">
         <h3 id="member-adjust-title">Điều chỉnh điểm thủ công</h3>
-        <p class="member-lock__hint">
-          Chỉ super admin ghi được. Số dương cộng vào ví, số âm trừ trước rồi mới ghi nợ phần thiếu.
-          Mỗi lệnh mang một mã chống trùng: bấm đúp hoặc thử lại sau timeout không cộng/trừ hai lần.
-        </p>
+        <p class="member-lock__hint">Số dương cộng điểm, số âm trừ điểm. Chỉ super admin dùng được.</p>
         <label class="erp-field">
-          <span>Số điểm (±, tối đa 1.000.000)</span>
-          <input class="erp-input" type="number" step="1" [value]="adjustPoints()" (input)="onAdjustPoints($event)" placeholder="ví dụ: -50" />
+          <span>Số điểm (+/−) <span class="erp-required" aria-hidden="true">*</span></span>
+          <input class="erp-input" type="number" step="1" required [value]="adjustPoints()" (input)="onAdjustPoints($event)" placeholder="ví dụ: -50" />
         </label>
         <label class="erp-field">
-          <span>Lý do (tối thiểu 10 ký tự)</span>
+          <span>Lý do <span class="erp-required" aria-hidden="true">*</span></span>
           <textarea class="erp-input" rows="2" required minlength="10" [value]="adjustReason()" (input)="onAdjustReason($event)" placeholder="ví dụ: bù điểm khách khiếu nại đơn 1234, đã duyệt 01/11"></textarea>
         </label>
         @if (adjustError()) {
@@ -249,16 +243,11 @@
 
     <section class="member-section" aria-labelledby="member-trail-title">
       <div class="member-section__head">
-        <h3 id="member-trail-title">Dấu vết điểm</h3>
-        <span>
-          {{ member.totals.ledger_entries }} bút toán
-          @if (member.trail.length < member.totals.ledger_entries) {
-            · hiển thị {{ member.trail.length }} gần nhất
-          }
-        </span>
+        <h3 id="member-trail-title">Lịch sử điểm</h3>
+        <span>{{ member.totals.ledger_entries }} giao dịch</span>
       </div>
       @if (!member.trail.length) {
-        <p class="member-notice">Chưa có bút toán nào.</p>
+        <p class="member-notice">Chưa có giao dịch.</p>
       } @else {
         <ol class="member-trail">
           @for (entry of member.trail; track entry.ledger_id) {
@@ -271,7 +260,7 @@
               </div>
               <p class="member-trail__note">{{ entry.note || '—' }}</p>
               @if (isZeroEntry(entry.amount_milli_points)) {
-                <p class="member-trail__zero">Bút toán 0 điểm — cần rà soát nguồn ghi.</p>
+                <p class="member-trail__zero">0 điểm — cần kiểm tra.</p>
               }
               <div class="member-trail__links">
                 @if (orderLink(entry.order_id); as link) {
@@ -340,29 +329,26 @@
   </div>
 </app-erp-drawer>
 
-
-<app-erp-modal [open]="policyModalOpen()" title="Chính sách dùng điểm khi thanh toán" size="md" (closed)="closePolicyModal()">
+<app-erp-modal [open]="policyModalOpen()" title="Dùng điểm khi thanh toán" size="md" (closed)="closePolicyModal()">
   <div class="spending-modal-content">
     <div class="spending-badge-row">
       <strong>Trạng thái:</strong>
       <span class="spending-status-badge" [class.is-live]="spendingLive()">
-        {{ spendingLive() ? 'ĐANG BẬT CHO THÀNH VIÊN' : 'ĐANG TẠM KHÓA' }}
+        {{ spendingLive() ? 'Đang bật' : 'Đang tắt' }}
       </span>
       @if (spendingCap()) {
-        <span class="erp-hint">· Giảm tối đa <strong>{{ spendingCap() }}%</strong> giá trị đơn hàng sau voucher</span>
+        <span class="erp-hint">· Tối đa <strong>{{ spendingCap() }}%</strong> đơn hàng</span>
       }
     </div>
-    <p class="erp-hint">
-      Bật/tắt chính sách được ghi nhận người thao tác và lưu nhật ký kiểm toán. Chỉ super admin có quyền thay đổi.
-    </p>
+    <p class="erp-hint">Chỉ super admin được đổi.</p>
 
     <div class="spending-policy-grid">
       <label class="erp-field">
-        <span>Tỉ lệ giảm tối đa trên đơn hàng (%)</span>
+        <span>Tỉ lệ tối đa (%) <span class="erp-required" aria-hidden="true">*</span></span>
         <input class="erp-input" type="number" min="1" max="100" step="1" [value]="spendingPercent()" (input)="onSpendingPercent($event)" />
       </label>
       <label class="erp-field">
-        <span>Lý do cập nhật chính sách (tối thiểu 10 ký tự)</span>
+        <span>Lý do <span class="erp-required" aria-hidden="true">*</span></span>
         <textarea class="erp-input" rows="2" required minlength="10" [value]="spendingReason()" (input)="onSpendingReason($event)" placeholder="ví dụ: Đã duyệt chính sách thưởng và dùng điểm cho quý này"></textarea>
       </label>
     </div>
@@ -374,11 +360,11 @@
     <button class="erp-btn" type="button" (click)="closePolicyModal()">Đóng</button>
     @if (spendingLive()) {
       <button class="erp-btn erp-btn--danger" type="button" [disabled]="spendingBusy()" (click)="saveSpending(false)">
-        {{ spendingBusy() ? 'Đang lưu…' : 'Tạm khóa dùng điểm' }}
+        {{ spendingBusy() ? 'Đang lưu…' : 'Tắt dùng điểm' }}
       </button>
     } @else {
       <button class="erp-btn erp-btn--primary" type="button" [disabled]="spendingBusy()" (click)="saveSpending(true)">
-        {{ spendingBusy() ? 'Đang lưu…' : 'Kích hoạt dùng điểm' }}
+        {{ spendingBusy() ? 'Đang lưu…' : 'Bật dùng điểm' }}
       </button>
     }
   </div>

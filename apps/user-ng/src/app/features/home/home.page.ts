@@ -1,6 +1,6 @@
 import { AfterViewInit, Component, ElementRef, Injector, OnDestroy, ViewChild, afterNextRender, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { catchError, forkJoin, of } from 'rxjs';
+import { catchError, forkJoin, of, take } from 'rxjs';
 import { COLLECTION_LOOKBOOKS } from '../../core/models/collection-lookbook';
 import { CategorySummary, ProductSummary } from '../../core/models/product.interface';
 import { AuthService } from '../../core/services/auth.service';
@@ -230,32 +230,57 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   /**
+   * Safe image error fallback preventing infinite retry loop and missing assets.
+   */
+  onModelImgError(event: Event, fallbackPath?: string): void {
+    const img = event.target as HTMLImageElement;
+    if (!img) return;
+    if (!img.dataset['fallback']) {
+      img.dataset['fallback'] = '1';
+      img.src = '/assets/images/models/model_cutout_1.png';
+    }
+  }
+
+  /**
    * Loads homepage category and featured product widgets.
    */
   loadHome(): void {
     this.loading.set(true);
     this.loadError.set(null);
 
-    if (typeof this.catalog.getBanners === 'function') {
-      this.catalog.getBanners('home_hero').subscribe({
-        next: (banners) => {
-          if (banners && banners.length >= 3) {
-            const dynamicLooks: HeroLook[] = banners.map((b) => ({
-              id: b.banner_id,
-              collectionName: b.tag_label || 'Velura Collection',
-              title: b.title,
-              eyebrow: 'VELURA',
-              season: (b.metadata?.['season'] as string) || 'SPRING / SUMMER 2027',
-              description: b.subtitle || 'Những thiết kế thanh lịch tôn vinh phong cách riêng của bạn.',
-              badge: (b.metadata?.['badge'] as string) || 'ELEGANT',
-              looksCount: (b.metadata?.['looks_count'] as string) || '10 LOOKS',
-              image: b.media_url,
-              link: b.link_url || '/products',
-            }));
+    if (typeof this.catalog.getCollections === 'function') {
+      this.catalog
+        .getCollections()
+        .pipe(
+          take(1),
+          catchError(() => of<any[]>([]))
+        )
+        .subscribe((collections) => {
+          if (collections && collections.length >= 3) {
+            // Take exactly up to 5 collections to preserve 5-position 3D runway layout
+            const targetCols = collections.slice(0, 5);
+            const dynamicLooks: HeroLook[] = targetCols.map((col, idx) => {
+              const defaultFallbackCutout = `/assets/images/models/model_cutout_${(idx % 5) + 1}.png`;
+              const modelImg = (col.models && col.models.length > 0 && col.models[0])
+                ? col.models[0]
+                : defaultFallbackCutout;
+
+              return {
+                id: col.code || col.id,
+                collectionName: col.name || 'Velura Collection',
+                title: col.storyHeadline || col.name,
+                eyebrow: 'VELURA',
+                season: col.colNumber || 'SPRING / SUMMER 2027',
+                description: col.storyDesc || col.homeStory || 'Những thiết kế thanh lịch tôn vinh phong cách riêng của bạn.',
+                badge: col.badge || 'ELEGANT',
+                looksCount: col.kicker || '10 LOOKS',
+                image: modelImg,
+                link: col.categoryLink || `/collections#${col.code || col.id}`,
+              };
+            });
             this.heroLooks.set(dynamicLooks);
           }
-        },
-      });
+        });
     }
 
     forkJoin({

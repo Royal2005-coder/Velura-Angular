@@ -761,6 +761,18 @@ export class AdminErpContentPage {
     });
   }
 
+  onModelImgError(event: Event, path?: string): void {
+    const img = event.target as HTMLImageElement;
+    if (!img) return;
+    if (!img.dataset['fallback']) {
+      img.dataset['fallback'] = '1';
+      img.src = path && path.startsWith('http') ? path : `https://velura.royalai.dev${path || '/assets/images/models/model_cutout_1.png'}`;
+    } else if (img.dataset['fallback'] === '1') {
+      img.dataset['fallback'] = '2';
+      img.src = '/assets/images/models/model_cutout_1.png';
+    }
+  }
+
   onCollectionField(field: keyof AdminCollectionRow, event: Event): void {
     const target = event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
     const value = target.type === 'checkbox' ? (target as HTMLInputElement).checked : target.type === 'number' ? Number(target.value) : target.value;

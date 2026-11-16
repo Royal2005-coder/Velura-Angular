@@ -88,8 +88,37 @@ export function createOrderRepository() {
       return map;
     },
 
-    /** Số đơn của từng trạng thái, đếm ở cơ sở dữ liệu (một truy vấn đếm cho mỗi trạng thái). */
+    /** Số đơn của từng trạng thái, đếm ở cơ sở dữ liệu (tối ưu 1 truy vấn GROUP BY khi có SUPABASE_DB_URL). */
     async countByStatus(statuses: readonly string[], accessToken: string | null): Promise<Record<string, number>> {
+      if (process.env.SUPABASE_DB_URL) {
+        try {
+          const pgModule = await (Function('return import("pg")')() as Promise<any>);
+          const ClientClass = pgModule?.default?.Client || pgModule?.Client;
+          if (ClientClass) {
+            const client = new ClientClass({
+              connectionString: process.env.SUPABASE_DB_URL,
+              ssl: { rejectUnauthorized: false }
+            });
+            await client.connect();
+            try {
+              const res = await (client.query as (sql: string) => Promise<{ rows: Array<{ status: string; count: number }> }>)(
+                `SELECT status::text, COUNT(*)::int AS count FROM orders GROUP BY status`
+              );
+              const map: Record<string, number> = {};
+              for (const s of statuses) map[s] = 0;
+              for (const r of res.rows) {
+                if (map[r.status] !== undefined) map[r.status] = Number(r.count || 0);
+              }
+              return map;
+            } finally {
+              await client.end().catch(() => {});
+            }
+          }
+        } catch (err) {
+          console.warn('[orderRepository.countByStatus] Direct pg query failed, falling back to PostgREST:', err);
+        }
+      }
+
       const entries = await Promise.all(statuses.map(async (status) => {
         try {
           const { count } = await withOrderError(() => selectRows("orders", {

@@ -151,12 +151,20 @@ export class B1AnalyticsRepository {
         cur_period_orders AS (
           SELECT 
             DATE_TRUNC('${dateTruncGrain}', o.created_at)::date AS bucket_date,
-            SUM(oi.unit_price * oi.quantity) AS revenue,
-            SUM(COALESCE(oi.unit_price * 0.48, 0) * oi.quantity) AS cogs,
-            SUM(${measureExpr}) AS metric_val,
+            SUM(COALESCE(oi.line_total, o.total_amount, 0)) AS revenue,
+            SUM(COALESCE(oi.line_cogs, o.total_amount * 0.48, 0)) AS cogs,
+            SUM(COALESCE(oi.line_metric, o.total_amount, 0)) AS metric_val,
             COUNT(DISTINCT o.order_id) AS order_count
           FROM orders o
-          JOIN order_item oi ON o.order_id = oi.order_id
+          LEFT JOIN (
+            SELECT 
+              order_id, 
+              SUM(unit_price * quantity) AS line_total,
+              SUM(COALESCE(unit_price * 0.48, 0) * quantity) AS line_cogs,
+              SUM(${measureExpr}) AS line_metric
+            FROM order_item
+            GROUP BY order_id
+          ) oi ON o.order_id = oi.order_id
           WHERE o.created_at >= $1::timestamptz 
             AND o.created_at <= $2::timestamptz
             AND o.status::text IN ('confirmed', 'processing', 'shipping', 'delivered', 'completed')
@@ -172,9 +180,15 @@ export class B1AnalyticsRepository {
         prev_period_orders AS (
           SELECT 
             DATE_TRUNC('${dateTruncGrain}', o.created_at)::date AS prev_bucket_date,
-            SUM(${measureExpr}) AS prev_metric_val
+            SUM(COALESCE(oi.line_metric, o.total_amount, 0)) AS prev_metric_val
           FROM orders o
-          JOIN order_item oi ON o.order_id = oi.order_id
+          LEFT JOIN (
+            SELECT 
+              order_id, 
+              SUM(${measureExpr}) AS line_metric
+            FROM order_item
+            GROUP BY order_id
+          ) oi ON o.order_id = oi.order_id
           WHERE o.created_at >= $3::timestamptz 
             AND o.created_at < $4::timestamptz
             AND o.status::text IN ('confirmed', 'processing', 'shipping', 'delivered', 'completed')

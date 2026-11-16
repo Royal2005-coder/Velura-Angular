@@ -331,15 +331,15 @@ export class AdminErpReturnsPage {
     {
       key: 'status',
       label: 'Trạng thái',
-      width: '190px',
-      truncate: '190px',
+      width: '230px',
+      truncate: '230px',
       value: (row) => returnStatusLabel((row as AdminReturnRow).status),
       badge: (row) => ({
         label: returnStatusLabel((row as AdminReturnRow).status),
         tone: returnStatusTone((row as AdminReturnRow).status),
       }),
     },
-    { key: 'created', label: 'Tạo lúc', width: '135px', value: (row) => this.date((row as AdminReturnRow).created_at) },
+    { key: 'created', label: 'Tạo lúc', width: '140px', value: (row) => this.date((row as AdminReturnRow).created_at) },
   ]);
 
   readonly ticketColumns = computed<readonly AdminTableColumn[]>(() => [

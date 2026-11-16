@@ -31,6 +31,11 @@ export class AdminErpToastService {
     this.show('error', message);
   }
 
+  /** Cautionary message. */
+  warning(message: string): void {
+    this.show('warning', message);
+  }
+
   /** Neutral or cautionary information. */
   info(message: string, tone: 'info' | 'warning' = 'info'): void {
     this.show(tone, message);

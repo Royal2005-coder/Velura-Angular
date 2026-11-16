@@ -39,6 +39,12 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, output }
         align-items: flex-end;
         gap: 10px;
       }
+      .filter-bar__fields .erp-field:has(input[type='search']),
+      .filter-bar__fields .erp-field:has(input[type='text']),
+      .filter-bar__fields .promotions-search {
+        flex: 1 1 280px;
+        min-width: 260px;
+      }
       .filter-bar__actions {
         display: flex;
         flex-wrap: wrap;

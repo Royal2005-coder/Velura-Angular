@@ -23,6 +23,7 @@ import { AdminErpKpiCard } from '../../shared/ui/admin-kpi-card';
 import { AdminErpModal } from '../../shared/ui/admin-modal';
 import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
 import { AdminErpPagination } from '../../shared/ui/admin-pagination';
+import { AdminErpToastService } from '../../shared/ui/admin-toast';
 import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 
@@ -30,6 +31,14 @@ type ReviewTab = 'all' | 'urgent' | 'processed' | 'logs';
 
 const REVIEW_TABS: readonly string[] = ['all', 'urgent', 'processed', 'logs'];
 type ReviewAction = 'approve' | 'hide' | 'unhide' | 'reply' | 'escalate' | null;
+
+const REVIEW_ACTION_DONE: Record<NonNullable<ReviewAction>, string> = {
+  approve: 'Đã duyệt đánh giá.',
+  hide: 'Đã ẩn đánh giá.',
+  unhide: 'Đã mở ẩn đánh giá.',
+  reply: 'Đã gửi phản hồi.',
+  escalate: 'Đã tạo ticket CSKH.',
+};
 
 const EMPTY_REVIEWS = { rows: [] as AdminReviewRow[], count: 0 };
 const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
@@ -75,6 +84,7 @@ export class AdminErpReviewsPage {
   private readonly session = inject(AdminErpSessionService);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(AdminErpToastService);
 
   readonly tab = signal<ReviewTab>('all');
   readonly query = signal('');
@@ -547,6 +557,7 @@ export class AdminErpReviewsPage {
       next: () => {
         this.dirty.set(false);
         this.closeOverlays();
+        this.toast.success(REVIEW_ACTION_DONE[type]);
         this.reload();
         this.loadCounts();
       },

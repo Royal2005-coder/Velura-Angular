@@ -9,11 +9,11 @@ export type MemberWalletFilter = 'all' | 'has' | 'none' | 'negative' | 'locked';
 export const MEMBER_WALLET_KEYS: readonly MemberWalletFilter[] = ['all', 'has', 'none', 'negative', 'locked'];
 
 export const MEMBER_WALLET_FILTERS: readonly { key: MemberWalletFilter; label: string; hint: string }[] = [
-  { key: 'all', label: 'Tất cả', hint: 'Mọi tài khoản vai trò thành viên' },
-  { key: 'has', label: 'Có ví', hint: 'Đã từng phát sinh điểm' },
-  { key: 'none', label: 'Chưa có ví', hint: 'Chưa giao dịch đủ điều kiện tích luỹ' },
-  { key: 'negative', label: 'Nợ điểm', hint: 'Số dư âm sau khi thu hồi theo trả hàng' },
-  { key: 'locked', label: 'Khoá tích luỹ', hint: 'Đang bị dừng cộng điểm' },
+  { key: 'all', label: 'Tất cả', hint: 'Mọi thành viên' },
+  { key: 'has', label: 'Có ví', hint: 'Đã có điểm' },
+  { key: 'none', label: 'Chưa có ví', hint: 'Chưa có điểm' },
+  { key: 'negative', label: 'Nợ điểm', hint: 'Số dư âm' },
+  { key: 'locked', label: 'Khóa tích lũy', hint: 'Không được cộng điểm' },
 ];
 
 export type MemberTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
@@ -45,21 +45,21 @@ export function memberWalletValue(balanceMilli: number | null | undefined, debtM
 }
 
 /**
- * Trạng thái vận hành của một ví, theo thứ tự ưu tiên: chưa có ví → bị khoá →
+ * Trạng thái vận hành của một ví, theo thứ tự ưu tiên: chưa có ví → bị khóa →
  * đang nợ điểm → có cảnh báo → bình thường. Một dòng chỉ mang đúng một nhãn.
  */
 export function memberState(row: MemberStateInput): { label: string; tone: MemberTone } {
   if (!row.wallet_exists) return { label: 'Chưa có ví', tone: 'neutral' };
-  if (row.accrual_locked) return { label: 'Khoá tích luỹ', tone: 'danger' };
+  if (row.accrual_locked) return { label: 'Khóa tích lũy', tone: 'danger' };
   if (Number(row.balance_milli_points || 0) < Number(row.debt_milli_points || 0)) {
     return { label: 'Đang nợ điểm', tone: 'warning' };
   }
   if (Number(row.warning_flags || 0) > 0) return { label: 'Có cảnh báo', tone: 'warning' };
-  return { label: 'Đang tích luỹ', tone: 'success' };
+  return { label: 'Đang tích lũy', tone: 'success' };
 }
 
 /**
- * Nhãn cho từng loại bút toán trong `loyalty_ledger`. Khoá lấy theo CHECK của
+ * Nhãn cho từng loại bút toán trong `loyalty_ledger`. Khóa lấy theo CHECK của
  * `loyalty_ledger_kind_check` (migration 087), không phải theo tên viết tắt trong UI cũ,
  * để drawer không bao giờ hiện token thô cho nhân viên.
  */
@@ -77,7 +77,7 @@ export function ledgerKindMeta(kind: string | null | undefined): { label: string
       return { label: 'Hết hạn điểm', tone: 'neutral' };
     case 'adjustment':
     case 'adjust':
-      return { label: 'Điều chỉnh thủ công có lý do', tone: 'info' };
+      return { label: 'Điều chỉnh', tone: 'info' };
     case 'redeem':
     case 'consumed':
       return { label: 'Đã dùng điểm', tone: 'warning' };
@@ -85,15 +85,15 @@ export function ledgerKindMeta(kind: string | null | undefined): { label: string
     case 'refund':
       return { label: 'Hoàn điểm đã dùng', tone: 'success' };
     case 'reversed':
-      return { label: 'Bút toán bị đảo', tone: 'neutral' };
+      return { label: 'Đã đảo', tone: 'neutral' };
     case 'reconcile':
-      return { label: 'Đối soát ví', tone: 'neutral' };
+      return { label: 'Đối soát', tone: 'neutral' };
     case 'bonus':
       return { label: 'Điểm thưởng', tone: 'success' };
     case 'reserved':
       return { label: 'Điểm đang giữ', tone: 'neutral' };
     default:
-      return { label: kind || 'Bút toán', tone: 'neutral' };
+      return { label: kind || 'Giao dịch', tone: 'neutral' };
   }
 }
 
@@ -165,7 +165,7 @@ export const MEMBER_LOCK_REASON_MIN = 8;
 
 export function memberLockReasonError(reason: string): string | null {
   return reason.trim().length < MEMBER_LOCK_REASON_MIN
-    ? `Cần lý do tối thiểu ${MEMBER_LOCK_REASON_MIN} ký tự để lưu dấu vết vận hành.`
+    ? `Nhập lý do (≥ ${MEMBER_LOCK_REASON_MIN} ký tự).`
     : null;
 }
 
@@ -179,9 +179,9 @@ export function memberWarning(row: {
   debt_milli_points?: number;
   warning_flags?: number;
 }): string | null {
-  if (row.accrual_locked) return 'Tích luỹ đang bị khoá: điểm mới sẽ không được cộng cho tới khi mở khoá.';
+  if (row.accrual_locked) return 'Tích lũy đang bị khóa: điểm mới sẽ không được cộng cho tới khi mở khóa.';
   if (Number(row.balance_milli_points || 0) < Number(row.debt_milli_points || 0)) {
-    return 'Ví đang âm: điểm đã dùng/đã hết hạn vượt số điểm còn lại. Khoản nợ này sẽ trừ vào lần tích luỹ kế tiếp.';
+    return 'Ví đang âm: điểm đã dùng/đã hết hạn vượt số điểm còn lại. Khoản nợ này sẽ trừ vào lần tích lũy kế tiếp.';
   }
   if (Number(row.warning_flags || 0) > 0) return 'Ví có cờ cảnh báo từ lần thu hồi điểm trước.';
   return null;

@@ -58,7 +58,7 @@ const EMPTY_OVERVIEW: AdminMemberOverview = {};
  * Thành viên & điểm (KAN-106).
  *
  * Ví điểm là dữ liệu tiền, nên màn hình chỉ đọc từ `loyalty_account`/`loyalty_ledger` và chỉ ghi
- * đúng một thao tác vận hành: khoá/mở tích luỹ kèm lý do (RPC ghi audit). Không có nút sửa số dư —
+ * đúng một thao tác vận hành: khóa/mở tích lũy kèm lý do (RPC ghi audit). Không có nút sửa số dư —
  * điều chỉnh điểm cần phê duyệt riêng, không phải một cú bấm trong hàng đợi.
  */
 @Component({
@@ -181,7 +181,7 @@ export class AdminErpMembersPage {
     },
     {
       key: 'points',
-      label: 'Ví điểm',
+      label: 'Điểm',
       value: (row) => this.pointsLabel(row as AdminMemberRow),
       align: 'right',
       mono: true,
@@ -201,14 +201,14 @@ export class AdminErpMembersPage {
     },
     {
       key: 'entries',
-      label: 'Bút toán',
+      label: 'Giao dịch',
       value: (row) => String((row as AdminMemberRow).ledger_entries ?? 0),
       align: 'right',
       mono: true,
     },
     {
       key: 'last',
-      label: 'Lần cuối',
+      label: 'Hoạt động cuối',
       value: (row) => this.dateTime((row as AdminMemberRow).last_ledger_at),
     },
     {
@@ -410,7 +410,7 @@ export class AdminErpMembersPage {
         : Math.abs(points) > 1_000_000
           ? 'Một lần điều chỉnh tối đa ±1.000.000 điểm.'
           : reason.length < 10
-            ? 'Cần lý do tối thiểu 10 ký tự để lưu dấu vết vận hành.'
+            ? 'Nhập lý do (≥ 10 ký tự).'
             : null,
     );
     if (this.adjustError()) return;
@@ -425,7 +425,7 @@ export class AdminErpMembersPage {
         this.adjustPoints.set(0);
         this.adjustKeySignal.set('');
         this.notice.set(result.idempotent
-          ? 'Lệnh này đã được ghi nhận trước đó; ví không đổi thêm lần nữa.'
+          ? 'Đã ghi nhận trước đó.'
           : points > 0
             ? `Đã cộng ${points} điểm cho thành viên.`
             : `Đã trừ ${Math.abs(points)} điểm khỏi ví thành viên.`);
@@ -452,7 +452,7 @@ export class AdminErpMembersPage {
     const percent = this.spendingPercent();
     this.spendingError.set(
       reason.length < 10
-        ? 'Cần lý do tối thiểu 10 ký tự để lưu dấu vết vận hành.'
+        ? 'Nhập lý do (≥ 10 ký tự).'
         : percent < 1 || percent > 100
           ? 'Tỉ lệ tối đa phải từ 1 đến 100.'
           : null,
@@ -495,16 +495,16 @@ export class AdminErpMembersPage {
         this.notice.set(
           result.changed
             ? locked
-              ? 'Đã khoá tích luỹ. Điểm mới sẽ không được cộng cho thành viên này.'
-              : 'Đã mở khoá tích luỹ.'
-            : 'Ví đã ở đúng trạng thái này từ trước, không ghi thêm dấu vết.',
+              ? 'Đã khóa tích lũy. Điểm mới sẽ không được cộng cho thành viên này.'
+              : 'Đã mở khóa tích lũy.'
+            : 'Không có thay đổi.',
         );
         this.reload();
         this.loadDetail(detail.user.user_id);
       },
       error: (error: unknown) => {
         this.lockBusy.set(false);
-        this.lockError.set(adminErrorMessage(error, 'Không lưu được trạng thái khoá tích luỹ.'));
+        this.lockError.set(adminErrorMessage(error, 'Không lưu được trạng thái khóa tích lũy.'));
       },
     });
   }

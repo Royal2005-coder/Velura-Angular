@@ -572,9 +572,9 @@
               ticketAction() === 'reply'
                 ? 'Nội dung phản hồi khách hàng'
                 : 'Tóm tắt hướng giải quyết (tối thiểu ' + minNote + ' ký tự)'
-            }} <span class="erp-required" aria-hidden="true">*</span>
-          </span>
-          <textarea class="erp-input" name="note" rows="4" required></textarea>
+            }}
+          <span class="erp-required" aria-hidden="true">*</span></span>
+          <textarea class="erp-input" name="note" rows="4" required aria-required="true"></textarea>
         </label>
       } @else {
         <p class="desk-note">Đóng phiếu chỉ ghi nhận trạng thái đã kết thúc; nội dung phản hồi cuối cùng vẫn giữ nguyên.</p>

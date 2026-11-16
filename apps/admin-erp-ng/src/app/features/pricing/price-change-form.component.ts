@@ -66,8 +66,8 @@ export function priceChangeProblem(base: number, sale: number, reason: string): 
 
           <div class="price-change__fields">
             <label class="erp-field">
-              <span>Giá gốc</span>
-              <input class="erp-input" name="basePrice" type="number" min="0" step="1000" inputmode="numeric" [value]="baseInput()" (input)="onBaseInput($event)" required />
+              <span>Giá gốc <span class="erp-required" aria-hidden="true">*</span></span>
+              <input class="erp-input" name="basePrice" type="number" min="0" step="1000" inputmode="numeric" [value]="baseInput()" (input)="onBaseInput($event)" required aria-required="true" />
             </label>
             <label class="erp-field">
               <span>Giá bán (bỏ trống = bán bằng giá gốc)</span>
@@ -105,8 +105,8 @@ export function priceChangeProblem(base: number, sale: number, reason: string): 
           }
 
           <label class="erp-field">
-            <span>Lý do (tối thiểu {{ minReasonLength }} ký tự, ghi vào lịch sử giá)</span>
-            <textarea class="erp-input" name="reason" rows="3" [value]="reason()" (input)="onReasonInput($event)" required></textarea>
+            <span>Lý do (tối thiểu {{ minReasonLength }} ký tự, ghi vào lịch sử giá) <span class="erp-required" aria-hidden="true">*</span></span>
+            <textarea class="erp-input" name="reason" rows="3" [value]="reason()" (input)="onReasonInput($event)" required aria-required="true"></textarea>
           </label>
 
           @if (error()) {

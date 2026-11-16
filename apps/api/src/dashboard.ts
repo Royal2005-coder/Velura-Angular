@@ -92,7 +92,7 @@ export async function buildDashboardSummary(params: URLSearchParams | null, now 
           paymentErrors: 0,
           openReturns: 0,
           openSupportTickets: 0,
-          lowStockProducts: 18,
+          lowStockProducts: 0,
           urgentReviews: 0,
           returnsDueSoon: 0,
         },

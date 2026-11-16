@@ -256,7 +256,7 @@
               <form class="evidence-form" (submit)="submitEvidence($event)">
                 <label class="erp-field">
                   <span>Ảnh/video bằng chứng cho “{{ stageLabel(selectedStage()) }}” <span class="erp-required" aria-hidden="true">*</span></span>
-                  <input class="erp-input" type="file" name="evidenceFile" accept="image/*,video/*" (change)="onEvidenceFile($event)" required />
+                  <input class="erp-input" type="file" name="evidenceFile" accept="image/*,video/*" (change)="onEvidenceFile($event)" required aria-required="true" />
                 </label>
                 <label class="erp-field">
                   <span>Ghi chú (tuỳ chọn)</span>
@@ -393,8 +393,8 @@
       }
 
       <label class="erp-field">
-        <span>Ghi chú{{ action.requires_note ? ' (tối thiểu 5 ký tự)' : '' }}</span>
-        <textarea class="erp-input" name="note" rows="3" [value]="prefill().note" [required]="action.requires_note"></textarea>
+        <span>Ghi chú{{ action.requires_note ? ' (tối thiểu 5 ký tự)' : '' }}@if (action.requires_note) { <span class="erp-required" aria-hidden="true">*</span> }</span>
+        <textarea class="erp-input" name="note" rows="3" [value]="prefill().note" [required]="action.requires_note" [attr.aria-required]="action.requires_note ? 'true' : null"></textarea>
         @if (prefill().note) {
           <span class="erp-hint">Đã điền sẵn theo dữ liệu đơn; sửa lại nếu thực tế khác.</span>
         }
@@ -545,7 +545,7 @@
           <option value="mark_failed">Thanh toán thất bại</option>
         </select>
       </label>
-      <label class="erp-field"><span>Lý do <span class="erp-required" aria-hidden="true">*</span></span><textarea class="erp-input" name="reason" rows="3" required></textarea></label>
+      <label class="erp-field"><span>Lý do <span class="erp-required" aria-hidden="true">*</span></span><textarea class="erp-input" name="reason" rows="3" required aria-required="true"></textarea></label>
       @if (actionError()) {
         <p class="erp-error" role="alert">{{ actionError() }}</p>
       }

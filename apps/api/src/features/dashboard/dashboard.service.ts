@@ -125,7 +125,7 @@ export async function getDashboardSlaMetrics(): Promise<SlaMetricsResponse> {
     }
   }
 
-  // Tầng 3: Safe Fallback Defaults (tránh throw 401 làm browser interceptor logout)
+  // Tầng 3: Safe Fallback Defaults khi bảng analytics chưa khởi tạo
   return {
     success: true,
     data: [

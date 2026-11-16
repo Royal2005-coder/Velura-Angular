@@ -9,6 +9,11 @@
   overflow: hidden;
 }
 
+.promotions-search {
+  flex: 1 1 300px;
+  min-width: 280px;
+}
+
 .promotions-tabs {
   display: flex;
   flex-wrap: wrap;

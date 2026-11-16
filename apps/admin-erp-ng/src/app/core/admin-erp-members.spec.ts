@@ -24,7 +24,7 @@ describe('member loyalty display rules', () => {
   it('labels one wallet state per row, ordered by operational urgency', () => {
     expect(memberState({ wallet_exists: false })).toEqual({ label: 'Chưa có ví', tone: 'neutral' });
     expect(memberState({ wallet_exists: true, accrual_locked: true, warning_flags: 2 })).toEqual({
-      label: 'Khoá tích luỹ',
+      label: 'Khóa tích lũy',
       tone: 'danger',
     });
     expect(memberState({ wallet_exists: true, balance_milli_points: 100_000, debt_milli_points: 300_000 })).toEqual({
@@ -36,7 +36,7 @@ describe('member loyalty display rules', () => {
       tone: 'warning',
     });
     expect(memberState({ wallet_exists: true, balance_milli_points: 5_000 })).toEqual({
-      label: 'Đang tích luỹ',
+      label: 'Đang tích lũy',
       tone: 'success',
     });
   });
@@ -45,7 +45,7 @@ describe('member loyalty display rules', () => {
     expect(ledgerKindMeta('earn').label).toBe('Cộng điểm khi giao');
     expect(ledgerKindMeta('clawback').tone).toBe('danger');
     expect(ledgerKindMeta('debt_repayment').label).toBe('Bù nợ điểm');
-    expect(ledgerKindMeta(null).label).toBe('Bút toán');
+    expect(ledgerKindMeta(null).label).toBe('Giao dịch');
   });
 
   it('maps referral, voucher and benefit vocabulary from the RPC', () => {
@@ -75,7 +75,7 @@ describe('member loyalty display rules', () => {
   });
 
   it('surfaces the balance problems an operator has to act on', () => {
-    expect(memberWarning({ wallet_exists: true, accrual_locked: true })).toContain('Tích luỹ đang bị khoá');
+    expect(memberWarning({ wallet_exists: true, accrual_locked: true })).toContain('Tích lũy đang bị khóa');
     expect(memberWarning({ wallet_exists: true, balance_milli_points: 1, debt_milli_points: 2 })).toContain('Ví đang âm');
     expect(memberWarning({ wallet_exists: true, warning_flags: 1 })).toContain('cờ cảnh báo');
     expect(memberWarning({ wallet_exists: true })).toBeNull();

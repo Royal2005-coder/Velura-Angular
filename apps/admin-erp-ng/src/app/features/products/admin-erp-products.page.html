@@ -279,7 +279,7 @@
       </div>
       <label class="erp-field">
         <span>Lý do (tối thiểu {{ minReasonLength }} ký tự, được ghi vào nhật ký) <span class="erp-required" aria-hidden="true">*</span></span>
-        <textarea class="erp-input" name="reason" rows="3" required></textarea>
+        <textarea class="erp-input" name="reason" rows="3" required aria-required="true"></textarea>
       </label>
       @if (statusError()) {
         <p class="erp-error" role="alert">{{ statusError() }}</p>
@@ -301,7 +301,7 @@
       </div>
       <label class="erp-field">
         <span>Giá gốc <span class="erp-required" aria-hidden="true">*</span></span>
-        <input class="erp-input" name="basePrice" type="number" min="0" step="1000" [value]="product.base_price ?? 0" required />
+        <input class="erp-input" name="basePrice" type="number" min="0" step="1000" [value]="product.base_price ?? 0" required aria-required="true" />
       </label>
       <label class="erp-field">
         <span>Giá bán (bỏ trống nếu muốn ẩn giá khuyến mãi)</span>
@@ -309,7 +309,7 @@
       </label>
       <label class="erp-field">
         <span>Lý do (tối thiểu {{ minReasonLength }} ký tự) <span class="erp-required" aria-hidden="true">*</span></span>
-        <textarea class="erp-input" name="reason" rows="2" required></textarea>
+        <textarea class="erp-input" name="reason" rows="2" required aria-required="true"></textarea>
       </label>
       @if (priceError()) {
         <p class="erp-error" role="alert">{{ priceError() }}</p>

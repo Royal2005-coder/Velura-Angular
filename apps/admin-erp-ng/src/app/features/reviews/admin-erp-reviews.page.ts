@@ -99,6 +99,7 @@ export class AdminErpReviewsPage {
   readonly logsPage = signal(1);
   readonly pageSize = 10;
   readonly total = signal(0);
+  readonly allReviewsTotal = signal(0);
   readonly logsCount = signal(0);
   readonly urgentCount = signal(0);
   readonly processedCount = signal(0);
@@ -129,11 +130,13 @@ export class AdminErpReviewsPage {
   });
   readonly canMutate = computed(() => this.session.can('update', 'reviews'));
 
+  readonly allReviewsCount = computed(() => this.allReviewsTotal() || this.total());
+
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
-    { key: 'all', label: 'Tất cả', count: this.kpiNumber(this.total()) },
+    { key: 'all', label: 'Tất cả', count: this.kpiNumber(this.allReviewsCount()) },
     { key: 'urgent', label: 'Cần xử lý gấp', count: this.kpiNumber(this.urgentCount()) },
     { key: 'processed', label: 'Đã xử lý', count: this.kpiNumber(this.processedCount()) },
-    { key: 'logs', label: 'Nhật ký' },
+    { key: 'logs', label: 'Nhật ký', count: this.kpiNumber(this.logsCount()) },
   ]);
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
   readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
@@ -307,13 +310,17 @@ export class AdminErpReviewsPage {
     const countOnly = (params: Record<string, string>) =>
       this.api.listReviews({ ...params, limit: '1' }).pipe(catchError(() => of(EMPTY_REVIEWS)));
     forkJoin({
+      all: countOnly({}),
       approved: countOnly({ status: 'approved' }),
       rejected: countOnly({ status: 'rejected' }),
       urgent: countOnly({ urgent: 'true' }),
+      logs: this.api.listReviewAuditLogs({ limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
     }).subscribe((payload) => {
+      this.allReviewsTotal.set(adminListCount(payload.all));
       this.hiddenCount.set(adminListCount(payload.rejected));
       this.urgentCount.set(adminListCount(payload.urgent));
       this.processedCount.set(adminListCount(payload.approved) + adminListCount(payload.rejected));
+      this.logsCount.set(adminListCount(payload.logs));
     });
   }
 

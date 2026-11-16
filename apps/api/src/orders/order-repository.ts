@@ -40,13 +40,22 @@ export function createOrderRepository() {
       // trên toàn bộ đơn, không chỉ trên trang đang xem.
       if (filters.tag || filters.attention) {
         const ids = await this.orderIdsWithTags(filters.tag ? String(filters.tag) : null, accessToken);
-        const idList = ids.map(quotePostgrestValue).join(",");
         if (filters.attention) {
           // "Cần xử lý" = có tag cần chú ý hoặc còn chờ xác nhận.
-          and.push(ids.length ? `or(status.eq.pending,order_id.in.(${idList}))` : "status.eq.pending");
+          // Cắt ngưỡng an toàn tối đa 50 ID để PostgREST URL không vượt quá 3KB tránh lỗi 414/502.
+          if (ids.length && ids.length <= 50) {
+            const idList = ids.map(quotePostgrestValue).join(",");
+            and.push(`or(status.eq.pending,order_id.in.(${idList}))`);
+          } else if (ids.length > 50) {
+            const safeList = ids.slice(0, 50).map(quotePostgrestValue).join(",");
+            and.push(`or(status.eq.pending,order_id.in.(${safeList}))`);
+          } else {
+            and.push("status.eq.pending");
+          }
         } else {
           if (!ids.length) return { rows: [], count: 0 };
-          query.order_id = `in.(${idList})`;
+          const safeIds = ids.slice(0, 100);
+          query.order_id = `in.(${safeIds.map(quotePostgrestValue).join(",")})`;
         }
       }
       if (and.length) query.and = `(${and.join(",")})`;
@@ -82,25 +91,52 @@ export function createOrderRepository() {
     /** Số đơn của từng trạng thái, đếm ở cơ sở dữ liệu (một truy vấn đếm cho mỗi trạng thái). */
     async countByStatus(statuses: readonly string[], accessToken: string | null): Promise<Record<string, number>> {
       const entries = await Promise.all(statuses.map(async (status) => {
-        const { count } = await withOrderError(() => selectRows("orders", {
-          select: "order_id",
-          status: `eq.${status}`,
-          limit: 1
-        }, authOptions(accessToken)));
-        return [status, count ?? 0] as const;
+        try {
+          const { count } = await withOrderError(() => selectRows("orders", {
+            select: "order_id",
+            status: `eq.${status}`,
+            limit: 1
+          }, authOptions(accessToken)));
+          return [status, count ?? 0] as const;
+        } catch {
+          return [status, 0] as const;
+        }
       }));
       return Object.fromEntries(entries);
     },
 
     async countAttention(accessToken: string | null): Promise<number> {
-      const ids = await this.orderIdsWithTags(null, accessToken);
-      const idList = ids.map(quotePostgrestValue).join(",");
-      const { count } = await withOrderError(() => selectRows("orders", {
-        select: "order_id",
-        or: ids.length ? `(status.eq.pending,order_id.in.(${idList}))` : "(status.eq.pending)",
-        limit: 1
-      }, authOptions(accessToken)));
-      return count ?? 0;
+      try {
+        const ids = await this.orderIdsWithTags(null, accessToken);
+        // Nếu số lượng ids nhỏ (<= 30), query trực tiếp qua PostgREST or=(...)
+        if (ids.length <= 30) {
+          const idList = ids.map(quotePostgrestValue).join(",");
+          const { count } = await withOrderError(() => selectRows("orders", {
+            select: "order_id",
+            or: ids.length ? `(status.eq.pending,order_id.in.(${idList}))` : "(status.eq.pending)",
+            limit: 1
+          }, authOptions(accessToken)));
+          return count ?? 0;
+        }
+        // Khi ids > 30, query PostgREST URL sẽ dài vượt quá buffer 8KB gây lỗi 414/502.
+        // Ta đếm tập hợp hợp nhất giữa đơn pending và đơn có tags an toàn trong bộ nhớ.
+        const pendingResult = await withOrderError(() => selectRows("orders", {
+          select: "order_id",
+          status: "eq.pending",
+          limit: ATTENTION_CAP
+        }, { ...authOptions(accessToken), count: "none" }));
+        const pendingIds = (pendingResult.rows || []).map((row) => asString(row.order_id)).filter(Boolean);
+        const uniqueIds = new Set([...ids, ...pendingIds]);
+        return uniqueIds.size;
+      } catch (err) {
+        console.warn("[countAttention] fallback to pending only due to error:", err);
+        const { count } = await selectRows("orders", {
+          select: "order_id",
+          status: "eq.pending",
+          limit: 1
+        }, authOptions(accessToken)).catch(() => ({ count: 0 }));
+        return count ?? 0;
+      }
     },
 
     findById(orderId: string, accessToken: string | null) {

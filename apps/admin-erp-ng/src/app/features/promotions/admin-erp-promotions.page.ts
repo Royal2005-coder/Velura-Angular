@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { catchError, finalize, of, timeout } from 'rxjs';
+import { catchError, finalize, forkJoin, of, timeout } from 'rxjs';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -126,7 +126,7 @@ export class AdminErpPromotionsPage {
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
     { key: 'campaigns', label: 'Chiến dịch', count: this.promoCount() },
     { key: 'vouchers', label: 'Voucher', count: this.voucherCount() },
-    { key: 'logs', label: 'Nhật ký' },
+    { key: 'logs', label: 'Nhật ký', count: this.logsCount() },
     { key: 'stats', label: 'Thống kê' },
   ]);
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.promoCount() / this.pageSize())));
@@ -297,7 +297,27 @@ export class AdminErpPromotionsPage {
   constructor() {
     this.reload();
     this.loadCampaignOptions();
+    this.loadInitialTabCounts();
     useWorkspaceRefresh(() => this.reload());
+  }
+
+  /**
+   * Preloads counts for all promotion tabs so badges display real data on first paint.
+   */
+  loadInitialTabCounts(): void {
+    forkJoin({
+      promos: this.api.listPromotions({ limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
+      vouchers: this.api.listVouchers({ limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
+      logs: this.api.listPricingAuditLogs({ limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
+    }).subscribe((payload) => {
+      if (this.view() !== 'campaigns') {
+        this.promoCount.set(adminListCount(payload.promos));
+      }
+      if (this.view() !== 'vouchers') {
+        this.voucherCount.set(adminListCount(payload.vouchers));
+      }
+      this.logsCount.set(adminListCount(payload.logs));
+    });
   }
 
   /**
@@ -327,6 +347,9 @@ export class AdminErpPromotionsPage {
           this.campaigns.set(adminListRows(payload));
           this.promoCount.set(adminListCount(payload));
           this.summary.set(payload.summary || null);
+          if (payload.summary?.activeVouchers != null && !this.voucherCount()) {
+            this.voucherCount.set(payload.summary.activeVouchers);
+          }
           this.loading.set(false);
         },
         error: (error: unknown) => {

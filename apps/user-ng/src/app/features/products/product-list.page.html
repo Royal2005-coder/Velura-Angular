@@ -1,38 +1,103 @@
 <main class="product-list-page container">
   <header class="product-list-header">
-    <div class="product-list-editorial-hero" aria-label="Velura Atelier — Timeless Elegance">
+    <!-- Dynamic Multi-media Hero Banner Slider/Carousel -->
+    <div
+      class="product-list-editorial-hero"
+      [attr.aria-label]="currentBanner().title"
+      (mouseenter)="pauseBannerTimer()"
+      (mouseleave)="resumeBannerTimer()"
+    >
       <div class="product-list-editorial-hero__video-wrap">
-        <video #heroVideo autoplay loop playsinline muted poster="/assets/images/auth/model_main.png" class="product-list-editorial-hero__video">
-          <source src="/assets/videos/hero-bg.mp4" type="video/mp4" />
-        </video>
+        @if (currentBanner().media_type === 'video') {
+          <video
+            #heroVideo
+            [src]="currentBanner().media_url"
+            autoplay
+            playsinline
+            [muted]="!videoSoundOn()"
+            (ended)="nextBanner()"
+            [poster]="currentBanner().poster_url || '/assets/images/auth/model_main.png'"
+            class="product-list-editorial-hero__video"
+          ></video>
+        } @else {
+          <img
+            [src]="currentBanner().media_url"
+            [alt]="currentBanner().title"
+            class="product-list-editorial-hero__video"
+            loading="eager"
+            style="object-fit: cover; object-position: center;"
+          />
+        }
         <div class="product-list-editorial-hero__video-overlay"></div>
       </div>
+
       <div class="product-list-editorial-hero__copy">
-        <span class="product-list-editorial-hero__eyebrow">VELURA ATELIER</span>
-        <h2 class="product-list-editorial-hero__title">Timeless Elegance</h2>
-        <p class="product-list-editorial-hero__description">Những lựa chọn tinh tế dành cho nhịp sống và phong cách riêng của bạn.</p>
-        <button
-          class="product-list-editorial-hero__sound-btn"
-          type="button"
-          [attr.aria-label]="videoSoundOn() ? 'Tắt âm thanh video' : 'Bật âm thanh video'"
-          (click)="toggleVideoSound()"
-        >
-          @if (videoSoundOn()) {
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-            </svg>
-            <span>Âm thanh: Bật</span>
-          } @else {
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-              <line x1="23" y1="9" x2="17" y2="15"></line>
-              <line x1="17" y1="9" x2="23" y2="15"></line>
-            </svg>
-            <span>Bật tiếng</span>
+        <span class="product-list-editorial-hero__eyebrow">{{ currentBanner().tag_label || 'VELURA ATELIER' }}</span>
+        <h2 class="product-list-editorial-hero__title">{{ currentBanner().title }}</h2>
+        @if (currentBanner().subtitle) {
+          <p class="product-list-editorial-hero__description">{{ currentBanner().subtitle }}</p>
+        }
+        <div class="product-list-editorial-hero__actions">
+          @if (currentBanner().link_url) {
+            <a [routerLink]="currentBanner().link_url" class="product-list-editorial-hero__cta-btn">
+              <span>{{ currentBanner().button_text || 'Khám phá ngay' }}</span>
+              <span aria-hidden="true">↗</span>
+            </a>
           }
-        </button>
+          @if (currentBanner().media_type === 'video') {
+            <button
+              class="product-list-editorial-hero__sound-btn"
+              type="button"
+              [attr.aria-label]="videoSoundOn() ? 'Tắt âm thanh video' : 'Bật âm thanh video'"
+              (click)="toggleVideoSound()"
+            >
+              @if (videoSoundOn()) {
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                </svg>
+                <span>Âm thanh: Bật</span>
+              } @else {
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                  <line x1="23" y1="9" x2="17" y2="15"></line>
+                  <line x1="17" y1="9" x2="23" y2="15"></line>
+                </svg>
+                <span>Bật tiếng</span>
+              }
+            </button>
+          }
+        </div>
       </div>
+
+      <!-- Carousel Navigation & Indicators -->
+      @if (heroBanners().length > 1) {
+        <button
+          type="button"
+          class="product-list-hero__arrow product-list-hero__arrow--prev"
+          (click)="prevBanner()"
+          aria-label="Banner trước đó"
+          title="Banner trước đó"
+        >‹</button>
+        <button
+          type="button"
+          class="product-list-hero__arrow product-list-hero__arrow--next"
+          (click)="nextBanner()"
+          aria-label="Banner kế tiếp"
+          title="Banner kế tiếp"
+        >›</button>
+        <div class="product-list-hero__dots" aria-label="Chọn banner">
+          @for (b of heroBanners(); track b.banner_id; let bIdx = $index) {
+            <button
+              type="button"
+              class="product-list-hero__dot"
+              [class.is-active]="activeBannerIndex() === bIdx"
+              (click)="setBanner(bIdx)"
+              [attr.aria-label]="'Chuyển đến slide ' + (bIdx + 1)"
+            ></button>
+          }
+        </div>
+      }
     </div>
     <nav class="breadcrumb" aria-label="Breadcrumb">
       <a routerLink="/">Trang chủ</a>

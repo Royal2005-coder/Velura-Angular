@@ -3,11 +3,13 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, injec
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, of, switchMap } from 'rxjs';
 import {
+  AdminBannerRow,
   AdminBlogProduct,
   AdminBlogProductMatch,
   AdminBlogRow,
   AdminBlogSeoSuggestion,
   AdminCategoryRow,
+  AdminCollectionRow,
   AdminContentCategory,
   AdminErpApiService,
   AdminProductRow,
@@ -48,11 +50,11 @@ import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
 import { AdminErpPagination } from '../../shared/ui/admin-pagination';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 
-type ContentTab = 'all' | 'draft' | 'published' | 'archived' | 'subscribers';
+type ContentTab = 'all' | 'draft' | 'published' | 'archived' | 'banners' | 'collections' | 'subscribers';
 type EditorTab = 'content' | 'seo' | 'products';
 
 const EMPTY_BLOGS: AdminListPayload<AdminBlogRow> = { rows: [], count: 0 };
-const TABS: readonly ContentTab[] = ['all', 'draft', 'published', 'archived', 'subscribers'];
+const TABS: readonly ContentTab[] = ['all', 'draft', 'published', 'archived', 'banners', 'collections', 'subscribers'];
 const EDITOR_TABS: readonly EditorTab[] = ['content', 'seo', 'products'];
 const PRODUCT_STATUS_LABELS: Readonly<Record<string, string>> = {
   on_sale: 'Đang bán',
@@ -177,16 +179,60 @@ export class AdminErpContentPage {
     return draft.productIds.map((id) => cache[id] || { product_id: id, name: 'Sản phẩm đang tải…' });
   });
 
+  // --- BANNERS MANAGEMENT (KAN-108) ---
+  readonly banners = signal<AdminBannerRow[]>([]);
+  readonly bannerLoading = signal(false);
+  readonly bannerPlacementFilter = signal<string>('all');
+  readonly bannerModalOpen = signal(false);
+  readonly bannerEditing = signal<AdminBannerRow | null>(null);
+  readonly bannerDraft = signal<Partial<AdminBannerRow>>({
+    placement: 'products_hero',
+    media_type: 'image',
+    is_active: true,
+    sort_order: 0,
+    button_text: 'Khám phá ngay',
+    link_url: '/products',
+  });
+  readonly bannerSaving = signal(false);
+  readonly bannerUploading = signal(false);
+  readonly bannerError = signal<string | null>(null);
+
+  readonly filteredBanners = computed(() => {
+    const filter = this.bannerPlacementFilter();
+    const list = this.banners();
+    if (filter === 'all') return list;
+    return list.filter((b) => b.placement === filter);
+  });
+
+  // --- COLLECTIONS MANAGEMENT (KAN-108) ---
+  readonly collectionsList = signal<AdminCollectionRow[]>([]);
+  readonly collectionLoading = signal(false);
+  readonly collectionModalOpen = signal(false);
+  readonly collectionEditing = signal<AdminCollectionRow | null>(null);
+  readonly collectionDraft = signal<Partial<AdminCollectionRow>>({
+    badge: 'ELEGANT',
+    is_active: true,
+    sort_order: 0,
+    hero_gradient: 'linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%)',
+    models: [],
+    story_paragraphs: [],
+  });
+  readonly collectionSaving = signal(false);
+  readonly collectionUploading = signal(false);
+  readonly collectionError = signal<string | null>(null);
+
   readonly canRead = computed(() => this.session.can('read', 'content'));
   readonly canCreate = computed(() => this.session.can('create', 'content'));
   readonly canUpdate = computed(() => this.session.can('update', 'content'));
   readonly canEdit = computed(() => this.canCreate() || this.canUpdate());
 
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
-    { key: 'all', label: 'Tất cả', count: this.total() },
+    { key: 'all', label: 'Tất cả bài viết', count: this.total() },
     { key: 'draft', label: 'Bản nháp', count: this.counts().draft },
     { key: 'published', label: 'Đã công bố', count: this.counts().published },
     { key: 'archived', label: 'Đã lưu trữ', count: this.counts().archived },
+    { key: 'banners', label: 'Quản lý Banner', count: this.banners().length },
+    { key: 'collections', label: 'Bộ sưu tập & Lookbook', count: this.collectionsList().length },
     { key: 'subscribers', label: 'Người nhận tin', count: this.counts().subscribers },
   ]);
   readonly editorTabs = computed<readonly { key: EditorTab; label: string }[]>(() => [
@@ -247,8 +293,9 @@ export class AdminErpContentPage {
       image: (row) => this.blogCover(row as AdminBlogRow),
       imageRatio: '16:9',
       truncate: '280px',
+      width: '280px',
     },
-    { key: 'slug', label: 'Slug', value: (row) => (row as AdminBlogRow).slug || '—', mono: true, truncate: '180px' },
+    { key: 'slug', label: 'Slug', value: (row) => (row as AdminBlogRow).slug || '—', mono: true, truncate: '180px', width: '180px' },
     { key: 'category', label: 'Danh mục', value: (row) => this.categoryLabel((row as AdminBlogRow).category_slug) },
     {
       key: 'status',
@@ -414,7 +461,314 @@ export class AdminErpContentPage {
     if (!TABS.includes(tab as ContentTab)) return;
     this.tab.set(tab as ContentTab);
     this.page.set(1);
-    this.reload();
+    if (tab === 'banners') {
+      this.loadBanners();
+    } else if (tab === 'collections') {
+      this.loadCollectionsList();
+    } else {
+      this.reload();
+    }
+  }
+
+  // --- BANNERS ACTION HANDLERS ---
+  loadBanners(): void {
+    this.bannerLoading.set(true);
+    this.bannerError.set(null);
+    this.api.listBanners().subscribe({
+      next: (res) => {
+        this.banners.set(res?.data || (res as any)?.rows || []);
+        this.bannerLoading.set(false);
+      },
+      error: (err) => {
+        this.bannerError.set(adminErrorMessage(err, 'Không tải được danh sách banner.'));
+        this.bannerLoading.set(false);
+      },
+    });
+  }
+
+  openCreateBanner(): void {
+    this.bannerEditing.set(null);
+    this.bannerDraft.set({
+      placement: 'products_hero',
+      title: '',
+      subtitle: '',
+      tag_label: 'VELURA ATELIER',
+      media_type: 'image',
+      media_url: '',
+      poster_url: '',
+      button_text: 'Khám phá ngay',
+      link_url: '/products',
+      is_active: true,
+      sort_order: this.banners().length,
+      metadata: { autoplay: true, sound_default: false },
+    });
+    this.bannerError.set(null);
+    this.bannerModalOpen.set(true);
+  }
+
+  openEditBanner(banner: AdminBannerRow): void {
+    this.bannerEditing.set(banner);
+    this.bannerDraft.set({ ...banner });
+    this.bannerError.set(null);
+    this.bannerModalOpen.set(true);
+  }
+
+  closeBannerModal(): void {
+    this.bannerModalOpen.set(false);
+    this.bannerEditing.set(null);
+    this.bannerError.set(null);
+  }
+
+  saveBanner(): void {
+    const draft = this.bannerDraft();
+    if (!draft.title?.trim()) {
+      this.bannerError.set('Tiêu đề banner là bắt buộc.');
+      return;
+    }
+    if (!draft.media_url?.trim()) {
+      this.bannerError.set('Hình ảnh hoặc video banner là bắt buộc.');
+      return;
+    }
+
+    this.bannerSaving.set(true);
+    this.bannerError.set(null);
+
+    const editing = this.bannerEditing();
+    const request$ = editing
+      ? this.api.updateBanner(editing.banner_id, draft)
+      : this.api.createBanner(draft);
+
+    request$.subscribe({
+      next: () => {
+        this.bannerSaving.set(false);
+        this.closeBannerModal();
+        this.notice.set(editing ? 'Đã cập nhật banner thành công.' : 'Đã tạo banner mới thành công.');
+        this.loadBanners();
+      },
+      error: (err) => {
+        this.bannerSaving.set(false);
+        this.bannerError.set(adminErrorMessage(err, 'Lưu banner thất bại.'));
+      },
+    });
+  }
+
+  deleteBanner(banner: AdminBannerRow): void {
+    if (!confirm(`Bạn có chắc chắn muốn xóa banner "${banner.title}" không?`)) return;
+    this.api.deleteBanner(banner.banner_id).subscribe({
+      next: () => {
+        this.notice.set('Đã xóa banner thành công.');
+        this.loadBanners();
+      },
+      error: (err) => {
+        this.bannerError.set(adminErrorMessage(err, 'Xóa banner thất bại.'));
+      },
+    });
+  }
+
+  toggleBannerActive(banner: AdminBannerRow): void {
+    this.api.updateBanner(banner.banner_id, { is_active: !banner.is_active }).subscribe({
+      next: () => {
+        this.notice.set(`Đã ${!banner.is_active ? 'bật' : 'tắt'} banner "${banner.title}".`);
+        this.loadBanners();
+      },
+      error: (err) => {
+        this.bannerError.set(adminErrorMessage(err, 'Cập nhật trạng thái thất bại.'));
+      },
+    });
+  }
+
+  onBannerMediaUploaded(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    this.bannerUploading.set(true);
+    this.bannerError.set(null);
+    this.api.uploadCmsMedia(file, 'banner').subscribe({
+      next: (res) => {
+        this.bannerUploading.set(false);
+        this.bannerDraft.update((current) => ({
+          ...current,
+          media_url: res.url,
+          media_type: res.mediaType,
+        }));
+      },
+      error: (err) => {
+        this.bannerUploading.set(false);
+        this.bannerError.set(adminErrorMessage(err, 'Tải tệp lên thất bại.'));
+      },
+    });
+  }
+
+  onBannerField(field: keyof AdminBannerRow, event: Event): void {
+    const target = event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+    const value = target.type === 'checkbox' ? (target as HTMLInputElement).checked : target.type === 'number' ? Number(target.value) : target.value;
+    this.bannerDraft.update((current) => ({ ...current, [field]: value }));
+  }
+
+  // --- COLLECTIONS ACTION HANDLERS ---
+  loadCollectionsList(): void {
+    this.collectionLoading.set(true);
+    this.collectionError.set(null);
+    this.api.listCollections().subscribe({
+      next: (res) => {
+        this.collectionsList.set(res?.data || (res as any)?.rows || []);
+        this.collectionLoading.set(false);
+      },
+      error: (err) => {
+        this.collectionError.set(adminErrorMessage(err, 'Không tải được danh sách bộ sưu tập.'));
+        this.collectionLoading.set(false);
+      },
+    });
+  }
+
+  openCreateCollection(): void {
+    this.collectionEditing.set(null);
+    this.collectionDraft.set({
+      code: '',
+      name: '',
+      label: 'Thanh lịch & Kiêu sa',
+      col_number: `COLLECTION 0${this.collectionsList().length + 1} · SPECIAL EDITION`,
+      script: 'golden muse',
+      hero_gradient: 'linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%)',
+      badge: 'ELEGANT',
+      kicker: 'THE ART OF SOFTNESS',
+      story_headline: 'Dịu dàng, có chủ ý.',
+      story_desc: '',
+      explore_cta: 'Khám phá bộ sưu tập',
+      category_link: '/products?category=dam-vay',
+      products_sub: 'SELECTED FOR YOU',
+      products_title: 'Những thiết kế nổi bật',
+      closing_quote: 'Một chút lãng mạn, vừa đủ cho riêng bạn.',
+      quote: '',
+      models: [],
+      story_paragraphs: [],
+      is_active: true,
+      sort_order: this.collectionsList().length,
+    });
+    this.collectionError.set(null);
+    this.collectionModalOpen.set(true);
+  }
+
+  openEditCollection(collection: AdminCollectionRow): void {
+    this.collectionEditing.set(collection);
+    this.collectionDraft.set({
+      ...collection,
+      models: Array.isArray(collection.models) ? [...collection.models] : [],
+      story_paragraphs: Array.isArray(collection.story_paragraphs) ? [...collection.story_paragraphs] : [],
+    });
+    this.collectionError.set(null);
+    this.collectionModalOpen.set(true);
+  }
+
+  closeCollectionModal(): void {
+    this.collectionModalOpen.set(false);
+    this.collectionEditing.set(null);
+    this.collectionError.set(null);
+  }
+
+  saveCollection(): void {
+    const draft = this.collectionDraft();
+    if (!draft.name?.trim()) {
+      this.collectionError.set('Tên bộ sưu tập là bắt buộc.');
+      return;
+    }
+    if (!draft.code?.trim()) {
+      this.collectionError.set('Mã định danh (slug) là bắt buộc.');
+      return;
+    }
+    if (!draft.story_desc?.trim()) {
+      this.collectionError.set('Mô tả câu chuyện cảm hứng là bắt buộc.');
+      return;
+    }
+
+    this.collectionSaving.set(true);
+    this.collectionError.set(null);
+
+    const editing = this.collectionEditing();
+    const request$ = editing
+      ? this.api.updateCollection(editing.collection_id, draft)
+      : this.api.createCollection(draft);
+
+    request$.subscribe({
+      next: () => {
+        this.collectionSaving.set(false);
+        this.closeCollectionModal();
+        this.notice.set(editing ? 'Đã cập nhật bộ sưu tập thành công.' : 'Đã tạo bộ sưu tập mới thành công.');
+        this.loadCollectionsList();
+      },
+      error: (err) => {
+        this.collectionSaving.set(false);
+        this.collectionError.set(adminErrorMessage(err, 'Lưu bộ sưu tập thất bại.'));
+      },
+    });
+  }
+
+  deleteCollection(collection: AdminCollectionRow): void {
+    if (!confirm(`Bạn có chắc chắn muốn xóa bộ sưu tập "${collection.name}" không?`)) return;
+    this.api.deleteCollection(collection.collection_id).subscribe({
+      next: () => {
+        this.notice.set('Đã xóa bộ sưu tập thành công.');
+        this.loadCollectionsList();
+      },
+      error: (err) => {
+        this.collectionError.set(adminErrorMessage(err, 'Xóa bộ sưu tập thất bại.'));
+      },
+    });
+  }
+
+  toggleCollectionActive(collection: AdminCollectionRow): void {
+    this.api.updateCollection(collection.collection_id, { is_active: !collection.is_active }).subscribe({
+      next: () => {
+        this.notice.set(`Đã ${!collection.is_active ? 'bật' : 'tắt'} bộ sưu tập "${collection.name}".`);
+        this.loadCollectionsList();
+      },
+      error: (err) => {
+        this.collectionError.set(adminErrorMessage(err, 'Cập nhật trạng thái thất bại.'));
+      },
+    });
+  }
+
+  onCollectionModelUploaded(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = input.files;
+    if (!files || !files.length) return;
+
+    this.collectionUploading.set(true);
+    this.collectionError.set(null);
+
+    const file = files[0];
+    this.api.uploadCmsMedia(file, 'collection').subscribe({
+      next: (res) => {
+        this.collectionUploading.set(false);
+        this.collectionDraft.update((current) => ({
+          ...current,
+          models: [...(current.models || []), res.url],
+        }));
+      },
+      error: (err) => {
+        this.collectionUploading.set(false);
+        this.collectionError.set(adminErrorMessage(err, 'Tải ảnh người mẫu thất bại.'));
+      },
+    });
+  }
+
+  removeCollectionModel(index: number): void {
+    this.collectionDraft.update((current) => {
+      const models = [...(current.models || [])];
+      models.splice(index, 1);
+      return { ...current, models };
+    });
+  }
+
+  onCollectionField(field: keyof AdminCollectionRow, event: Event): void {
+    const target = event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+    const value = target.type === 'checkbox' ? (target as HTMLInputElement).checked : target.type === 'number' ? Number(target.value) : target.value;
+    this.collectionDraft.update((current) => ({ ...current, [field]: value }));
+  }
+
+  setCollectionGradient(gradient: string): void {
+    this.collectionDraft.update((current) => ({ ...current, hero_gradient: gradient }));
   }
 
   /**

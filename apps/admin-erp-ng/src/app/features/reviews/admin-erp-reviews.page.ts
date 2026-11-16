@@ -148,8 +148,9 @@ export class AdminErpReviewsPage {
       key: 'product',
       label: 'Sản phẩm',
       value: (row) => this.productName(row as AdminReviewRow),
-      width: '180px',
-      truncate: '180px',
+      image: (row) => this.productImage(row as AdminReviewRow),
+      width: '200px',
+      truncate: '200px',
     },
     {
       key: 'rating',
@@ -702,6 +703,17 @@ export class AdminErpReviewsPage {
    */
   productName(row: AdminReviewRow): string {
     return row.product?.name || row.product_name || '—';
+  }
+
+  /**
+   * Product thumbnail image.
+   */
+  productImage(row: AdminReviewRow): string {
+    const images = row.product?.images;
+    if (Array.isArray(images) && images.length > 0 && typeof images[0] === 'string') {
+      return images[0];
+    }
+    return '';
   }
 
   /**

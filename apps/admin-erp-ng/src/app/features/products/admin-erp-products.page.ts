@@ -990,6 +990,7 @@ export class AdminErpProductsPage {
       out: this.api.listProducts({ status: 'out_of_stock', limit: '1' }).pipe(catchError(() => of(EMPTY_LIST))),
       // Count only: the stock tab owns the capped low-stock row payload.
       low: this.api.listProducts({ lowStock: 'true', limit: '1' }).pipe(catchError(() => of(EMPTY_LIST))),
+      logs: this.api.listProductAuditLogs({ limit: '1' }).pipe(catchError(() => of(EMPTY_LIST))),
     }).subscribe((payload) => {
       this.products.set(adminListRows(payload.list));
       this.total.set(adminListCount(payload.list));
@@ -997,6 +998,7 @@ export class AdminErpProductsPage {
       this.hidden.set(adminListCount(payload.hidden));
       this.outOfStock.set(adminListCount(payload.out));
       this.lowStockTotal.set(adminListCount(payload.low));
+      this.logsTotal.set(adminListCount(payload.logs));
       this.loading.set(false);
       this.hasLoadedOnce.set(true);
     });

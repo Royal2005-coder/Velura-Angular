@@ -153,13 +153,17 @@ export function createOrderService({
     async summary(context) {
       requireOrderReader(context);
       await maybeRunAutomation();
-      const [byStatus, attention] = await Promise.all([
+      const [byStatus, attention, paymentAttentionIds] = await Promise.all([
         repository.countByStatus(ORDER_STATUSES, context.accessToken),
-        repository.countAttention(context.accessToken)
+        repository.countAttention(context.accessToken),
+        typeof repository.orderIdsWithTags === "function"
+          ? repository.orderIdsWithTags("PAYMENT_ATTENTION", context.accessToken).catch(() => [])
+          : Promise.resolve([])
       ]);
       return {
         by_status: ORDER_STATUSES.map((status) => ({ status, label: ORDER_STATUS_LABELS[status], count: byStatus[status] ?? 0 })),
-        attention
+        attention,
+        payment_attention: Array.isArray(paymentAttentionIds) ? paymentAttentionIds.length : 0
       };
     },
 

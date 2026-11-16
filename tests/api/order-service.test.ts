@@ -18,6 +18,7 @@ function repository(order, extra = {}) {
       serviceAction: async (_id, input) => { calls.service.push(input); return { order }; },
       countByStatus: async (statuses) => Object.fromEntries(statuses.map((s) => [s, s === "pending" ? 4 : 0])),
       countAttention: async () => 5,
+      orderIdsWithTags: async () => [],
       ...extra
     }
   };

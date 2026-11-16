@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { AdminBadgeTone } from './admin-status-badge';
 import { AdminErpStatusBadge } from './admin-status-badge';
 import { AdminErpEmptyState } from './admin-empty-state';
@@ -71,7 +71,7 @@ export interface AdminTableRowAction {
           </div>
         }
         <div class="table-wrap">
-        <table>
+        <table [class.table-fixed]="hasFixedWidths()">
           <caption class="erp-sr-only">{{ caption() }}</caption>
           <thead>
             <tr>
@@ -108,7 +108,9 @@ export interface AdminTableRowAction {
                     [class.is-center]="column.align === 'center'"
                     [class.is-mono]="column.mono"
                     [class.is-truncated]="!!column.truncate"
-                    [style.max-width]="column.truncate"
+                    [class.is-clamped]="column.lineClamp === 2"
+                    [style.width]="column.width"
+                    [style.max-width]="column.truncate || column.width"
                     [attr.title]="column.truncate ? column.value(row) : null"
                   >
                     @if (badgeFor(column, row); as badge) {
@@ -215,6 +217,9 @@ export interface AdminTableRowAction {
         min-width: 760px;
         border-collapse: collapse;
       }
+      table.table-fixed {
+        table-layout: fixed;
+      }
       th,
       td {
         padding: 12px 16px;
@@ -222,6 +227,9 @@ export interface AdminTableRowAction {
         text-align: left;
         vertical-align: middle;
         white-space: nowrap;
+      }
+      td.is-clamped {
+        white-space: normal;
       }
       th {
         position: sticky;
@@ -405,6 +413,8 @@ export class AdminErpDataTable {
   readonly rowSelected = output<unknown>();
   /** Emits an image URL when clicked in a cell gallery, for opening a full preview lightbox. */
   readonly imageClick = output<string>();
+
+  readonly hasFixedWidths = computed(() => this.columns().some((col) => !!col.width || !!col.truncate));
 
   /**
    * Resolves a badge for one cell, or null when the cell renders as text.

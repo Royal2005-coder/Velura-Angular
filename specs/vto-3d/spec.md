@@ -1,3 +1,5 @@
+> Superseded by .specify/specs/vto-studio-10-pose-preview.md (3D/360 removed).
+
 # Feature Specification: VTO 3D — Phòng thử đồ 3D đa khung hình theo bối cảnh
 
 **Created:** 2026-11-04 | **Status:** Implemented (2D + 360° stage on the cluster) | **Branch:** KAN-66

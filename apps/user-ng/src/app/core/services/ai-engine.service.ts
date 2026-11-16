@@ -20,10 +20,16 @@ export interface AiJob {
   gate?: { valid?: boolean; reasons?: string[]; metrics?: Record<string, number> };
   error?: string;
   matches?: { product_id: string; score: number }[];
-  /** KAN-66 VTO 3D: published turntable frames for studio try-on. */
-  frames3d?: string[];
-  /** 360° add-on after a Success try-on: `pending` while it is built, `failed` if it could not be; absent = done/none. */
-  stage3d?: 'pending' | 'failed';
+  /**
+   * Studio try-on: poses published so far, in studio order (first = standing pose = `result_url`).
+   * Present while `running` (growing) and on `success`.
+   */
+  poses?: AiPoseRef[];
+}
+/** One published studio pose of a try-on job; its image is served by `AiEngineService.pose`. */
+export interface AiPoseRef {
+  id: string;
+  label: string;
 }
 export interface StudioAsset {
   id: string;
@@ -49,7 +55,7 @@ export interface AiCapabilities {
   /** Semantic search readiness; false until the owner rolls a worker exposing text_embedding. */
   ai_search?: { text: boolean; composed: boolean };
 }
-/** Explicitly consented input; product and studio IDs are validated against server allowlists. */
+/** Explicitly consented input; product IDs are validated against server allowlists. */
 export interface AiJobInput {
   task: AiTask;
   /** Existing catalog filter candidates, applied before the visual top-match limit. */
@@ -63,9 +69,6 @@ export interface AiJobInput {
   product_id?: string;
   variant_id?: string;
   mode?: 'personal' | 'studio';
-  studio_asset_id?: string;
-  /** Studio try-on renders the model inside a 3D scene; personal photos stay 2D. */
-  render3d?: boolean;
   consent: true;
   confirmed: true;
   idempotency_key: string;
@@ -76,6 +79,13 @@ export class AiEngineService {
   /** Retrieves an allowlisted synthetic studio model for explicit preview before try-on consent. */
   studioPreview(id: string): Observable<Blob> {
     return this.http.get(`${this.base}/api/user/ai/studio/${encodeURIComponent(id)}`, {
+      responseType: 'blob',
+    });
+  }
+  /** Retrieves the exact garment photo of the selected colour/size SKU for the pre-consent studio preview. */
+  garmentPreview(productId: string, variantId: string): Observable<Blob> {
+    return this.http.get(`${this.base}/api/user/ai/garment`, {
+      params: { product_id: productId, variant_id: variantId },
       responseType: 'blob',
     });
   }
@@ -166,11 +176,10 @@ export class AiEngineService {
       responseType: 'blob',
     });
   }
-
-  /** One published turntable frame of an owned job; the server matches the name against the job record. */
-  resultFile(id: string, name: string): Observable<Blob> {
+  /** One published studio pose of an owned job; the server matches the id against the job record. */
+  pose(id: string, poseId: string): Observable<Blob> {
     return this.http.get(
-      `${this.base}/api/user/ai/jobs/${encodeURIComponent(id)}/render3d/${encodeURIComponent(name)}`,
+      `${this.base}/api/user/ai/jobs/${encodeURIComponent(id)}/poses/${encodeURIComponent(poseId)}`,
       { responseType: 'blob' },
     );
   }

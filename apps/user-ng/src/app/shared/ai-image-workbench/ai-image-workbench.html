@@ -2,7 +2,7 @@
   <button type="button" class="btn btn--outline ai-workbench-trigger" (click)="open()">
     <span class="ai-trigger-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.4 2.4M15.3 15.3l2.4 2.4M17.7 6.3l-2.4 2.4M8.7 15.3l-2.4 2.4"></path></svg></span>
     <span>{{ title() }}</span>
-    <span class="ai-trigger-badge">AI 3D Try-On</span>
+    <span class="ai-trigger-badge">AI Try-On</span>
   </button>
 }
 
@@ -84,7 +84,7 @@
             (click)="chooseMode('studio')"
           >
             <span class="tab-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5V7A2.5 2.5 0 1 0 9.5 4.5"></path><path d="M12 8.5 3.6 14.1a1 1 0 0 0 .58 1.82h15.64a1 1 0 0 0 .58-1.82L12 8.5Z"></path></svg></span>
-            <span class="tab-text">Người mẫu Studio 3D</span>
+            <span class="tab-text">Người mẫu studio</span>
             <span class="tab-badge">Mới</span>
           </button>
         </div>
@@ -142,58 +142,59 @@
         </div>
       }
 
-      <!-- STUDIO MODEL CUSTOMIZATION -->
+      <!-- STUDIO: the fixed standing model plus the selected product; no pose is chosen before processing -->
       @if (mode() === 'studio') {
         <div class="studio-section">
-          <!-- FEMALE STUDIO TITLE (EXCLUSIVELY FOR WOMEN'S FASHION) -->
           <div class="studio-header-meta">
             <span class="studio-title-badge">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"></circle><path d="M12 13v8"></path><path d="M9 18h6"></path></svg>
               Người mẫu Nữ Studio
             </span>
-            <span class="studio-subtitle-text">Chọn dáng người mẫu để thử đồ. Kết quả gồm album 360° và các dáng đứng.</span>
-          </div>
-          <!-- CLEAN STUDIO CARDS GRID -->
-          <div class="studio-grid">
-            @for (asset of filteredStudioAssets(); track asset.id) {
-              <div
-                class="studio-card"
-                [class.studio-card--selected]="studio() === asset.id"
-                [class.studio-card--disabled]="busy()"
-                (click)="selectStudio(asset.id)"
-              >
-                <div class="studio-card__icon">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                </div>
-                <div class="studio-card__info">
-                  <div class="studio-card__title">{{ modelDisplayTitle(asset) }}</div>
-                </div>
-                @if (studio() === asset.id) {
-                  <span class="studio-card__check">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  </span>
-                }
-              </div>
-            }
+            <span class="studio-subtitle-text">AI thử trang phục đã chọn lần lượt trên {{ poseSlots().length || 'các' }} dáng của người mẫu.</span>
           </div>
 
-          <!-- SELECTED STUDIO MODEL PREVIEW -->
-          @if (studioLoading()) {
-            <div class="studio-preview-placeholder">
-              <span class="spinner-inline"></span> Đang tải ảnh người mẫu xem trước…
-            </div>
-          } @else if (studioImage()) {
-            <div class="studio-preview-container">
-              <img loading="lazy" decoding="async" class="studio-preview-img"
-                [src]="studioImage()"
-                alt="Người mẫu studio được chọn"
-                (error)="studioPreviewFailed()"
-              />
-              @if (busy()) {
-                <div class="laser-scanner" aria-hidden="true"></div>
+          <div class="studio-inputs">
+            <figure class="studio-input">
+              @if (studioLoading()) {
+                <div class="studio-preview-placeholder">
+                  <span class="spinner-inline"></span> Đang tải ảnh người mẫu…
+                </div>
+              } @else if (studioImage()) {
+                <div class="studio-preview-container">
+                  <img loading="lazy" decoding="async" class="studio-preview-img"
+                    [src]="studioImage()"
+                    alt="Người mẫu studio đứng thẳng"
+                    (error)="studioPreviewFailed()"
+                  />
+                  @if (busy()) {
+                    <div class="laser-scanner" aria-hidden="true"></div>
+                  }
+                </div>
               }
-            </div>
-          }
+              <figcaption class="studio-input__caption">Người mẫu đứng thẳng</figcaption>
+            </figure>
+            <figure class="studio-input">
+              @if (garmentLoading()) {
+                <div class="studio-preview-placeholder">
+                  <span class="spinner-inline"></span> Đang tải sản phẩm…
+                </div>
+              } @else if (garmentImage()) {
+                <div class="studio-preview-container">
+                  <img loading="lazy" decoding="async" class="studio-preview-img"
+                    [src]="garmentImage()"
+                    alt="Sản phẩm và biến thể đã chọn"
+                    (error)="garmentFailed.set(true)"
+                  />
+                </div>
+              } @else {
+                <div class="studio-garment-note">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 3 6l2 4 3-1v12h8V9l3 1 2-4-5-3a4 4 0 0 1-8 0Z"></path></svg>
+                  <span>{{ garmentFailed() ? 'Chưa tải được ảnh sản phẩm. Trang phục vẫn lấy theo màu và cỡ bạn đang chọn.' : 'Trang phục theo màu và cỡ bạn đang chọn trên trang sản phẩm.' }}</span>
+                </div>
+              }
+              <figcaption class="studio-input__caption">Sản phẩm đã chọn</figcaption>
+            </figure>
+          </div>
         </div>
       }
 
@@ -268,12 +269,12 @@
               busy() ||
               !available() ||
               (mode() === 'personal' && !preview()) ||
-              (mode() === 'studio' && (!studio() || !studioImage() || studioLoading()))
+              (mode() === 'studio' && (!studioImage() || studioLoading()))
             "
             (click)="generate()"
           >
             <span class="btn-sparkle" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5V7A2.5 2.5 0 1 0 9.5 4.5"></path><path d="M12 8.5 3.6 14.1a1 1 0 0 0 .58 1.82h15.64a1 1 0 0 0 .58-1.82L12 8.5Z"></path></svg></span>
-            <span>Xác nhận & Thử đồ AI</span>
+            <span>{{ mode() === 'studio' ? 'Thử đồ ' + (poseSlots().length || '') + ' dáng' : 'Xác nhận & Thử đồ AI' }}</span>
           </button>
         }
       </div>
@@ -287,108 +288,86 @@
         </div>
       }
 
-      <!-- RESULT: 2D try-on, plus a real 360° turntable when the add-on stage published frames -->
-      @if (result()) {
+      <!-- RESULT: one image for a personal try-on; for studio jobs a grid with one card per pose -->
+      @if (result() || showPoses()) {
         <div class="result-section">
-          <div class="result-toolbar">
-            <div class="result-toolbar__left">
-              <button
-                type="button"
-                class="view-btn"
-                [class.view-btn--active]="showOriginal()"
-                [attr.aria-pressed]="showOriginal()"
-                (click)="toggleShowOriginal()"
-                title="So sánh với ảnh gốc"
-              >
-                <span class="view-btn__icon" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                </span>
-                <span>{{ showOriginal() ? 'Đang xem: Ảnh gốc' : 'Đang xem: Đã thử đồ' }}</span>
-              </button>
-            </div>
-            <div class="result-toolbar__right">
-              <button type="button" class="btn-download" (click)="downloadResult()" title="Tải ảnh về máy">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                Tải ảnh
-              </button>
-            </div>
-          </div>
-
-          @if (stage3dNote(); as note) {
-            <div class="stage-360__note" [class.stage-360__note--warn]="note.tone === 'warn'" role="status">
-              @if (note.tone === 'info') {
-                <span class="spinner-inline" aria-hidden="true"></span>
+          @if (showPoses()) {
+            @if (poseProgress()) {
+              <p class="pose-progress" aria-live="polite">{{ poseProgress() }}</p>
+            }
+            <div class="pose-stage">
+              @if (previewedPose(); as shown) {
+                <img decoding="async" class="pose-stage__img" [src]="shown.src" [alt]="'Thử đồ - ' + shown.label" draggable="false" />
+                <span class="pose-stage__tag">{{ shown.label }}</span>
+                <button type="button" class="pose-stage__download" aria-label="Tải ảnh đang xem" title="Tải ảnh đang xem" (click)="downloadResult(shown)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Tải ảnh
+                </button>
+              } @else {
+                <div class="pose-stage__loading" role="status">
+                  <span class="spinner-inline" aria-hidden="true"></span> Đang tạo dáng đầu tiên…
+                </div>
               }
-              <span>{{ note.text }}</span>
+            </div>
+            <div class="pose-grid" role="list" aria-label="Các dáng đã thử đồ">
+              @for (slot of poseSlots(); track slot.id) {
+                <div class="pose-card" role="listitem" [class.pose-card--selected]="previewedPose()?.id === slot.id">
+                  @if (slot.src) {
+                    <button type="button" class="pose-card__select" [attr.aria-label]="'Xem ' + slot.label" [attr.aria-pressed]="previewedPose()?.id === slot.id" (click)="selectPose(slot)">
+                      <img loading="lazy" decoding="async" class="pose-card__img" [src]="slot.src" [alt]="'Thử đồ - ' + slot.label" draggable="false" />
+                    </button>
+                    <button type="button" class="pose-card__download" [attr.aria-label]="'Tải ảnh ' + slot.label" title="Tải ảnh về máy" (click)="downloadResult(slot)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    </button>
+                  } @else {
+                    <span class="pose-card__skeleton" role="status" aria-label="Đang xử lý"></span>
+                  }
+                  <span class="pose-card__label">{{ slot.label }}</span>
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="result-toolbar">
+              <div class="result-toolbar__left">
+                <button
+                  type="button"
+                  class="view-btn"
+                  [class.view-btn--active]="showOriginal()"
+                  [attr.aria-pressed]="showOriginal()"
+                  (click)="toggleShowOriginal()"
+                  title="So sánh với ảnh gốc"
+                >
+                  <span class="view-btn__icon" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  </span>
+                  <span>{{ showOriginal() ? 'Đang xem: Ảnh gốc' : 'Đang xem: Đã thử đồ' }}</span>
+                </button>
+              </div>
+              <div class="result-toolbar__right">
+                <button type="button" class="btn-download" [disabled]="!result()" (click)="downloadResult()" title="Tải ảnh về máy">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Tải ảnh
+                </button>
+              </div>
+            </div>
+
+            <div class="pose-stage">
+              @if (currentDisplayImage()) {
+                <img loading="lazy" decoding="async" class="pose-stage__img"
+                  [src]="currentDisplayImage()"
+                  [alt]="showOriginal() ? 'Ảnh gốc trước khi thử đồ' : 'Kết quả thử đồ AI'"
+                  draggable="false"
+                />
+              } @else {
+                <div class="pose-stage__loading" role="status">
+                  <span class="spinner-inline" aria-hidden="true"></span> Đang tạo ảnh thử đồ…
+                </div>
+              }
+              <span class="pose-stage__tag">{{ stageTag() }}</span>
             </div>
           }
-          @if (spinnable()) {
-            <div class="hint-3d">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-4M12 8h.01"></path></svg>
-              <span><strong>360°:</strong> Kéo ngang trên ảnh hoặc dùng phím ← → để xoay quanh người mẫu.</span>
-            </div>
-          }
-
-          <div
-            class="stage-360-container"
-            [class.stage-360-container--interactive]="spinnable()"
-            [style.background]="activeScenario.wallBackTexture"
-            [attr.tabindex]="spinnable() ? 0 : null"
-            [attr.role]="spinnable() ? 'slider' : null"
-            [attr.aria-label]="spinnable() ? 'Xoay góc nhìn 360°' : null"
-            [attr.aria-valuemin]="spinnable() ? 0 : null"
-            [attr.aria-valuemax]="spinnable() ? 359 : null"
-            [attr.aria-valuenow]="spinnable() ? roundedAngle() : null"
-            [attr.aria-valuetext]="spinnable() ? angleDisplayLabel() : null"
-            (pointerdown)="onStagePointerDown($event)"
-            (pointermove)="onStagePointerMove($event)"
-            (pointerup)="onStagePointerUp($event)"
-            (pointercancel)="onStagePointerUp($event)"
-            (keydown)="onStageKeydown($event)"
-          >
-            <div class="stage-360__floor" [style.background]="activeScenario.floorTexture" aria-hidden="true"></div>
-            <span class="stage-360__tag">
-              {{ showOriginal() ? 'Ảnh gốc' : has3d() ? '360° · ' + frames3d().length + ' góc' : 'Ảnh thử đồ AI' }}
-            </span>
-            <div class="stage-360__figure" [style.transform]="'scale(' + zoomLevel() + ')'">
-              <img loading="lazy" decoding="async" class="stage-360__img"
-                [src]="currentDisplayImage()"
-                [alt]="showOriginal() ? 'Ảnh gốc trước khi thử đồ' : 'Kết quả thử đồ AI'"
-                draggable="false"
-              />
-            </div>
-            <div class="stage-360__shadow" aria-hidden="true"></div>
-            @if (spinnable()) {
-              <div class="stage-360-hud">
-                <span class="angle-indicator-pill">{{ angleDisplayLabel() }}</span>
-              </div>
-            }
-          </div>
-
-          <div class="orbit-controls-bar">
-            @if (spinnable()) {
-              <div class="orbit-controls-group">
-                <button type="button" class="orbit-btn" [class.orbit-btn--active]="normalizedAngle() <= 20 || normalizedAngle() >= 340" (click)="setAnglePreset(0)">Trước (0°)</button>
-                <button type="button" class="orbit-btn" [class.orbit-btn--active]="normalizedAngle() >= 30 && normalizedAngle() <= 65" (click)="setAnglePreset(45)">Nghiêng (45°)</button>
-                <button type="button" class="orbit-btn" [class.orbit-btn--active]="normalizedAngle() >= 75 && normalizedAngle() <= 105" (click)="setAnglePreset(90)">Cạnh (90°)</button>
-                <button type="button" class="orbit-btn" [class.orbit-btn--active]="normalizedAngle() >= 160 && normalizedAngle() <= 200" (click)="setAnglePreset(180)">Sau lưng (180°)</button>
-                @if (!reducedMotion) {
-                  <button type="button" class="orbit-btn" [class.orbit-btn--active]="autoSpin()" [attr.aria-pressed]="autoSpin()" (click)="toggleAutoSpin()">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                    <span>{{ autoSpin() ? 'Dừng xoay' : 'Tự xoay 360°' }}</span>
-                  </button>
-                }
-              </div>
-            }
-            <div class="orbit-zoom-group">
-              <button type="button" class="zoom-btn" (click)="zoomOut()" [disabled]="zoomLevel() <= 1.0" aria-label="Thu nhỏ">−</button>
-              <span class="zoom-label">{{ (zoomLevel() * 100).toFixed(0) }}%</span>
-              <button type="button" class="zoom-btn" (click)="zoomIn()" [disabled]="zoomLevel() >= 1.8" aria-label="Phóng to">+</button>
-              <button type="button" class="zoom-btn zoom-btn--reset" (click)="reset3DView()">Đặt lại</button>
-            </div>
-          </div>
           <p class="result-disclaimer">
-            * Ảnh do AI mô phỏng. Góc nhìn 360° được dựng lại từ ảnh thử đồ nên chi tiết mặt sau là ước lượng.
+            * Ảnh do AI mô phỏng, chỉ mang tính tham khảo.
           </p>
         </div>
       }

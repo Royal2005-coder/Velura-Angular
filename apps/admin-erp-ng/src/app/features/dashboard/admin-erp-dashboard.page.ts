@@ -1098,15 +1098,30 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
 
     if (data && data.status === 'success' && data.chart_payload) {
       if (tab === 'time_combo' && data.chart_payload.rows && data.chart_payload.rows.length > 0) {
-        return this.buildTimeComboOption(data.chart_payload.rows, measure, this.b1Grain());
+        const hasRealRevenue = data.chart_payload.rows.some(
+          (r) => Number(r.revenue || 0) > 0 || Number(r.profit || 0) > 0
+        );
+        if (hasRealRevenue) {
+          return this.buildTimeComboOption(data.chart_payload.rows, measure, this.b1Grain());
+        }
       }
 
       if (tab === 'price_bar' && data.chart_payload.tiers && data.chart_payload.tiers.length > 0) {
-        return this.buildPriceTierOption(data.chart_payload.tiers, measure);
+        const hasRealTierRevenue = data.chart_payload.tiers.some(
+          (t) => Number(t.tier_revenue || 0) > 0 || Number(t.tier_profit || 0) > 0
+        );
+        if (hasRealTierRevenue) {
+          return this.buildPriceTierOption(data.chart_payload.tiers, measure);
+        }
       }
 
       if (tab === 'payment_stacked' && data.chart_payload.channels && data.chart_payload.channels.length > 0) {
-        return this.buildPaymentChannelOption(data.chart_payload.channels);
+        const hasRealChannelRevenue = data.chart_payload.channels.some(
+          (c) => Number(c.revenue || 0) > 0
+        );
+        if (hasRealChannelRevenue) {
+          return this.buildPaymentChannelOption(data.chart_payload.channels);
+        }
       }
     }
 

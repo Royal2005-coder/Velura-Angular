@@ -577,6 +577,7 @@ export interface AdminOrderRow {
 export interface AdminOrderSummary {
   by_status: Array<{ status: string; label: string; count: number }>;
   attention: number;
+  payment_attention?: number;
 }
 
 export interface AdminOrderActionResult {

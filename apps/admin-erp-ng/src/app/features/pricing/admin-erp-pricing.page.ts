@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { catchError, forkJoin, of } from 'rxjs';
 import { ActivatedRoute, Router, type ParamMap } from '@angular/router';
 import {
   AdminAuditRow,
@@ -95,7 +96,7 @@ export class AdminErpPricingPage {
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
     { key: 'prices', label: 'Bảng giá', count: this.total() },
     { key: 'history', label: 'Lịch sử giá', count: this.historyCount() },
-    { key: 'logs', label: 'Nhật ký' },
+    { key: 'logs', label: 'Nhật ký', count: this.logsCount() },
   ]);
   readonly missingSale = computed(() => this.products().filter((row) => row.sale_price == null).length);
   readonly discounted = computed(() => this.products().filter((row) => this.discountPct(row) > 0).length);
@@ -191,7 +192,25 @@ export class AdminErpPricingPage {
 
   constructor() {
     watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
+    this.loadInitialCounts();
     useWorkspaceRefresh(() => this.reload());
+  }
+
+  /**
+   * Preloads count for history and audit logs so subtab badges show real numbers immediately.
+   */
+  loadInitialCounts(): void {
+    forkJoin({
+      history: this.api.listPriceHistory({ limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
+      logs: this.api.listPricingAuditLogs({ limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
+    }).subscribe((payload) => {
+      if (this.tab() !== 'history') {
+        this.historyCount.set(adminListCount(payload.history));
+      }
+      if (this.tab() !== 'logs') {
+        this.logsCount.set(adminListCount(payload.logs));
+      }
+    });
   }
 
   /**

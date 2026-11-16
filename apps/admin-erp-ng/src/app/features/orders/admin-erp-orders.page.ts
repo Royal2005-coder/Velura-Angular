@@ -153,6 +153,8 @@ export class AdminErpOrdersPage {
   readonly from = signal('');
   readonly rows = signal<AdminOrderRow[]>([]);
   readonly count = signal(0);
+  readonly allOrdersTotal = signal(0);
+  readonly paymentAttentionTotal = signal(0);
   readonly summary = signal<AdminOrderSummary | null>(null);
   readonly loading = signal(true);
   readonly hasLoadedOnce = signal(false);
@@ -230,12 +232,19 @@ export class AdminErpOrdersPage {
   readonly canMutate = computed(() => this.session.can('update', 'orders'));
   readonly canReadReturns = computed(() => this.session.can('read', 'returns'));
 
+  readonly totalOrdersCount = computed(() => {
+    const sum = this.summary()?.by_status?.reduce((acc, cur) => acc + (cur.count || 0), 0) ?? 0;
+    return sum > 0 ? sum : (this.allOrdersTotal() || this.count());
+  });
+  readonly attentionTotal = computed(() => this.summary()?.attention ?? this.attentionCount());
+  readonly paymentAttentionCount = computed(() => this.summary()?.payment_attention ?? this.paymentAttentionTotal());
+
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
-    { key: 'all', label: 'Tất cả', count: this.count() },
-    { key: 'attention', label: 'Cần xử lý', count: this.summary()?.attention ?? 0 },
-    { key: 'payment', label: 'Lỗi thanh toán' },
+    { key: 'all', label: 'Tất cả', count: this.totalOrdersCount() },
+    { key: 'attention', label: 'Cần xử lý', count: this.attentionTotal() },
+    { key: 'payment', label: 'Lỗi thanh toán', count: this.paymentAttentionCount() },
     { key: 'cancelled', label: 'Đã hủy', count: this.cancelledCount() },
-    { key: 'logs', label: 'Nhật ký' },
+    { key: 'logs', label: 'Nhật ký', count: this.logsCount() },
   ]);
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.count() / this.pageSize())));
   readonly rangeLabel = computed(() => adminRangeLabel(this.count(), this.page(), this.pageSize(), 'đơn hàng'));
@@ -428,9 +437,27 @@ export class AdminErpOrdersPage {
   constructor() {
     watchQueryParams(this.route, this.destroyRef, (params) => this.applyQuery(params));
     this.destroyRef.onDestroy(() => clearTimeout(this.copiedPhoneTimer ?? undefined));
+    this.loadSummaryCounters();
     useWorkspaceRefresh(() => this.reloadActive());
     // New orders must appear without F5; the tick stays silent and never interrupts a drawer.
     useAutoRefresh(() => this.autoReload());
+  }
+
+  /**
+   * Loads all order tab counters on initial paint and refresh.
+   */
+  loadSummaryCounters(): void {
+    this.api.orderSummary().pipe(catchError(() => of(null))).subscribe((summary) => {
+      if (summary) {
+        this.summary.set(summary);
+        if (summary.payment_attention != null) {
+          this.paymentAttentionTotal.set(summary.payment_attention);
+        }
+      }
+    });
+    this.api.listAuditLogs({ module: 'orders', limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))).subscribe((p) => {
+      this.logsCount.set(adminListCount(p));
+    });
   }
 
   /**
@@ -525,6 +552,9 @@ export class AdminErpOrdersPage {
       next: (payload) => {
         this.rows.set(adminListRows(payload));
         this.count.set(adminListCount(payload));
+        if (!this.hasFilters() && this.tab() === 'all') {
+          this.allOrdersTotal.set(adminListCount(payload));
+        }
         this.loading.set(false);
         this.hasLoadedOnce.set(true);
       },
@@ -537,7 +567,7 @@ export class AdminErpOrdersPage {
         this.loading.set(false);
       },
     });
-    this.api.orderSummary().pipe(catchError(() => of(null))).subscribe((summary) => this.summary.set(summary));
+    this.loadSummaryCounters();
   }
 
   /** Server filters of the active tab, shared by the paged list and the CSV export. */

@@ -149,6 +149,7 @@ export class AdminErpReturnsPage {
   readonly tickets = signal<AdminTicketRow[]>([]);
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly total = signal(0);
+  readonly allReturnsTotal = signal(0);
   readonly ticketsTotal = signal(0);
   readonly logsTotal = signal(0);
   readonly page = signal(1);
@@ -240,8 +241,10 @@ export class AdminErpReturnsPage {
   });
   readonly minNote = MIN_NOTE_LENGTH;
 
+  readonly returnsTotalCount = computed(() => this.allReturnsTotal() || this.total());
+
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
-    { key: 'returns', label: 'Đổi trả', count: this.total() },
+    { key: 'returns', label: 'Đổi trả', count: this.returnsTotalCount() },
     { key: 'tickets', label: 'Phiếu hỗ trợ', count: this.ticketsTotal() },
     { key: 'chat', label: 'Hội thoại' },
     { key: 'logs', label: 'Nhật ký đổi trả', count: this.logsTotal() },
@@ -490,6 +493,7 @@ export class AdminErpReturnsPage {
       logs: this.api.listServiceLogs({ limit: '1' }).pipe(catchError(() => of(EMPTY_LOGS))),
     }).subscribe((payload) => {
       this.countsBusy = false;
+      this.allReturnsTotal.set(adminListCount(payload.returns));
       if (!this.hasReturnFilters()) {
         this.total.set(adminListCount(payload.returns));
       }

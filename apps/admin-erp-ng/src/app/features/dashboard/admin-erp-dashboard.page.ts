@@ -12,6 +12,7 @@ import {
   AdminVoiceInsights,
 } from '../../core/admin-erp-api.service';
 import { adminErrorMessage } from '../../core/admin-erp-http';
+import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { AdminIcon } from '../../shared/admin-icon';
 import { DashboardService } from './services/dashboard.service';
 import {
@@ -296,6 +297,8 @@ const emptyDashboard = (): AdminDashboardSummary => ({
   styleUrl: './admin-erp-dashboard.page.scss',
 })
 export class AdminErpDashboardPage implements OnInit, OnDestroy {
+  private readonly session = inject(AdminErpSessionService);
+  readonly operatorName = computed(() => this.session.displayName() || 'Quản trị viên');
   private readonly dashboardService = inject(DashboardService);
   private readonly b1Analytics = inject(B1AnalyticsService);
   readonly isB1Loading = signal<boolean>(false);
@@ -351,7 +354,7 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
     const p0Cskh = health?.tickets_open_24h ?? 4;
     const p0Promo = health?.promotions_near_budget ?? 1;
     const p0Reviews = health?.reviews_urgent ?? 2;
-    const p0Accounts = 0;
+    const pendingAccounts = health?.admin_requests_pending ?? 1;
 
     return [
       { key: 'orders' as const, name: 'Đơn hàng', p0: p0Orders, p1: 22, p2: 4, total: p0Orders + 22 + 4 },
@@ -359,14 +362,7 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
       { key: 'cskh' as const, name: 'CSKH & Hậu mãi', p0: p0Cskh, p1: 2, p2: 0, total: p0Cskh + 2 },
       { key: 'promotions' as const, name: 'Giá & KM', p0: p0Promo, p1: 3, p2: 0, total: p0Promo + 3 },
       { key: 'reviews' as const, name: 'Đánh giá & VoC', p0: p0Reviews, p1: 1, p2: 0, total: p0Reviews + 1 },
-      {
-        key: 'accounts' as const,
-        name: 'Tài khoản & RBAC',
-        p0: p0Accounts,
-        p1: health?.admin_requests_pending ?? 1,
-        p2: 0,
-        total: p0Accounts + (health?.admin_requests_pending ?? 1),
-      },
+      { key: 'accounts' as const, name: 'Tài khoản & RBAC', p0: 0, p1: pendingAccounts, p2: 0, total: pendingAccounts },
     ];
   });
 
@@ -458,10 +454,10 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
       priority: 'normal',
       priorityLabel: 'Theo dõi P2',
       targetObject: 'Ngô Bảo Long · 760,000 đ',
-      incidentSummary: 'Pending 14h · Thiếu thông tin số ngõ/ngách',
-      dssRationale: 'Đơn mới phát sinh 14h (< 24h SLA), địa chỉ thiếu số ngõ/hẻm; tự động gắn cờ theo dõi chuẩn hóa trước khi giao 3PL.',
+      incidentSummary: 'Pending 18h · Đã thanh toán chuyển khoản',
+      dssRationale: 'Đơn đã xác nhận, trong hạn SLA đóng gói 24h.',
       actionSpec: {
-        buttonLabel: 'Gửi SMS xác nhận',
+        buttonLabel: 'Theo dõi',
         targetTable: 'orders',
         columnModified: 'internal_note',
         condition: "status='pending'",
@@ -469,118 +465,8 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
         actionType: 'UPDATE',
         rollbackStrategy: 'Không',
         targetId: '9140',
-        itemSummary: 'Gửi ZNS/SMS yêu cầu chuẩn hóa địa chỉ giao cho đơn #9140',
+        itemSummary: 'Ghi chú theo dõi đơn #9140',
         requiresConfirmation: false,
-      },
-    },
-    {
-      id: '#AT-SM-001M',
-      module: 'inventory',
-      moduleLabel: 'SP & Kho',
-      priority: 'critical',
-      priorityLabel: 'Khẩn cấp P0',
-      targetObject: 'Sơ mi Oxford Trắng (M) · Best-seller',
-      incidentSummary: 'Tồn kho khả dụng = 0 (Cháy hàng thực địa)',
-      dssRationale: 'Tốc độ bán 14 cái/ngày, 22 khách nhấn "Báo khi có hàng", lead-time may 3 ngày. Tổn thất doanh thu ước tính 12.6M đ/ngày nếu không tái đặt hàng.',
-      actionSpec: {
-        buttonLabel: 'Tạo PO nhập kho',
-        targetTable: 'variant',
-        columnModified: 'is_active',
-        condition: "variant_id='AT-SM-001M'",
-        module: 'inventory',
-        actionType: 'UPDATE',
-        rollbackStrategy: 'Không',
-        targetId: 'AT-SM-001M',
-        itemSummary: 'Phát lệnh PO sản xuất khẩn 100 áo Sơ mi Oxford (M) và bật Pre-order',
-        requiresConfirmation: true,
-      },
-    },
-    {
-      id: '#TK-882',
-      module: 'cskh',
-      moduleLabel: 'CSKH',
-      priority: 'critical',
-      priorityLabel: 'Khẩn cấp P0',
-      targetObject: 'Vũ Mai Lan (VIP Platinum - LTV 18.5M)',
-      incidentSummary: 'Đổi size khẩn cấp · Cần đầm dự tiệc thứ Bảy',
-      dssRationale: 'Khách VIP Platinum (LTV > 18 triệu đ) cần đầm dự tiệc cho sự kiện thứ Bảy; rủi ro tụt CSAT và mất khách VIP nếu xử lý thường; kho đích còn 4 chiếc size L.',
-      actionSpec: {
-        buttonLabel: 'Duyệt đổi size 2h',
-        targetTable: 'support_ticket',
-        columnModified: "status='resolved', admin_note",
-        condition: "ticket_id='TK-882'",
-        module: 'cskh',
-        actionType: 'UPDATE',
-        rollbackStrategy: 'Revert về in_progress',
-        targetId: 'TK-882',
-        itemSummary: 'Duyệt cấp đầm size L giao hỏa tốc 2h cho khách VIP Platinum Vũ Mai Lan',
-        requiresConfirmation: true,
-      },
-    },
-    {
-      id: '#VLR-SUM50',
-      module: 'promotions',
-      moduleLabel: 'Giá & KM',
-      priority: 'critical',
-      priorityLabel: 'Khẩn cấp P0',
-      targetObject: 'Mã giảm 50k · Chiến dịch Summer Splash',
-      incidentSummary: 'Chạm trần 98.5% ngân sách · Burn-rate bất thường',
-      dssRationale: 'Tốc độ tiêu hao ngân sách (Burn-rate) nhanh gấp 2.4 lần dự toán; biên lợi nhuận ròng đơn áp mã âm (-3.2%); nghi vấn 8.2% đơn gom mã gian lận.',
-      actionSpec: {
-        buttonLabel: 'Tạm dừng Voucher',
-        targetTable: 'voucher',
-        columnModified: 'is_active=false',
-        condition: "code='VLR-SUM50'",
-        module: 'promotions',
-        actionType: 'UPDATE',
-        rollbackStrategy: 'is_active=true',
-        targetId: 'VLR-SUM50',
-        itemSummary: 'Tạm khóa voucher VLR-SUM50 để ngăn vượt ngân sách và bảo vệ biên lợi nhuận',
-        requiresConfirmation: true,
-      },
-    },
-    {
-      id: '#REV-409',
-      module: 'reviews',
-      moduleLabel: 'Review',
-      priority: 'critical',
-      priorityLabel: 'Khẩn cấp P0',
-      targetObject: 'Đầm Lụa Satin (Top 3 GMV toàn sàn)',
-      incidentSummary: 'Review 1 sao kèm ảnh bung chỉ trên sản phẩm Top 3',
-      dssRationale: 'Review 1 sao kèm ảnh bung chỉ, 15 lượt upvote "Hữu ích", tỷ lệ chuyển đổi sản phẩm sụt giảm 18% ngay khi review lên trang nhất.',
-      actionSpec: {
-        buttonLabel: 'Liên hệ & Đền bù',
-        targetTable: 'review',
-        columnModified: "status='hidden'",
-        condition: "review_id='REV-409'",
-        module: 'reviews',
-        actionType: 'UPDATE',
-        rollbackStrategy: "status='visible'",
-        targetId: 'REV-409',
-        itemSummary: 'Tạm ẩn review REV-409 kiểm tra kỹ thuật xưởng may và tặng voucher đền bù 200k',
-        requiresConfirmation: true,
-      },
-    },
-    {
-      id: '#REQ-ADM-04',
-      module: 'accounts',
-      moduleLabel: 'Tài khoản',
-      priority: 'warning',
-      priorityLabel: 'Cần xử lý P1',
-      targetObject: 'Trần Văn Tâm (Kho Bình Tân) · Gán quyền Operator',
-      incidentSummary: 'Chờ duyệt quyền Quản lý Kho treo > 48h',
-      dssRationale: 'Kho Bình Tân thiếu nhân sự ký lệnh xuất kho ca sáng khiến 18 đơn bị dồn ứ; yêu cầu đã có chữ ký điện tử xác nhận từ Trưởng phòng Kho vận.',
-      actionSpec: {
-        buttonLabel: 'Kích hoạt quyền',
-        targetTable: 'approval_admin_request',
-        columnModified: "status='approved'",
-        condition: "request_id='REQ-ADM-04'",
-        module: 'accounts',
-        actionType: 'approve',
-        rollbackStrategy: "status='pending'",
-        targetId: 'REQ-ADM-04',
-        itemSummary: 'Phê duyệt kích hoạt quyền Operator Kho vận cho nhân sự Trần Văn Tâm',
-        requiresConfirmation: true,
       },
     },
   ];
@@ -616,112 +502,46 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
   readonly q2Incidents: Q2IncidentItem[] = [
     {
       id: '#ORD-8812',
-      customerName: 'Vũ Văn Cường',
+      customerName: 'Hoàng Tuấn (VIP Gold)',
       region: 'south',
       regionLabel: 'Miền Nam',
-      location: 'TP. HCM',
-      bottleneckStage: 'Kho Tân Bình · preparing (54.2h)',
-      ageHours: 54.2,
-      dssRationale: 'Đơn của khách Diamond, giỏ hàng > 2.5M, trễ 6.2h so với SLA; kích hoạt ưu tiên đóng gói trước 10:00 sáng.',
+      location: 'Kho Tân Bình (TP.HCM)',
+      bottleneckStage: 'Line đóng gói Tân Bình quá tải 118%',
+      ageHours: 31,
+      dssRationale: 'Kho Tân Bình quá tải, Kho Thủ Đức dư 45% công suất và sẵn 100% SKU. Khách Gold (SLA < 24h).',
       actionSpec: {
-        buttonLabel: 'Ưu tiên đóng ngay',
+        buttonLabel: 'Điều phối kho Thủ Đức',
         targetTable: 'orders',
-        columnModified: "internal_note='PRIORITY_URGENT'",
-        condition: "status IN ('pending', 'confirmed', 'preparing')",
+        columnModified: 'internal_note',
+        condition: "status='pending'",
         module: 'orders',
         actionType: 'UPDATE',
-        rollbackStrategy: 'Không (chỉ note)',
-        targetId: '8812',
-        itemSummary: 'Gán cờ ưu tiên đóng gói đơn #ORD-8812 (Vũ Văn Cường)',
+        rollbackStrategy: 'Không',
+        targetId: 'ORD-8812',
+        itemSummary: 'Điều phối kho Thủ Đức xử lý đơn #ORD-8812 thay kho Tân Bình',
         requiresConfirmation: false,
       },
     },
     {
-      id: '#ORD-8819',
-      customerName: 'Mai Anh Tuyết',
-      region: 'south',
-      regionLabel: 'Miền Nam',
-      location: 'Bình Dương',
-      bottleneckStage: 'Kho Tân Bình · preparing (51.8h)',
-      ageHours: 51.8,
-      dssRationale: 'Điểm giao cách kho < 25km, thời gian trễ cận kề ngưỡng khách hủy; chuyển hỏa tốc Grab/Aha rẻ hơn chi phí bồi hoàn đơn.',
-      actionSpec: {
-        buttonLabel: 'Chuyển Hỏa Tốc',
-        targetTable: 'orders',
-        columnModified: 'delivery_partner_id, status',
-        condition: "status='preparing'",
-        module: 'orders',
-        actionType: 'UPDATE',
-        rollbackStrategy: 'Không',
-        targetId: '8819',
-        itemSummary: 'Chuyển đổi giao hỏa tốc AhaMove cho đơn #ORD-8819 (Mai Anh Tuyết)',
-        requiresConfirmation: true,
-      },
-    },
-    {
-      id: '#ORD-8824',
-      customerName: 'Nguyễn Long',
-      region: 'south',
-      regionLabel: 'Miền Nam',
-      location: 'Đồng Nai',
-      bottleneckStage: 'Kho Tân Bình · confirmed (49.5h)',
-      ageHours: 49.5,
-      dssRationale: 'Kho Tân Bình cạn size L, kho vệ tinh Thủ Đức còn 4 chiếc; điều phối xe máy nội bộ chỉ 45 phút thay vì chờ xe liên tỉnh 24h.',
-      actionSpec: {
-        buttonLabel: 'Điều phối Thủ Đức',
-        targetTable: 'orders',
-        columnModified: "internal_note='TRANSFER_WAREHOUSE: THUDUC'",
-        condition: "status='confirmed'",
-        module: 'orders',
-        actionType: 'UPDATE',
-        rollbackStrategy: 'Không',
-        targetId: '8824',
-        itemSummary: 'Điều phối kho Thủ Đức xuất hàng thay Tân Bình cho đơn #ORD-8824',
-        requiresConfirmation: false,
-      },
-    },
-    {
-      id: '#ORD-8829',
-      customerName: 'Lê Thị Sen',
+      id: '#ORD-8790',
+      customerName: 'Trần Minh Khang',
       region: 'north',
       regionLabel: 'Miền Bắc',
-      location: 'Hà Nội',
-      bottleneckStage: 'Kho Long Biên · preparing (48.8h)',
-      ageHours: 48.8,
-      dssRationale: 'Đơn vị 3PL chậm điều xe gom hàng ca sáng (Missed scan); phát công điện cảnh báo vi phạm SLA thu gom đến giám sát bưu cục 3PL.',
+      location: 'Kho Gia Lâm (Hà Nội)',
+      bottleneckStage: 'Chờ lấy hàng từ bưu tá Viettel Post',
+      ageHours: 26,
+      dssRationale: 'Đã đóng gói xong lúc 08h sáng; bưu tá ca trưa chưa quét nhận bưu phẩm.',
       actionSpec: {
-        buttonLabel: 'Hối 3PL lấy hàng',
+        buttonLabel: 'Hối thúc bưu tá',
         targetTable: 'orders',
-        columnModified: "internal_note='URGE_3PL: Long Bien'",
-        condition: "status='preparing'",
+        columnModified: 'internal_note',
+        condition: "status='packed'",
         module: 'orders',
         actionType: 'UPDATE',
         rollbackStrategy: 'Không',
-        targetId: '8829',
-        itemSummary: 'Gửi công điện hối thúc 3PL điều xe lấy hàng đơn #ORD-8829 tại kho Long Biên',
-        requiresConfirmation: true,
-      },
-    },
-    {
-      id: '#ORD-8833',
-      customerName: 'Bùi Văn Hảo',
-      region: 'central',
-      regionLabel: 'Miền Trung',
-      location: 'Đà Nẵng',
-      bottleneckStage: 'Kho Hòa Khánh · preparing (48.2h)',
-      ageHours: 48.2,
-      dssRationale: 'Đơn vi phạm SLA > 48h tại cụm Miền Trung; kích hoạt quy trình CSKH tự động gửi mã voucher đền bù 50k vào ví khách.',
-      actionSpec: {
-        buttonLabel: 'Bắn voucher xin lỗi',
-        targetTable: 'notifications',
-        columnModified: "type='sla_compensation', title, content",
-        condition: 'order_id trong danh sách trễ SLA',
-        module: 'orders',
-        actionType: 'create',
-        rollbackStrategy: 'Không',
-        targetId: '8833',
-        itemSummary: 'Bắn thông báo và tặng voucher xin lỗi 50k cho khách Bùi Văn Hảo (#ORD-8833)',
-        requiresConfirmation: true,
+        targetId: 'ORD-8790',
+        itemSummary: 'Phát yêu cầu hối thúc điều phối bưu tá Viettel Post lấy hàng đơn #ORD-8790',
+        requiresConfirmation: false,
       },
     },
   ];
@@ -788,14 +608,14 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
     {
       provider: 'sepay',
       name: 'SePay – Chuyển khoản',
-      method: 'VietQR 24/7 Webhook IPN',
+      method: 'VietQR Webhook Reconciliation',
       totalTx: 45,
       successTx: 44,
       failedTx: 1,
       discrepancyTx: 0,
       successRate: 97.8,
-      revenueAmount: 48500000,
-      statusText: 'Độ tin cậy cao nhất',
+      revenueAmount: 49500000,
+      statusText: 'Khớp sổ 100%',
       statusBadge: 'success',
     },
   ]);
@@ -846,132 +666,28 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
   readonly q3Incidents: Q3IncidentItem[] = [
     {
       id: 'PAY-991',
-      orderId: '#8801',
-      customerName: 'Hoàng Thu Trang (Gold VIP)',
+      orderId: '#ORD-8902',
+      customerName: 'Nguyễn Thị Mai',
       provider: 'vnpay',
-      providerLabel: 'VNPay – QR Bank',
+      providerLabel: 'VNPay QR',
       orderAmount: 850000,
       gatewayAmount: 800000,
       discrepancy: 50000,
-      responseCode: 'Code 00 (OK)',
-      errorNature: 'Lệch tiền đối soát 50.000 đ',
+      responseCode: 'Code 99 (Chênh lệch)',
+      errorNature: 'Khách áp voucher sàn 50k vào thời điểm IPN webhook chưa ghi nhận',
       category: 'reconciliation_discrepancy',
-      dssRationale: 'Khách VIP LTV 14.5M, đơn chờ 3.5h sắp quá SLA 4h. Chênh lệch 50k < hạn mức 100k Quỹ Marketing; duyệt bù quỹ MKT để xuất hàng ngay.',
+      dssRationale: 'Khách đã thanh toán 800k; mã giảm giá 50k hợp lệ tại thời điểm đặt hàng. Cần bù trừ quỹ khuyến mại.',
       actionSpec: {
-        buttonLabel: 'Khớp lệnh',
-        targetTable: 'payment, orders',
-        columnModified: "payment.payment_status='paid', payment.has_discrepancy=FALSE, orders.status='confirmed'",
-        condition: "payment.has_discrepancy = TRUE OR payment.payment_status = 'discrepancy'",
-        module: 'payment',
-        actionType: 'UPDATE',
-        rollbackStrategy: 'Revert payment_status về discrepancy, has_discrepancy=TRUE',
+        buttonLabel: 'Duyệt bù trừ 50k & Xuất kho',
+        targetTable: 'order_payment',
+        columnModified: 'status=PAID, reconciliation=RESOLVED',
+        condition: "order_id='ORD-8902'",
+        module: 'finance',
+        actionType: 'approve',
+        rollbackStrategy: 'Revert về HOLD',
         targetId: 'PAY-991',
-        itemSummary: 'Khớp lệnh đối soát thủ công PAY-991 (tiền cổng 800k / tiền đơn 850k lệch do voucher)',
+        itemSummary: 'Kế toán duyệt ghi nhận bù trừ 50k từ Quỹ Khuyến Mãi cho đơn #ORD-8902',
         requiresConfirmation: true,
-      },
-    },
-    {
-      id: 'PAY-982',
-      orderId: '#8789',
-      customerName: 'Nguyễn Minh Anh',
-      provider: 'stripe',
-      providerLabel: 'VNPay – Thẻ Visa',
-      orderAmount: 1200000,
-      gatewayAmount: 0,
-      discrepancy: 0,
-      responseCode: 'Code 24',
-      errorNature: 'Khách hủy sau 80s chờ SMS OTP',
-      category: 'customer_cancel',
-      dssRationale: 'Khách quen, đơn 1.2M có 3 SP hot chỉ còn 2 cái tồn kho. Tỷ lệ mua lại 90%; gửi link SePay QR không cần OTP thẻ, giữ giỏ hàng 60m.',
-      actionSpec: {
-        buttonLabel: 'Gửi lại TT',
-        targetTable: 'notifications',
-        columnModified: "id, user_id, type='payment_reminder', link, is_read=FALSE",
-        condition: "payment.payment_status IN ('pending', 'failed')",
-        module: 'payment',
-        actionType: 'create',
-        rollbackStrategy: 'Không',
-        targetId: 'PAY-982',
-        itemSummary: 'Gửi thông báo kèm link thanh toán mới cho đơn #8789',
-        requiresConfirmation: false,
-      },
-    },
-    {
-      id: 'PAY-976',
-      orderId: '#8774',
-      customerName: 'Trần Đức Toàn',
-      provider: 'vnpay',
-      providerLabel: 'VNPay – QR Bank',
-      orderAmount: 650000,
-      gatewayAmount: 0,
-      discrepancy: 0,
-      responseCode: 'Code 75',
-      errorNature: 'Lỗi mạng / IPN Timeout (chờ 35m)',
-      category: 'gateway_timeout',
-      dssRationale: 'Khách gửi ảnh trừ tiền thẻ Vietcombank, đơn chờ 35m > 15m; gọi QueryDR API đối chiếu VNPay chống hủy nhầm đơn hàng.',
-      actionSpec: {
-        buttonLabel: 'Hỏi Cổng',
-        targetTable: 'email_outbox',
-        columnModified: "template_code='query_gateway_ipn', subject, body",
-        condition: "gateway='vnpay'",
-        module: 'payment',
-        actionType: 'create',
-        rollbackStrategy: 'Không',
-        targetId: 'PAY-976',
-        itemSummary: 'Gửi truy vấn đối soát tới VNPay kiểm tra giao dịch PAY-976 bị timeout IPN',
-        requiresConfirmation: false,
-      },
-    },
-    {
-      id: 'PAY-971',
-      orderId: '#8762',
-      customerName: 'Lê Thùy Dung',
-      provider: 'sepay',
-      providerLabel: 'SePay – Chuyển khoản',
-      orderAmount: 2100000,
-      gatewayAmount: 0,
-      discrepancy: 0,
-      responseCode: 'Code 24',
-      errorNature: 'Khách vãng lai bỏ phiên > 120m',
-      category: 'customer_cancel',
-      dssRationale: 'Khách bỏ phiên > 120m, đang giam Áo Dạ Tweed cuối cùng tại kho Tân Bình khiến 2 khách khác không mua được; hủy phiên giải phóng kho.',
-      actionSpec: {
-        buttonLabel: 'Hủy phiên',
-        targetTable: 'payment, orders, order_status_history',
-        columnModified: "payment.payment_status='failed', orders.status='cancelled'",
-        condition: "payment.payment_status IN ('pending', 'discrepancy') AND orders.status = 'pending'",
-        module: 'payment',
-        actionType: 'UPDATE',
-        rollbackStrategy: 'Không (đã giải phóng kho)',
-        targetId: 'PAY-971',
-        itemSummary: 'Hủy phiên thanh toán quá hạn PAY-971 và hủy đơn hàng #8762',
-        requiresConfirmation: true,
-      },
-    },
-    {
-      id: 'PAY-965',
-      orderId: '#8750',
-      customerName: 'Phạm Quỳnh Chi',
-      provider: 'momo',
-      providerLabel: 'MoMo – Ví điện tử',
-      orderAmount: 450000,
-      gatewayAmount: 0,
-      discrepancy: 0,
-      responseCode: 'Code 51',
-      errorNature: 'Ví MoMo thiếu số dư',
-      category: 'insufficient_funds',
-      dssRationale: 'Khách Silver thiếu số dư ví MoMo, điểm CSAT 5 sao; gửi thông báo kèm tùy chọn chuyển 1 chạm sang COD.',
-      actionSpec: {
-        buttonLabel: 'Nhắc nạp',
-        targetTable: 'notifications',
-        columnModified: "id, user_id, type='payment_reminder', is_read=FALSE",
-        condition: "payment.payment_status = 'failed'",
-        module: 'payment',
-        actionType: 'create',
-        rollbackStrategy: 'Không',
-        targetId: 'PAY-965',
-        itemSummary: 'Gửi thông báo nhắc nạp ví MoMo hoặc đổi sang COD cho đơn #8750',
-        requiresConfirmation: false,
       },
     },
   ];
@@ -990,7 +706,7 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
   readonly q3TotalDiscrepancy = computed(() => this.q3Gateways().reduce((s, g) => s + g.discrepancyTx, 0));
   readonly q3OverallSuccessPct = computed(() => {
     const total = this.q3TotalTx();
-    if (total === 0) return 94.1;
+    if (total === 0) return 0;
     return Math.round((this.q3TotalSuccess() / total) * 1000) / 10;
   });
   readonly q3TotalSettlementAmount = computed(() => this.q3Gateways().reduce((s, g) => s + g.revenueAmount, 0));
@@ -1017,7 +733,7 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
       total: 15,
       latePct: 60.0,
       avgHours: 32.3,
-      statusText: 'Báo động trễ hạn 60% ',
+      statusText: 'Báo động trễ hạn 60%',
       statusBadge: 'danger',
     },
   ]);
@@ -1033,11 +749,11 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
     },
     {
       task: 'Trả hàng hoàn tiền',
-      avgHours: 26.0,
+      avgHours: 28.0,
       thresholdHours: 24,
       status: 'over_sla',
-      statusText: 'Quá trần SLA (+2.0h)',
-      barColor: '#7D263D',
+      statusText: 'Quá SLA (+4.0h)',
+      barColor: '#B4233D',
     },
     {
       task: 'Tư vấn chọn size',
@@ -1121,19 +837,19 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
       ageHours: 42.0,
       csat: '2/5 ★',
       priority: 'high',
-      priorityLabel: 'Ưu tiên Cao',
-      dssRationale: 'Khách VIP LTV 16.5M, tồn đọng 42h (quá SLA 24h +18h), CSAT sụt giảm 2/5 ★. Kho sẵn tồn 12 cái; duyệt xuất đổi trước không chờ hàng cũ thu hồi.',
+      priorityLabel: 'Ưu tiên cao',
+      dssRationale: 'Khách VIP mua nhiều lần phản ánh đổi size gấp, thời gian chờ đã 42h vượt SLA.',
       actionSpec: {
-        buttonLabel: 'Duyệt đổi size',
-        targetTable: 'return_exchange',
-        columnModified: "status='approved', resolved_at=now(), updated_at=now(), version=version+1",
-        condition: "status = 'pending' AND return_type = 'exchange'",
+        buttonLabel: 'Duyệt đổi size & điều phối giao hàng',
+        targetTable: 'order_returns',
+        columnModified: 'status=APPROVED, warehouse=TAN_BINH',
+        condition: "id='RET-104'",
         module: 'returns',
         actionType: 'approve',
-        rollbackStrategy: 'Cho phép revert về pending nếu bưu tá chưa lấy hàng',
+        rollbackStrategy: 'Hủy phiếu đổi hàng',
         targetId: 'RET-104',
-        itemSummary: 'Duyệt nhanh đổi size S -> M đơn RET-104 cho Nguyễn Hằng (Phím tắt A)',
-        requiresConfirmation: true,
+        itemSummary: 'Duyệt yêu cầu đổi size S sang M cho đơn #ORD-8804 của khách Nguyễn Hằng',
+        requiresConfirmation: false,
       },
     },
     {
@@ -1148,126 +864,18 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
       ageHours: 36.0,
       csat: '3/5 ★',
       priority: 'high',
-      priorityLabel: 'Ưu tiên Cao',
-      dssRationale: 'Size L chỉ còn đúng 2 chiếc tại kho Tân Bình, nếu chờ nhận lại hàng cũ mới duyệt sẽ hết sạch hàng khiến khách phải hủy đổi; duyệt giữ hàng xuất trước.',
+      priorityLabel: 'Ưu tiên cao',
+      dssRationale: 'Tồn kho size L chỉ còn 2 cái cuối, cần giữ chỗ trước khi khách khác đặt trên web.',
       actionSpec: {
-        buttonLabel: 'Duyệt đổi size',
-        targetTable: 'return_exchange',
-        columnModified: "status='approved', resolved_at=now(), updated_at=now(), version=version+1",
-        condition: "status = 'pending' AND return_type = 'exchange'",
+        buttonLabel: 'Giữ hàng kho & duyệt đổi',
+        targetTable: 'order_returns',
+        columnModified: 'status=APPROVED, hold_stock=TRUE',
+        condition: "id='RET-108'",
         module: 'returns',
         actionType: 'approve',
-        rollbackStrategy: 'Cho phép revert về pending nếu bưu tá chưa lấy hàng',
+        rollbackStrategy: 'Mở lại tồn kho',
         targetId: 'RET-108',
-        itemSummary: 'Duyệt đổi size M -> L đơn RET-108 (Trần Mai - Đầm lụa nơ)',
-        requiresConfirmation: true,
-      },
-    },
-    {
-      id: 'RET-112',
-      category: 'wrong_size',
-      categoryLabel: 'Sai size / Mặc không vừa',
-      customerName: 'Bùi Lan',
-      vipTier: 'Khách quen (LTV 4.5M)',
-      orderCode: '#ORD-8765',
-      productName: 'Chân váy chữ A',
-      itemDetails: 'Đổi size S → M (Đã khiếu nại lần 2)',
-      ageHours: 28.0,
-      csat: '1/5 ★',
-      priority: 'high',
-      priorityLabel: 'Ưu tiên Cao',
-      dssRationale: 'Khách đã gọi tổng đài nhắc lần 2, đánh giá CSAT 1/5 ★ vì chờ bưu tá lấy hàng quá 24h; duyệt phát hành vận đơn xuất trước cứu vãn churn.',
-      actionSpec: {
-        buttonLabel: 'Duyệt đổi size',
-        targetTable: 'return_exchange',
-        columnModified: "status='approved', resolved_at=now(), updated_at=now(), version=version+1",
-        condition: "status = 'pending' AND return_type = 'exchange'",
-        module: 'returns',
-        actionType: 'approve',
-        rollbackStrategy: 'Cho phép revert về pending nếu bưu tá chưa lấy hàng',
-        targetId: 'RET-112',
-        itemSummary: 'Duyệt đổi size S -> M đơn RET-112 (Bùi Lan - Chân váy chữ A)',
-        requiresConfirmation: true,
-      },
-    },
-    {
-      id: 'RET-130',
-      category: 'defect',
-      categoryLabel: 'Lỗi sản xuất / may mặc',
-      customerName: 'Vũ Hoàng',
-      vipTier: 'Gold VIP (LTV 14.0M)',
-      orderCode: '#ORD-8710',
-      productName: 'Áo Blazer Linen',
-      itemDetails: 'Rách đường chỉ may sườn (Ảnh thẩm định OK)',
-      ageHours: 26.0,
-      csat: '2/5 ★',
-      priority: 'high',
-      priorityLabel: 'Ưu tiên Cao',
-      dssRationale: 'Hình ảnh bằng chứng do khách tải lên đạt chuẩn QC (đứt chỉ may nách áo); duyệt đổi mới 1-1 miễn phí và thu hồi hàng lỗi về thanh lý.',
-      actionSpec: {
-        buttonLabel: 'Đổi mới 1-1',
-        targetTable: 'return_exchange, orders',
-        columnModified: "status='approved', replacement_dispatch=TRUE",
-        condition: "status = 'pending' AND return_type = 'exchange'",
-        module: 'returns',
-        actionType: 'approve',
-        rollbackStrategy: 'Không',
-        targetId: 'RET-130',
-        itemSummary: 'Duyệt xuất bù đổi mới 1-1 miễn phí áo Blazer cho Vũ Hoàng (#ORD-8710)',
-        requiresConfirmation: true,
-      },
-    },
-    {
-      id: 'TCK-302',
-      category: 'late_delivery',
-      categoryLabel: 'Chậm giao vận 3PL',
-      customerName: 'Lê Thảo',
-      vipTier: 'Khách mới (LTV 1.8M)',
-      orderCode: '#ORD-8692',
-      productName: 'Set bộ mùa hè',
-      itemDetails: 'GHTK lưu bưu cục Tân Bình > 4 ngày',
-      ageHours: 20.0,
-      csat: '2/5 ★',
-      priority: 'high',
-      priorityLabel: 'Ưu tiên Cao',
-      dssRationale: 'Đơn hàng bị bưu cục GHTK Tân Bình giữ lưu kho 4 ngày không đi phát; khách dọa hủy đơn. Phát công điện yêu cầu 3PL giao trong 4h.',
-      actionSpec: {
-        buttonLabel: 'Hối 3PL hỏa tốc',
-        targetTable: 'support_ticket, carrier_logs',
-        columnModified: "priority='urgent', carrier_escalation=TRUE",
-        condition: "status IN ('open', 'processing')",
-        module: 'cskh',
-        actionType: 'UPDATE',
-        rollbackStrategy: 'Không',
-        targetId: 'TCK-302',
-        itemSummary: 'Phát điện hối thúc 3PL giao vận GHTK phát đơn #ORD-8692 trong 4h',
-        requiresConfirmation: false,
-      },
-    },
-    {
-      id: 'TCK-315',
-      category: 'missing_item',
-      categoryLabel: 'Giao thiếu phụ kiện / quà tặng',
-      customerName: 'Trịnh Hà',
-      vipTier: 'Silver VIP (LTV 6.5M)',
-      orderCode: '#ORD-8650',
-      productName: 'Đầm Vest Cao Cấp',
-      itemDetails: 'Thiếu thắt lưng da đi kèm bộ',
-      ageHours: 19.0,
-      csat: '3/5 ★',
-      priority: 'high',
-      priorityLabel: 'Ưu tiên Cao',
-      dssRationale: 'Kho đóng gói sót thắt lưng da tặng kèm đầm; khách cần dự tiệc cuối tuần; tạo lệnh xuất kho ship hỏa tốc giao bù trong ngày.',
-      actionSpec: {
-        buttonLabel: 'Giao bù hỏa tốc',
-        targetTable: 'support_ticket, orders',
-        columnModified: "status='resolved', dispatch_supplement=TRUE",
-        condition: "status IN ('open', 'processing')",
-        module: 'cskh',
-        actionType: 'create',
-        rollbackStrategy: 'Không',
-        targetId: 'TCK-315',
-        itemSummary: 'Tạo lệnh giao bù phụ kiện thắt lưng miễn phí trong ngày cho Trịnh Hà',
+        itemSummary: 'Giữ 1 đầm lụa nơ cổ size L và duyệt đổi cho khách Trần Mai',
         requiresConfirmation: false,
       },
     },
@@ -1283,7 +891,7 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
   readonly q4TotalOverdue = computed(() => this.q4QueueStats().reduce((s, q) => s + q.outSla, 0));
   readonly q4OverallSlaCompliance = computed(() => {
     const total = this.q4TotalQueue();
-    if (total === 0) return 68.8;
+    if (total === 0) return 72.5;
     return Math.round(((total - this.q4TotalOverdue()) / total) * 1000) / 10;
   });
   readonly q5Tab = signal<'alerts_table' | 'category' | 'size_color'>('alerts_table');
@@ -1325,20 +933,10 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
       categoryLabel: 'Chân Váy',
       outOfStock: 2,
       critical: 3,
-      warning: 1,
-      totalDeficit: 6,
-      percentage: 8.8,
-      statusText: 'Tồn đọng thấp',
-    },
-    {
-      category: 'phu_kien',
-      categoryLabel: 'Phụ kiện',
-      outOfStock: 1,
-      critical: 2,
-      warning: 1,
-      totalDeficit: 4,
-      percentage: 5.9,
-      statusText: 'Ổn định',
+      warning: 5,
+      totalDeficit: 10,
+      percentage: 14.7,
+      statusText: 'Cần bổ sung size S',
     },
   ]);
 
@@ -1376,158 +974,58 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
       riskLevel: 'critical',
       riskLabel: 'Cạn trong 16h tới (Tồn 2 cái)',
     },
-    {
-      sku: 'QT-TA-002M',
-      productName: 'Quần Tây Slimfit Công Sở',
-      variantDetails: 'Ghi xám · Size 31',
-      currentStock: 3,
-      salesVelocity7d: 18,
-      daysUntilOos: 1.2,
-      lostRevenueEst: 4200000,
-      riskLevel: 'critical',
-      riskLabel: 'Cạn trong 28h tới (Tồn 3 cái)',
-    },
-    {
-      sku: 'VLR-DV-032',
-      productName: 'Chân Váy Quấn Ngắn',
-      variantDetails: 'Sage · Size XS',
-      currentStock: 0,
-      salesVelocity7d: 14,
-      daysUntilOos: 0,
-      lostRevenueEst: 5460000,
-      riskLevel: 'out_of_stock',
-      riskLabel: 'Đã cạn kho (Tồn 0 cái)',
-    },
   ]);
 
   readonly q5ActionItems: Q5InventoryActionItem[] = [
     {
-      id: 'ACT-Q5-01',
-      sku: 'AT-SM-001M',
-      productName: 'Áo Sơ mi Oxford Basic',
-      category: 'ao_somi',
-      categoryLabel: 'Áo Sơ mi',
-      variantDetails: 'Trắng · Size M',
+      id: 'ACT-01',
+      sku: 'AT-CR-001',
+      productName: 'Áo Crop Top Linen Cổ Vuông',
+      category: 'ao',
+      categoryLabel: 'Áo',
+      variantDetails: 'Trắng / S',
       currentStock: 0,
-      lowStockThreshold: 5,
-      salesVelocity7d: 35,
+      lowStockThreshold: 10,
+      salesVelocity7d: 4.8,
       status: 'out_of_stock',
-      statusLabel: 'Cạn sạch (0 cái)',
-      dssRationale: 'Tốc độ bán 35 cái/7N (Top 1 toàn sàn), đứt hàng 14h qua khiến mất ước tính 12 đơn giỏ hàng. Cần kích hoạt lệnh PO khẩn cấp đặt xưởng 100 cái (Phím tắt P).',
+      statusLabel: 'Cháy hàng',
+      dssRationale: 'Tốc độ bán 4.8 chiếc/ngày, dự kiến mất 4.5M doanh thu nếu không bổ sung trong tuần.',
       actionSpec: {
-        buttonLabel: 'PO Đặt xưởng 100 cái',
-        targetTable: 'notifications',
-        columnModified: "id, user_id, type='inventory_alert', title, content, link, is_read=FALSE, created_at=now()",
-        condition: 'variant.stock_quantity <= variant.low_stock_threshold',
+        buttonLabel: 'Đặt may bổ sung 50 chiếc',
+        targetTable: 'purchase_orders',
+        columnModified: 'status=DRAFT',
+        condition: "sku='AT-CR-001-WHT-S'",
         module: 'inventory',
         actionType: 'create',
-        rollbackStrategy: 'Không',
-        targetId: 'AT-SM-001M',
-        itemSummary: 'Lên đơn PO nhập khẩn cấp 100 áo Sơ mi Oxford trắng size M với Xưởng May Q12',
+        rollbackStrategy: 'Hủy đơn mua',
+        targetId: 'PO-AT-CR-001',
+        itemSummary: 'Tạo phiếu đặt sản xuất 50 áo crop top AT-CR-001 size S màu Trắng',
         requiresConfirmation: false,
       },
     },
     {
-      id: 'ACT-Q5-02',
-      sku: 'VLR-DV-032',
-      productName: 'Chân Váy Quấn Ngắn',
-      category: 'chan_vay',
-      categoryLabel: 'Chân Váy',
-      variantDetails: 'Sage · Size XS',
-      currentStock: 0,
-      lowStockThreshold: 5,
-      salesVelocity7d: 14,
-      status: 'out_of_stock',
-      statusLabel: 'Cạn sạch (0 cái)',
-      dssRationale: 'Xưởng may báo chậm nguyên liệu vải Sage đến cuối tháng mới tái sản xuất; tạm ẩn biến thể trên storefront để khách không thêm vào giỏ hàng.',
-      actionSpec: {
-        buttonLabel: 'Ẩn SKU khỏi web',
-        targetTable: 'variant',
-        columnModified: 'is_active=false, updated_at=now()',
-        condition: "sku='VLR-DV-032'",
-        module: 'inventory',
-        actionType: 'UPDATE',
-        rollbackStrategy: 'is_active=true',
-        targetId: 'VLR-DV-032',
-        itemSummary: 'Tạm ẩn biến thể Chân Váy Quấn Ngắn XS Sage khỏi storefront',
-        requiresConfirmation: true,
-      },
-    },
-    {
-      id: 'ACT-Q5-03',
-      sku: 'DM-CS-004L',
-      productName: 'Đầm Lụa Nơ Cổ',
-      category: 'dam_congso',
-      categoryLabel: 'Đầm Công sở',
-      variantDetails: 'Đen · Size L',
-      currentStock: 2,
-      lowStockThreshold: 5,
-      salesVelocity7d: 20,
-      status: 'critical',
-      statusLabel: 'Cực hạn (2 cái)',
-      dssRationale: 'Chỉ còn 2 chiếc tại kho Tân Bình, 1 khách VIP đang yêu cầu đổi size RET-108; nâng ngưỡng an toàn lên 15 để hệ thống tự động ưu tiên giữ hàng.',
-      actionSpec: {
-        buttonLabel: 'Nâng ngưỡng an toàn 15',
-        targetTable: 'variant',
-        columnModified: 'low_stock_threshold=15, updated_at=now(), version=version+1',
-        condition: 'low_stock_threshold >= 0',
-        module: 'inventory',
-        actionType: 'UPDATE',
-        rollbackStrategy: 'low_stock_threshold=5',
-        targetId: 'DM-CS-004L',
-        itemSummary: 'Tăng ngưỡng cảnh báo an toàn từ 5 lên 15 cái cho SKU Đầm lụa size L',
-        requiresConfirmation: false,
-      },
-    },
-    {
-      id: 'ACT-Q5-04',
-      sku: 'QT-TA-002M',
-      productName: 'Quần Tây Slimfit',
-      category: 'quan_tay',
-      categoryLabel: 'Quần Tây',
-      variantDetails: 'Ghi xám · Size 31',
+      id: 'ACT-02',
+      sku: 'BL-NU-002',
+      productName: 'Áo Blazer Nữ Thiết Kế Cổ Sam',
+      category: 'ao',
+      categoryLabel: 'Áo',
+      variantDetails: 'Đen / M',
       currentStock: 3,
-      lowStockThreshold: 5,
-      salesVelocity7d: 18,
+      lowStockThreshold: 12,
+      salesVelocity7d: 3.2,
       status: 'critical',
-      statusLabel: 'Cực hạn (3 cái)',
-      dssRationale: 'Tốc độ bán 2.6 cái/ngày, nguy cơ cạn trong 28h; kho Thủ Đức còn tồn 15 cái, điều chuyển 10 cái sang kho Tân Bình đáp ứng giao hỏa tốc.',
+      statusLabel: 'Báo động',
+      dssRationale: 'Tồn kho chỉ còn 3 áo, với tốc độ 3.2 áo/ngày sẽ cháy hàng trong vòng 24 giờ tới.',
       actionSpec: {
-        buttonLabel: 'Điều phối liên kho',
-        targetTable: 'stock_transfer',
-        columnModified: "from_warehouse='THUDUC', to_warehouse='TANBINH', quantity=10",
-        condition: "sku='QT-TA-002M'",
+        buttonLabel: 'Chuyển hàng từ kho Thủ Đức',
+        targetTable: 'inventory_transfer',
+        columnModified: 'status=PENDING',
+        condition: "sku='BL-NU-002-BLK-M'",
         module: 'inventory',
         actionType: 'create',
         rollbackStrategy: 'Hủy phiếu điều chuyển',
-        targetId: 'QT-TA-002M',
-        itemSummary: 'Lập lệnh điều chuyển 10 Quần Tây Slimfit size 31 từ kho Thủ Đức về Tân Bình',
-        requiresConfirmation: false,
-      },
-    },
-    {
-      id: 'ACT-Q5-05',
-      sku: 'VLR-AK-023',
-      productName: 'Áo Khoác Bomber',
-      category: 'ao_somi',
-      categoryLabel: 'Áo Khoác',
-      variantDetails: 'Champagne · Size XS',
-      currentStock: 0,
-      lowStockThreshold: 5,
-      salesVelocity7d: 12,
-      status: 'out_of_stock',
-      statusLabel: 'Cạn sạch (0 cái)',
-      dssRationale: 'Sản phẩm chủ lực trong chương trình Livestream cuối tuần, cần lên lệnh PO gia công bổ sung 50 cái giao trước thứ 6.',
-      actionSpec: {
-        buttonLabel: 'PO Bổ sung 50 cái',
-        targetTable: 'notifications',
-        columnModified: "id, user_id, type='inventory_alert', title, content",
-        condition: "sku='VLR-AK-023'",
-        module: 'inventory',
-        actionType: 'create',
-        rollbackStrategy: 'Không',
-        targetId: 'VLR-AK-023',
-        itemSummary: 'Tạo phiếu PO gia công bổ sung 50 Áo Khoác Bomber Champagne XS',
+        targetId: 'TRF-BL-NU-002',
+        itemSummary: 'Điều chuyển 20 áo blazer BL-NU-002 từ kho Thủ Đức sang kho Tân Bình',
         requiresConfirmation: false,
       },
     },
@@ -1543,7 +1041,10 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
 
   readonly q5TotalDeficit = computed(() => this.q5CategoryStats().reduce((s, c) => s + c.totalDeficit, 0));
   readonly q5TotalOutOfStock = computed(() => this.q5CategoryStats().reduce((s, c) => s + c.outOfStock, 0));
-  readonly q5OverallOosPct = computed(() => 3.2);
+  readonly q5OverallOosPct = computed(() => {
+    const total = this.q5TotalDeficit();
+    return total > 0 ? Math.round((this.q5TotalOutOfStock() / total) * 1000) / 10 : 3.8;
+  });
   readonly Math = Math;
   readonly b1Tab = signal<'time_combo' | 'price_bar' | 'payment_stacked'>('time_combo');
   readonly b1SelectedDay = signal<'day12' | 'day25' | 'day5'>('day12');
@@ -1687,7 +1188,7 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
 
   // Dynamic 5 KPI Signals kết nối trực tiếp từ OLTP Queues và Star Schema
   readonly totalSystemIssues = computed(() => {
-    return this.moduleHealth()?.total_issues ?? 34;
+    return this.moduleHealth()?.total_issues ?? 0;
   });
 
   readonly totalProcessingOrders = computed(() => {
@@ -1695,18 +1196,18 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
     if (sla && sla.length > 0) {
       return sla.reduce((sum, item) => sum + (item.total_orders || 0), 0);
     }
-    return this.ops()?.pendingOrders || 305;
+    return this.ops()?.pendingOrders ?? 0;
   });
 
   readonly totalPaymentErrors = computed(() => {
-    return this.ops()?.paymentErrors ?? 18;
+    return this.ops()?.paymentErrors ?? 0;
   });
 
   readonly totalCskhQueue = computed(() => {
     const tickets = this.ops()?.openSupportTickets ?? 0;
     const returns = this.ops()?.openReturns ?? 0;
     const sum = tickets + returns;
-    return sum > 0 ? sum : 48;
+    return sum;
   });
 
   readonly totalLowStockVariants = computed(() => {
@@ -1714,7 +1215,7 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
     if (alerts && alerts.length > 0) {
       return alerts.length;
     }
-    return this.ops()?.lowStockProducts ?? 10;
+    return this.ops()?.lowStockProducts ?? 0;
   });
 
   // ==============================================================
@@ -1726,9 +1227,9 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
     const channelFilter = filters.find(f => f.field === 'channel');
     const bucketFilter = filters.find(f => f.field === 'bucket');
 
-    let revenue = this.business().revenue || 1_500_000_000;
-    let orders = this.business().orderCount || 2150;
-    let growth = this.comparisons().revenuePct ?? 15.4;
+    let revenue = this.business().revenue || 0;
+    let orders = this.business().orderCount || 0;
+    let growth = this.comparisons().revenuePct ?? 0;
 
     if (priceFilter) {
       if (priceFilter.value.includes('< 300k')) {
@@ -3810,70 +3311,58 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
 
   private buildDefaultFallbackOption(tab: 'time_combo' | 'price_bar' | 'payment_stacked'): echarts.EChartsOption {
     if (tab === 'price_bar') {
-      return {
-        grid: { top: 28, left: 10, right: 16, bottom: 4, containLabel: true },
-        xAxis: {
-          type: 'value',
-          axisLabel: { fontSize: 10, color: '#94A3B8' },
-          splitLine: { lineStyle: { type: 'dashed', color: '#F1F5F9' } }
-        },
-        yAxis: {
-          type: 'category',
-          data: ['< 200k', '200k - 500k', '500k - 1tr', '> 1tr'],
-          axisLabel: { fontSize: 10.5, color: '#94A3B8' },
-          axisLine: { lineStyle: { color: '#CBD5E1' } }
-        },
-        series: []
-      };
+      const tiers: B1PriceTierRow[] = this.b1PriceTiersData().map((t) => ({
+        tier_code: t.label.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+        tier_label: t.label,
+        tier_metric_val: t.val * 1_000_000,
+        tier_revenue: t.revenue * 1_000_000,
+        tier_profit: t.profit * 1_000_000,
+        tier_orders: t.orders,
+        margin_pct: t.marginPct,
+        segments: t.segs.map((s) => ({
+          dimension_name: s.name,
+          metric_val: s.val * 1_000_000,
+          revenue: s.val * 1_000_000,
+          profit: Math.round(s.val * 0.45 * 1_000_000),
+          share_pct: t.val > 0 ? Math.round((s.val / t.val) * 1000) / 10 : 0,
+        })),
+      }));
+      return this.buildPriceTierOption(tiers, this.b1Measure());
     }
 
     if (tab === 'payment_stacked') {
-      return {
-        grid: { top: 16, left: 10, right: 28, bottom: 4, containLabel: true },
-        xAxis: {
-          type: 'value',
-          max: 100,
-          axisLabel: { formatter: '{value}%', fontSize: 10, color: '#94A3B8' },
-          splitLine: { lineStyle: { type: 'dashed', color: '#F1F5F9' } }
-        },
-        yAxis: {
-          type: 'category',
-          data: ['COD', 'QR Bank', 'VNPay', 'MoMo'],
-          axisLabel: { fontSize: 10.5, color: '#94A3B8' },
-          axisLine: { lineStyle: { color: '#CBD5E1' } }
-        },
-        series: []
-      };
+      const channels: B1PaymentChannelRow[] = this.b1PaymentChannelsData().map((c) => ({
+        code: c.code,
+        name: c.name,
+        revenue: c.revenue * 1_000_000,
+        total_orders: c.orders,
+        gateway_fee_rate: c.gatewayFeeRate,
+        return_rate_pct: c.returnRatePct,
+        net_cash_flow: c.netCashFlow * 1_000_000,
+        share_pct: parseFloat(c.pct.replace('%', '')) || 0,
+      }));
+      return this.buildPaymentChannelOption(channels);
     }
 
-    return {
-      grid: { top: 28, left: 10, right: 10, bottom: 4, containLabel: true },
-      xAxis: {
-        type: 'category',
-        data: ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'],
-        axisLine: { lineStyle: { color: '#CBD5E1' } },
-        axisLabel: { fontSize: 10, color: '#94A3B8' }
-      },
-      yAxis: [
-        {
-          type: 'value',
-          name: 'VND',
-          nameTextStyle: { fontSize: 9.5, color: '#94A3B8' },
-          axisLabel: { fontSize: 10, color: '#94A3B8' },
-          splitLine: { lineStyle: { type: 'dashed', color: '#F1F5F9' } }
-        },
-        {
-          type: 'value',
-          name: '%',
-          min: 0,
-          max: 100,
-          nameTextStyle: { fontSize: 9.5, color: '#94A3B8' },
-          axisLabel: { fontSize: 10, color: '#94A3B8' },
-          splitLine: { show: false }
-        }
-      ],
-      series: []
-    };
+    const grain = this.b1Grain();
+    const trend = this.b1GrainTrend();
+    const now = new Date();
+    const rows: B1TimeSpineRow[] = trend.map((t, idx) => {
+      const dayOffset = (trend.length - 1 - idx) * (grain === 'week' ? 7 : (grain === 'day' ? 1 : 30));
+      const d = new Date(now.getTime() - dayOffset * 86400000);
+      const bucketDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return {
+        bucket_date: bucketDate,
+        revenue: t.revenue * 1_000_000,
+        cogs: (t.cogs ?? Math.round(t.revenue * 0.52)) * 1_000_000,
+        profit: (t.profit ?? Math.round(t.revenue * 0.48)) * 1_000_000,
+        metric_val: (this.b1Measure() === 'profit' ? (t.profit ?? t.revenue * 0.48) : t.revenue) * 1_000_000,
+        order_count: t.orders ?? 400,
+        prev_metric_val: (t.compare?.revenue ?? Math.round(t.revenue * 0.95)) * 1_000_000,
+        margin_pct: t.marginPct ?? 48,
+      };
+    });
+    return this.buildTimeComboOption(rows, this.b1Measure(), grain);
   }
 
   private buildTimeComboOption(

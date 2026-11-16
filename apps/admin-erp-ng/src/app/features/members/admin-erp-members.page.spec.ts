@@ -187,7 +187,7 @@ describe('AdminErpMembersPage', () => {
     expect(listCalls[0]['wallet']).toBe('all');
     expect(listCalls[0]['sort']).toBe('balance');
     expect(page.pointsLabel(ROWS[0])).toBe('90.900 điểm');
-    expect(page.state(ROWS[1]).label).toBe('Khoá tích luỹ');
+    expect(page.state(ROWS[1]).label).toBe('Khóa tích lũy');
   });
 
   it('applies a deep link to the wallet tab and opens the focused member', () => {
@@ -196,8 +196,8 @@ describe('AdminErpMembersPage', () => {
     expect(page.wallet()).toBe('negative');
     expect(listCalls[0]['wallet']).toBe('negative');
     expect(page.detail()?.user.user_id).toBe('u-2');
-    expect(page.detailState().label).toBe('Khoá tích luỹ');
-    expect(page.detailWarningText()).toContain('Tích luỹ đang bị khoá');
+    expect(page.detailState().label).toBe('Khóa tích lũy');
+    expect(page.detailWarningText()).toContain('Tích lũy đang bị khóa');
   });
 
   it('ignores a hand-typed filter the screen does not support', () => {
@@ -212,7 +212,7 @@ describe('AdminErpMembersPage', () => {
     page.saveLock(false);
 
     expect(locks.length).toBe(0);
-    expect(page.lockError()).toContain('tối thiểu');
+    expect(page.lockError()).toContain('Nhập lý do');
 
     page.lockReason.set('Đã xác minh với khách qua hotline');
     page.saveLock(false);
@@ -220,7 +220,7 @@ describe('AdminErpMembersPage', () => {
     expect(locks.length).toBe(1);
     expect(locks[0].userId).toBe('u-2');
     expect(locks[0].body.locked).toBe(false);
-    expect(page.notice()).toContain('mở khoá');
+    expect(page.notice()).toContain('mở khóa');
   });
 
   it('refuses to toggle accrual without the update capability', () => {

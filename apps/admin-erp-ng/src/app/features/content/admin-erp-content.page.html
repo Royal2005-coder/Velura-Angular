@@ -33,9 +33,35 @@
     <div class="content-panel__head">
       <div>
         <span class="content-eyebrow">CMS</span>
-        <h2 id="content-title">Bài viết</h2>
+        <h2 id="content-title">Bài viết & Bản tin</h2>
       </div>
-      <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />
+      <div class="content-head-right">
+        @if (tab() !== 'subscribers') {
+          <div class="content-view-toggle" role="group" aria-label="Kiểu hiển thị">
+            <button
+              type="button"
+              class="erp-btn erp-btn--sm"
+              [class.erp-btn--primary]="viewMode() === 'cards'"
+              [class.erp-btn--ghost]="viewMode() !== 'cards'"
+              (click)="setViewMode('cards')"
+              title="Dạng thẻ lưới trực quan"
+            >
+              Thẻ
+            </button>
+            <button
+              type="button"
+              class="erp-btn erp-btn--sm"
+              [class.erp-btn--primary]="viewMode() === 'table'"
+              [class.erp-btn--ghost]="viewMode() !== 'table'"
+              (click)="setViewMode('table')"
+              title="Dạng bảng chi tiết"
+            >
+              Bảng
+            </button>
+          </div>
+        }
+        <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />
+      </div>
     </div>
 
     <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
@@ -67,6 +93,46 @@
         [clickable]="false"
         (retry)="reload()"
       />
+    } @else if (viewMode() === 'cards') {
+      @if (loading() && !rows().length) {
+        <div class="content-cards-grid">
+          @for (n of [1, 2, 3, 4, 5, 6]; track n) {
+            <div class="blog-card" style="opacity: 0.5; pointer-events: none;">
+              <div class="blog-card__media" style="background: var(--erp-line);"></div>
+              <div class="blog-card__body">
+                <div style="height: 18px; width: 70%; background: var(--erp-line); border-radius: 4px;"></div>
+                <div style="height: 14px; width: 90%; background: var(--erp-line); border-radius: 4px; margin-top: 6px;"></div>
+              </div>
+            </div>
+          }
+        </div>
+      } @else if (!rows().length) {
+        <div class="content-empty-state">
+          Chưa có bài viết nào phù hợp với bộ lọc hiện tại.
+        </div>
+      } @else {
+        <div class="content-cards-grid">
+          @for (blog of rows(); track blog.blog_id || blog.slug) {
+            <article class="blog-card" (click)="openEdit(blog)" (keydown.enter)="openEdit(blog)" tabindex="0">
+              <div class="blog-card__media">
+                <img [src]="blogCover(blog)" alt="{{ blog.title }}" loading="lazy" />
+                <span class="blog-card__category">{{ categoryLabel(blog.category_slug) }}</span>
+                <span class="blog-card__status" [class.is-published]="blog.status === 'published'">
+                  {{ statusLabel(blog.status) }}
+                </span>
+              </div>
+              <div class="blog-card__body">
+                <h3 class="blog-card__title">{{ blog.title }}</h3>
+                <p class="blog-card__excerpt">{{ blog.meta_description || blog.excerpt || blog.title }}</p>
+                <div class="blog-card__footer">
+                  <span class="blog-card__author">{{ blog.author || 'Ban biên tập' }}</span>
+                  <span class="blog-card__date">{{ dateTime(blog.published_at || blog.created_at) }}</span>
+                </div>
+              </div>
+            </article>
+          }
+        </div>
+      }
     } @else {
       <app-erp-data-table
         caption="Danh sách bài viết"
@@ -81,7 +147,6 @@
       />
     }
     <app-erp-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
-    <p class="content-hint">Bản nháp không xuất hiện ở <code>/api/content/blogs</code>: RLS của bảng chỉ mở dòng <code>status = published</code>.</p>
   </section>
 }
 

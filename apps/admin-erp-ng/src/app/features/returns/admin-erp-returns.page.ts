@@ -279,18 +279,21 @@ export class AdminErpReturnsPage {
     {
       key: 'return',
       label: 'Phiếu',
-      width: '14%',
+      width: '95px',
       value: (row) => (row as AdminReturnRow).return_id.slice(0, 8),
       mono: true,
     },
     {
       key: 'order',
       label: 'Đơn hàng',
+      width: '130px',
       value: (row) => (row as AdminReturnRow).order_code || (row as AdminReturnRow).order_id?.slice(0, 8) || '—',
     },
     {
       key: 'customer',
       label: 'Khách',
+      width: '190px',
+      truncate: '190px',
       value: (row) => {
         const record = row as AdminReturnRow;
         return [record.customer_name, record.customer_phone].filter(Boolean).join(' · ') || '—';
@@ -299,6 +302,7 @@ export class AdminErpReturnsPage {
     {
       key: 'type',
       label: 'Yêu cầu',
+      width: '110px',
       value: (row) => typeLabel((row as AdminReturnRow).return_type),
       badge: (row) => {
         const record = row as AdminReturnRow;
@@ -310,11 +314,13 @@ export class AdminErpReturnsPage {
     {
       key: 'channel',
       label: 'Kênh tiền',
+      width: '95px',
       value: (row) => paymentKindLabel((row as AdminReturnRow).payment_kind),
     },
     {
       key: 'amount',
       label: 'Hoàn',
+      width: '105px',
       align: 'right',
       mono: true,
       value: (row) => this.money((row as AdminReturnRow).refund_amount),
@@ -322,48 +328,52 @@ export class AdminErpReturnsPage {
     {
       key: 'status',
       label: 'Trạng thái',
+      width: '230px',
       value: (row) => returnStatusLabel((row as AdminReturnRow).status),
       badge: (row) => ({
         label: returnStatusLabel((row as AdminReturnRow).status),
         tone: returnStatusTone((row as AdminReturnRow).status),
       }),
     },
-    { key: 'created', label: 'Tạo lúc', value: (row) => this.date((row as AdminReturnRow).created_at) },
+    { key: 'created', label: 'Tạo lúc', width: '135px', value: (row) => this.date((row as AdminReturnRow).created_at) },
   ]);
 
   readonly ticketColumns = computed<readonly AdminTableColumn[]>(() => [
     {
       key: 'ticket',
       label: 'Phiếu',
-      width: '14%',
+      width: '110px',
       value: (row) => (row as AdminTicketRow).title || (row as AdminTicketRow).ticket_id.slice(0, 8),
     },
     {
       key: 'channel',
       label: 'Kênh',
+      width: '95px',
       value: (row) => ((row as AdminTicketRow).chat_session_id ? 'Chat' : 'Trực tiếp'),
       badge: (row) =>
         (row as AdminTicketRow).chat_session_id
           ? { label: 'Chat', tone: 'info' as const }
           : { label: 'Trực tiếp', tone: 'neutral' as const },
     },
-    { key: 'contact', label: 'Khách', value: (row) => this.ticketContact(row as AdminTicketRow) },
+    { key: 'contact', label: 'Khách', width: '190px', truncate: '190px', value: (row) => this.ticketContact(row as AdminTicketRow) },
     {
       key: 'priority',
       label: 'Ưu tiên',
+      width: '110px',
       value: (row) => TICKET_PRIORITY_LABELS[(row as AdminTicketRow).priority || ''] || (row as AdminTicketRow).priority || '—',
     },
     {
       key: 'status',
       label: 'Trạng thái',
+      width: '160px',
       value: (row) => TICKET_STATUS_LABELS[(row as AdminTicketRow).status || ''] || (row as AdminTicketRow).status || '—',
       badge: (row) => ({
         label: TICKET_STATUS_LABELS[(row as AdminTicketRow).status || ''] || String((row as AdminTicketRow).status || '—'),
         tone: ticketStatusTone((row as AdminTicketRow).status),
       }),
     },
-    { key: 'reply', label: 'Phản hồi cuối', width: '26%', value: (row) => (row as AdminTicketRow).admin_reply || '—' },
-    { key: 'created', label: 'Tạo lúc', value: (row) => this.date((row as AdminTicketRow).created_at) },
+    { key: 'reply', label: 'Phản hồi cuối', width: '220px', truncate: '220px', value: (row) => (row as AdminTicketRow).admin_reply || '—' },
+    { key: 'created', label: 'Tạo lúc', width: '135px', value: (row) => this.date((row as AdminTicketRow).created_at) },
   ]);
 
   readonly logColumns = computed<readonly AdminTableColumn[]>(() => [

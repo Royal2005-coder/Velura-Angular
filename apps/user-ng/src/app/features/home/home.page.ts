@@ -134,14 +134,15 @@ export class HomePage implements AfterViewInit, OnDestroy {
   @ViewChild('categoriesTrack') private categoriesTrack?: ElementRef<HTMLElement>;
   @ViewChild('productsTrack') private productsTrack?: ElementRef<HTMLElement>;
 
-  readonly heroLooks = HERO_LOOKS;
+  readonly heroLooks = signal<HeroLook[]>(HERO_LOOKS);
   readonly activeModelIndex = signal(2); // Model 3 (In Bloom) starts in center
 
-  readonly activeLook = computed(() => this.heroLooks[this.activeModelIndex()]);
+  readonly activeLook = computed(() => this.heroLooks()[this.activeModelIndex()] || this.heroLooks()[0] || HERO_LOOKS[0]);
 
   readonly modelCounterLabel = computed(() => {
+    const totalCount = this.heroLooks().length;
     const num = (this.activeModelIndex() + 1).toString().padStart(2, '0');
-    const total = this.heroLooks.length.toString().padStart(2, '0');
+    const total = totalCount.toString().padStart(2, '0');
     return `${num} / ${total}`;
   });
 
@@ -199,7 +200,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   getModelDistance(index: number): number {
     const current = this.activeModelIndex();
-    const total = this.heroLooks.length;
+    const total = this.heroLooks().length;
     let diff = index - current;
     while (diff > total / 2) diff -= total;
     while (diff < -total / 2) diff += total;
@@ -208,7 +209,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   onModelClick(index: number): void {
     if (this.activeModelIndex() === index) {
-      const link = this.heroLooks[index].link;
+      const looks = this.heroLooks();
+      const link = looks[index]?.link || '/products';
       void this.router.navigateByUrl(link);
     } else {
       this.activeModelIndex.set(index);
@@ -217,13 +219,13 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   prevModel(): void {
     const current = this.activeModelIndex();
-    const total = this.heroLooks.length;
+    const total = this.heroLooks().length;
     this.activeModelIndex.set((current - 1 + total) % total);
   }
 
   nextModel(): void {
     const current = this.activeModelIndex();
-    const total = this.heroLooks.length;
+    const total = this.heroLooks().length;
     this.activeModelIndex.set((current + 1) % total);
   }
 
@@ -233,6 +235,29 @@ export class HomePage implements AfterViewInit, OnDestroy {
   loadHome(): void {
     this.loading.set(true);
     this.loadError.set(null);
+
+    if (typeof this.catalog.getBanners === 'function') {
+      this.catalog.getBanners('home_hero').subscribe({
+        next: (banners) => {
+          if (banners && banners.length >= 3) {
+            const dynamicLooks: HeroLook[] = banners.map((b) => ({
+              id: b.banner_id,
+              collectionName: b.tag_label || 'Velura Collection',
+              title: b.title,
+              eyebrow: 'VELURA',
+              season: (b.metadata?.['season'] as string) || 'SPRING / SUMMER 2027',
+              description: b.subtitle || 'Những thiết kế thanh lịch tôn vinh phong cách riêng của bạn.',
+              badge: (b.metadata?.['badge'] as string) || 'ELEGANT',
+              looksCount: (b.metadata?.['looks_count'] as string) || '10 LOOKS',
+              image: b.media_url,
+              link: b.link_url || '/products',
+            }));
+            this.heroLooks.set(dynamicLooks);
+          }
+        },
+      });
+    }
+
     forkJoin({
       categories: this.catalog.getCategories().pipe(catchError(() => of<CategorySummary[]>([]))),
       products: this.catalog.getProducts().pipe(

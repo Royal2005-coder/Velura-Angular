@@ -1,8 +1,9 @@
 export interface CollectionLookbook {
   id: string;
+  code?: string;
   name: string;
   label: string;
-  quote: string;
+  quote?: string;
   banner: string;
   decor: string;
   story: string[];
@@ -20,6 +21,40 @@ export interface CollectionLookbook {
   productsTitle: string;
   closingQuote: string;
   models: string[];
+}
+
+export function normalizeCollectionLookbook(raw: any): CollectionLookbook {
+  const id = raw.code || raw.id || 'collection';
+  return {
+    id,
+    code: id,
+    name: raw.name || '',
+    label: raw.label || raw.name || '',
+    quote: raw.quote || '',
+    banner: raw.banner_url || raw.banner || '',
+    decor: raw.decor_url || raw.decor || '/assets/images/collections/soft-ceremony-decor.png',
+    story: Array.isArray(raw.story_paragraphs) ? raw.story_paragraphs : (Array.isArray(raw.story) ? raw.story : []),
+    badge: raw.badge || 'ELEGANT',
+    homeStory: raw.home_story || raw.homeStory || raw.story_desc || raw.storyDesc || '',
+    colNumber: raw.col_number || raw.colNumber || 'COLLECTION · VELURA',
+    script: raw.script || 'in bloom',
+    heroGradient: raw.hero_gradient || raw.heroGradient || 'linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%)',
+    kicker: raw.kicker || 'THE ART OF SOFTNESS',
+    storyHeadline: raw.story_headline || raw.storyHeadline || 'Dịu dàng, có chủ ý.',
+    storyDesc: raw.story_desc || raw.storyDesc || '',
+    exploreCta: raw.explore_cta || raw.exploreCta || 'Khám phá bộ sưu tập',
+    categoryLink: raw.category_link || raw.categoryLink || '/products?category=dam-vay',
+    productsSub: raw.products_sub || raw.productsSub || 'SELECTED FOR YOU',
+    productsTitle: raw.products_title || raw.productsTitle || 'Những thiết kế nổi bật',
+    closingQuote: raw.closing_quote || raw.closingQuote || 'Một chút lãng mạn, vừa đủ cho riêng bạn.',
+    models: Array.isArray(raw.models) && raw.models.length > 0 ? raw.models : [
+      '/assets/images/models/model_cutout_1.png',
+      '/assets/images/models/model_cutout_2.png',
+      '/assets/images/models/model_cutout_3.png',
+      '/assets/images/models/model_cutout_4.png',
+      '/assets/images/models/model_cutout_5.png',
+    ],
+  };
 }
 
 export const COLLECTION_LOOKBOOKS: CollectionLookbook[] = [

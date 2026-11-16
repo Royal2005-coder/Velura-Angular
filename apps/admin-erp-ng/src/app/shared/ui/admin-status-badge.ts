@@ -13,7 +13,7 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
       @if (dot()) {
         <i aria-hidden="true"></i>
       }
-      {{ label() }}
+      <span class="badge__text">{{ label() }}</span>
     </span>
   `,
   styles: [
@@ -27,6 +27,7 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
         display: inline-flex;
         align-items: center;
         max-width: 100%;
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         gap: 6px;
@@ -37,6 +38,14 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
         line-height: 1.5;
         white-space: nowrap;
         border: 1px solid transparent;
+      }
+      .badge__text {
+        display: block;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .badge i {
         width: 6px;

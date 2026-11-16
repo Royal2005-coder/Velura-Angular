@@ -41,11 +41,11 @@
             <div class="collection-hero" [style.background]="group.lookbook.heroGradient">
               <div class="collection-hero__glow" aria-hidden="true"></div>
               <span class="collection-hero__script" aria-hidden="true">{{ group.lookbook.script }}</span>
-              <img [src]="group.lookbook.models[0]" alt="" class="collection-model model-1" loading="lazy" />
-              <img [src]="group.lookbook.models[1]" alt="" class="collection-model model-2" loading="lazy" />
-              <img [src]="group.lookbook.models[2]" alt="" class="collection-model model-3" loading="lazy" />
-              <img [src]="group.lookbook.models[3]" alt="" class="collection-model model-4" loading="lazy" />
-              <img [src]="group.lookbook.models[4]" alt="" class="collection-model model-5" loading="lazy" />
+              <img [src]="getModelCutout(group.lookbook, 0)" alt="" class="collection-model model-1" loading="lazy" />
+              <img [src]="getModelCutout(group.lookbook, 1)" alt="" class="collection-model model-2" loading="lazy" />
+              <img [src]="getModelCutout(group.lookbook, 2)" alt="" class="collection-model model-3" loading="lazy" />
+              <img [src]="getModelCutout(group.lookbook, 3)" alt="" class="collection-model model-4" loading="lazy" />
+              <img [src]="getModelCutout(group.lookbook, 4)" alt="" class="collection-model model-5" loading="lazy" />
               <div class="collection-hero__shade" aria-hidden="true"></div>
               <div class="collection-hero__title-wrap">
                 <span class="collection-hero__tag">{{ group.lookbook.colNumber }}</span>

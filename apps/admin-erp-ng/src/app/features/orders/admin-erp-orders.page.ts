@@ -446,18 +446,31 @@ export class AdminErpOrdersPage {
   /**
    * Loads all order tab counters on initial paint and refresh.
    */
-  loadSummaryCounters(): void {
-    this.api.orderSummary().pipe(catchError(() => of(null))).subscribe((summary) => {
-      if (summary) {
-        this.summary.set(summary);
-        if (summary.payment_attention != null) {
-          this.paymentAttentionTotal.set(summary.payment_attention);
+  loadSummaryCounters(retry = 0): void {
+    this.api
+      .orderSummary()
+      .pipe(
+        catchError(() => {
+          if (retry < 2) {
+            setTimeout(() => this.loadSummaryCounters(retry + 1), 2000);
+          }
+          return of(null);
+        })
+      )
+      .subscribe((summary) => {
+        if (summary) {
+          this.summary.set(summary);
+          if (summary.payment_attention != null) {
+            this.paymentAttentionTotal.set(summary.payment_attention);
+          }
         }
-      }
-    });
-    this.api.listAuditLogs({ module: 'orders', limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))).subscribe((p) => {
-      this.logsCount.set(adminListCount(p));
-    });
+      });
+    this.api
+      .listAuditLogs({ module: 'orders', limit: '1' })
+      .pipe(catchError(() => of({ rows: [], count: 0 })))
+      .subscribe((p) => {
+        this.logsCount.set(adminListCount(p));
+      });
   }
 
   /**

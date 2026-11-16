@@ -5,6 +5,53 @@ import { environment } from '../../environments/environment';
 import { AdminListPayload } from './admin-erp-http';
 import { AdminAuthMe } from './admin-erp-session.service';
 
+export interface AdminBannerRow {
+  banner_id: string;
+  placement: 'home_hero' | 'products_hero' | 'collections_hero';
+  title: string;
+  subtitle: string | null;
+  tag_label: string | null;
+  media_type: 'image' | 'video';
+  media_url: string;
+  poster_url: string | null;
+  button_text: string | null;
+  link_url: string | null;
+  is_active: boolean;
+  sort_order: number;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AdminCollectionRow {
+  collection_id: string;
+  code: string;
+  name: string;
+  label: string;
+  banner_url?: string | null;
+  decor_url?: string | null;
+  home_story?: string | null;
+  col_number: string;
+  script: string;
+  hero_gradient: string;
+  badge: string;
+  kicker: string;
+  story_headline: string;
+  story_desc: string;
+  explore_cta: string;
+  category_link: string;
+  products_sub: string;
+  products_title: string;
+  closing_quote: string;
+  quote?: string | null;
+  models: string[];
+  story_paragraphs: string[];
+  is_active: boolean;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface AdminAuditRow {
   audit_id?: string;
   timestamp?: string;
@@ -72,6 +119,7 @@ export interface AdminRoleRequestRow {
 export interface AdminReviewProduct {
   name?: string;
   sku?: string;
+  images?: string[];
 }
 
 export interface AdminReviewRow {
@@ -2636,6 +2684,79 @@ export class AdminErpApiService {
     return this.http.post<AdminMemberAdjustResult>(
       `${this.baseUrl}/api/v1/admin/members/${encodeURIComponent(userId)}/points-adjust`,
       body,
+    );
+  }
+
+  // --- CMS: BANNERS & COLLECTIONS MANAGEMENT (KAN-108) ---
+
+  /** Lists banners across Home, Product and Collection hero placements. */
+  listBanners(placement?: string): Observable<{ success: boolean; data: AdminBannerRow[] }> {
+    const url = placement
+      ? `${this.baseUrl}/api/v1/admin/content/banners?placement=${encodeURIComponent(placement)}`
+      : `${this.baseUrl}/api/v1/admin/content/banners`;
+    return this.http.get<{ success: boolean; data: AdminBannerRow[] }>(url);
+  }
+
+  /** Creates a new banner (video or image). */
+  createBanner(body: Partial<AdminBannerRow>): Observable<{ success: boolean; data: AdminBannerRow }> {
+    return this.http.post<{ success: boolean; data: AdminBannerRow }>(
+      `${this.baseUrl}/api/v1/admin/content/banners`,
+      body,
+    );
+  }
+
+  /** Updates an existing banner. */
+  updateBanner(id: string, body: Partial<AdminBannerRow>): Observable<{ success: boolean; data: AdminBannerRow }> {
+    return this.http.put<{ success: boolean; data: AdminBannerRow }>(
+      `${this.baseUrl}/api/v1/admin/content/banners/${encodeURIComponent(id)}`,
+      body,
+    );
+  }
+
+  /** Deletes a banner. */
+  deleteBanner(id: string): Observable<{ success: boolean }> {
+    return this.http.delete<{ success: boolean }>(
+      `${this.baseUrl}/api/v1/admin/content/banners/${encodeURIComponent(id)}`,
+    );
+  }
+
+  /** Lists seasonal fashion collections and lookbook model sets. */
+  listCollections(): Observable<{ success: boolean; data: AdminCollectionRow[] }> {
+    return this.http.get<{ success: boolean; data: AdminCollectionRow[] }>(
+      `${this.baseUrl}/api/v1/admin/content/collections`,
+    );
+  }
+
+  /** Creates a new seasonal collection with story & lookbook models. */
+  createCollection(body: Partial<AdminCollectionRow>): Observable<{ success: boolean; data: AdminCollectionRow }> {
+    return this.http.post<{ success: boolean; data: AdminCollectionRow }>(
+      `${this.baseUrl}/api/v1/admin/content/collections`,
+      body,
+    );
+  }
+
+  /** Updates an existing seasonal collection. */
+  updateCollection(id: string, body: Partial<AdminCollectionRow>): Observable<{ success: boolean; data: AdminCollectionRow }> {
+    return this.http.put<{ success: boolean; data: AdminCollectionRow }>(
+      `${this.baseUrl}/api/v1/admin/content/collections/${encodeURIComponent(id)}`,
+      body,
+    );
+  }
+
+  /** Deletes a collection. */
+  deleteCollection(id: string): Observable<{ success: boolean }> {
+    return this.http.delete<{ success: boolean }>(
+      `${this.baseUrl}/api/v1/admin/content/collections/${encodeURIComponent(id)}`,
+    );
+  }
+
+  /** Uploads banner image/video or lookbook model photo. */
+  uploadCmsMedia(file: File, category: 'banner' | 'collection' = 'banner'): Observable<{ success: boolean; url: string; mediaType: 'image' | 'video' }> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    return this.http.post<{ success: boolean; url: string; mediaType: 'image' | 'video' }>(
+      `${this.baseUrl}/api/v1/admin/content/upload-media?category=${category}`,
+      formData,
     );
   }
 

@@ -9,6 +9,7 @@ import { matchesAllSearchWords, normalizeSearchText, OCCASION_VIETNAMESE_MAP } f
 import { productMaterial, productMaterialText } from '../../core/utils/material';
 import { catchError, finalize, of, switchMap, tap, type Subscription } from 'rxjs';
 import { ProductSummary } from '../../core/models/product.interface';
+import { BannerSummary } from '../../core/models/banner.interface';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
@@ -108,8 +109,106 @@ export class ProductListPage implements AfterViewInit {
   private readonly visual = inject(VisualSearchModel);
   private readonly destroy = inject(DestroyRef);
 
+  readonly DEFAULT_HERO_BANNERS: BannerSummary[] = [
+    {
+      banner_id: 'default-product-video',
+      placement: 'products_hero',
+      title: 'Timeless Elegance',
+      subtitle: 'Những lựa chọn tinh tế dành cho nhịp sống và phong cách riêng của bạn.',
+      tag_label: 'POWERED BY TRESEMMÉ / SR CELEBRATING LOCAL PRIDE 9',
+      media_type: 'video',
+      media_url: '/assets/videos/hero-bg.mp4',
+      poster_url: '/assets/images/auth/model_main.png',
+      button_text: 'Khám phá bộ sưu tập',
+      link_url: '/collections',
+      is_active: true,
+      sort_order: 0,
+    },
+    {
+      banner_id: 'default-product-silk',
+      placement: 'products_hero',
+      title: 'Velura Silk & Satin Atelier',
+      subtitle: 'Chất liệu lụa satin thượng hạng ôm trọn từng đường nét kiêu sa, tỏa sáng trong mọi khoảnh khắc dạ tiệc.',
+      tag_label: 'HAUTE COUTURE 2027',
+      media_type: 'image',
+      media_url: 'https://cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images@main/categories/set-do/velura_The-Afterglow_cover.png',
+      poster_url: null,
+      button_text: 'Xem sản phẩm mới',
+      link_url: '/products?category=dam-vay',
+      is_active: true,
+      sort_order: 1,
+    },
+    {
+      banner_id: 'default-product-urban',
+      placement: 'products_hero',
+      title: 'Urban Rhythm · Minimal Muse',
+      subtitle: 'Phom dáng tinh gọn, chất liệu thoáng nhẹ sẵn sàng cho nhịp sống hiện đại từ văn phòng đến dạo phố cuối tuần.',
+      tag_label: 'EVERYDAY ICONS',
+      media_type: 'image',
+      media_url: 'https://cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images@main/categories/set-do/Velura_urban-rythm_cover.png',
+      poster_url: null,
+      button_text: 'Khám phá Set đồ',
+      link_url: '/products?category=set-do',
+      is_active: true,
+      sort_order: 2,
+    },
+  ];
+
+  readonly heroBanners = signal<BannerSummary[]>(this.DEFAULT_HERO_BANNERS);
+  readonly activeBannerIndex = signal(0);
+  readonly currentBanner = computed(() => {
+    const banners = this.heroBanners();
+    const idx = this.activeBannerIndex();
+    return banners[idx] || banners[0] || this.DEFAULT_HERO_BANNERS[0];
+  });
+  private bannerTimer: ReturnType<typeof setInterval> | null = null;
+
   @ViewChild('heroVideo') private heroVideo?: ElementRef<HTMLVideoElement>;
   readonly videoSoundOn = signal(false);
+
+  nextBanner(): void {
+    const total = this.heroBanners().length;
+    if (total <= 1) return;
+    this.activeBannerIndex.update((i) => (i + 1) % total);
+    this.syncHeroVideo();
+  }
+
+  prevBanner(): void {
+    const total = this.heroBanners().length;
+    if (total <= 1) return;
+    this.activeBannerIndex.update((i) => (i - 1 + total) % total);
+    this.syncHeroVideo();
+  }
+
+  setBanner(index: number): void {
+    this.activeBannerIndex.set(index);
+    this.syncHeroVideo();
+  }
+
+  pauseBannerTimer(): void {
+    if (this.bannerTimer) {
+      clearInterval(this.bannerTimer);
+      this.bannerTimer = null;
+    }
+  }
+
+  resumeBannerTimer(): void {
+    if (this.heroBanners().length <= 1) return;
+    this.pauseBannerTimer();
+    this.bannerTimer = setInterval(() => {
+      this.nextBanner();
+    }, 7000);
+  }
+
+  private syncHeroVideo(): void {
+    setTimeout(() => {
+      const video = this.heroVideo?.nativeElement;
+      if (video) {
+        video.muted = !this.videoSoundOn();
+        void Promise.resolve(video.play()).catch(() => undefined);
+      }
+    }, 50);
+  }
 
   ngAfterViewInit(): void {
     const video = this.heroVideo?.nativeElement;
@@ -587,7 +686,20 @@ export class ProductListPage implements AfterViewInit {
 
   constructor() {
     useBodyClass('page-product-list');
-    this.destroy.onDestroy(() => this.cancelAiTextSearch());
+    this.destroy.onDestroy(() => {
+      this.cancelAiTextSearch();
+      this.pauseBannerTimer();
+    });
+
+    this.catalog.getBanners('products_hero').pipe(takeUntilDestroyed(this.destroy)).subscribe({
+      next: (banners) => {
+        if (banners && banners.length > 0) {
+          this.heroBanners.set(banners);
+          this.resumeBannerTimer();
+        }
+      },
+    });
+    this.resumeBannerTimer();
     this.route.queryParamMap.pipe(tap((params) => {
       const category = params.get('category') || '';
       const slug = CATEGORY_QUERY_MAP[category] || category;

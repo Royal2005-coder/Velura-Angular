@@ -1231,3 +1231,101 @@
   .product-list-page .product-list-editorial-hero__description { max-width: 15rem; font-size: .75rem; }
   .product-list-page .product-list-editorial-hero__image { width: 58%; opacity: .92; }
 }
+
+/* Banner Carousel Controls & Actions */
+.product-list-editorial-hero__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.product-list-editorial-hero__cta-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: var(--velura-burgundy, #7D263D);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  text-decoration: none;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px rgba(125, 38, 61, 0.28);
+}
+
+.product-list-editorial-hero__cta-btn:hover {
+  background: #641E30;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(125, 38, 61, 0.35);
+  color: #fff;
+}
+
+.product-list-hero__arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  color: #352326;
+  font-size: 1.5rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 5;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.product-list-hero__arrow:hover {
+  background: #fff;
+  transform: translateY(-50%) scale(1.08);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+.product-list-hero__arrow--prev {
+  left: 16px;
+}
+
+.product-list-hero__arrow--next {
+  right: 16px;
+}
+
+.product-list-hero__dots {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(6px);
+  padding: 4px 10px;
+  border-radius: 9999px;
+}
+
+.product-list-hero__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  border: none;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  padding: 0;
+}
+
+.product-list-hero__dot.is-active {
+  width: 22px;
+  border-radius: 9999px;
+  background: #fff;
+}

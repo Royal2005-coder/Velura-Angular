@@ -22,7 +22,8 @@ import type {
   AiJobView,
   AiTask,
   AiWorker,
-  TurntableStage,
+  AiWorkerResult,
+  AiPoseRef,
 } from "./ai-types.js";
 
 const UUID =
@@ -95,14 +96,10 @@ export class AiService {
       throw new HttpError(503, "AI_RETRY_NOT_CONFIGURED", "Chính sách thử lại chưa hợp lệ.");
     return attempts;
   }
-  /** Report actual operator-enabled runtime state; no fabricated readiness. */
-  capabilities() {
-    const verified = (process.env.AI_VERIFIED_TASKS || "").split(",");
-    const allowed = !this.storageBlocked && process.env.AI_DISABLE !== "true" && process.env.AI_ENABLE !== "false" &&
-      (process.env.AI_ENABLE === "true" || process.env.NODE_ENV !== "production");
-    const enabled = allowed && TASKS.some(task => verified.includes(task) && this.worker.ready(task));
+  /** Licensed female studio models in registry order; the first is the standing model. */
+  private studioAssets(): Array<{ id: string; label: string; gender: string; season?: string; occasion?: string; badge?: string }> {
     const { root, registry } = loadStudioAssets();
-    const studio_assets = Object.entries(registry).flatMap(([id, raw]) => {
+    return Object.entries(registry).flatMap(([id, raw]) => {
       const asset = asJsonObject(raw),
         file = asString(asset.file),
         path = resolve(root, file);
@@ -124,6 +121,14 @@ export class AiService {
           ]
         : [];
     });
+  }
+  /** Report actual operator-enabled runtime state; no fabricated readiness. */
+  capabilities() {
+    const verified = (process.env.AI_VERIFIED_TASKS || "").split(",");
+    const allowed = !this.storageBlocked && process.env.AI_DISABLE !== "true" && process.env.AI_ENABLE !== "false" &&
+      (process.env.AI_ENABLE === "true" || process.env.NODE_ENV !== "production");
+    const enabled = allowed && TASKS.some(task => verified.includes(task) && this.worker.ready(task));
+    const studio_assets = this.studioAssets();
     return {
       enabled,
       local_only: true,
@@ -180,6 +185,23 @@ export class AiService {
         "Ảnh studio phải là PNG hoặc JPEG hợp lệ.",
       );
     return { bytes, mime };
+  }
+  /** The garment the studio job will really try on (this exact colour/size SKU), shown to the customer before consent. */
+  async garmentPreview(productId: string, variantId: string): Promise<{ bytes: Buffer; mime: string }> {
+    if (!UUID.test(productId) || !UUID.test(variantId))
+      throw new HttpError(400, "INVALID_PRODUCT", "Chọn sản phẩm và biến thể hợp lệ.");
+    const garment = await this.catalog.garment(productId, variantId);
+    const head = garment.bytes.subarray(0, 12);
+    const mime = head.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      ? "image/png"
+      : head[0] === 255 && head[1] === 216 && head[2] === 255
+        ? "image/jpeg"
+        : head.subarray(0, 4).toString("latin1") === "RIFF" && head.subarray(8, 12).toString("latin1") === "WEBP"
+          ? "image/webp"
+          : undefined;
+    if (!mime || garment.bytes.length > 8 * 1024 * 1024)
+      throw new HttpError(415, "INVALID_GARMENT_IMAGE", "Ảnh trang phục không hợp lệ.");
+    return { bytes: garment.bytes, mime };
   }
   private enabled(task?: AiTask): void {
     const capabilities = this.capabilities();
@@ -364,9 +386,7 @@ export class AiService {
     if (task === "virtual_try_on" && attempts.length >= this.maxVtoAttempts())
       throw new HttpError(429, "AI_RETRY_LIMIT", "Đã đạt giới hạn thử lại cho ảnh và sản phẩm này.");
     if (
-      // A pending 360° stage still needs the single GPU, so it counts toward global capacity.
-      jobs.filter((job) => ["queued", "running"].includes(job.status) || job.stage3d === "pending").length >=
-        12 ||
+      jobs.filter((job) => ["queued", "running"].includes(job.status)).length >= 12 ||
       jobs.filter(
         (job) =>
           job.owner === owner && ["queued", "running"].includes(job.status),
@@ -386,7 +406,7 @@ export class AiService {
       variant_id: "",
       consent: true,
       confirmed: true,
-      render_3d: task === "virtual_try_on" && body.render3d === true,
+      // Poses are fixed here so a later asset change cannot alter a running job.
     };
     let catalog_metadata: Omit<CatalogImageVector, "embedding"> | undefined;
     let catalog_batch_metadata: AiJob["catalog_batch_metadata"];
@@ -412,13 +432,14 @@ export class AiService {
         await writeFile(join(directory, "garment.image"), garment.bytes, {
           mode: 0o600,
         });
-        if (body.mode === "studio")
-          await writeFile(
-            join(directory, "person.image"),
-            await this.catalog.studio(asString(body.studio_asset_id)),
-            { mode: 0o600 },
-          );
-        else
+        if (body.mode === "studio") {
+          const poseIds = this.studioAssets().map((asset) => asset.id);
+          if (!poseIds.length)
+            throw new HttpError(503, "AI_STUDIO_UNAVAILABLE", "Người mẫu studio chưa sẵn sàng.");
+          // The first licensed asset is the standing model; it decides the job's own result.
+          worker.pose_ids = poseIds;
+          await writeFile(join(directory, "person.image"), await this.catalog.studio(poseIds[0]), { mode: 0o600 });
+        } else
           await copyFile(
             (await this.asset(owner, body.person_asset_id)).path,
             join(directory, "person.image"),
@@ -623,8 +644,7 @@ export class AiService {
       ...(job.task === "virtual_try_on" ? { product_id: job.product_id, variant_id: job.variant_id } : {}),
       ...(job.attempt ? { attempt: job.attempt, retry_of: job.retry_of } : {}),
       ...(job.result_url ? { result_url: job.result_url } : {}),
-      ...(job.frames3d?.length ? { frames3d: job.frames3d } : {}),
-      ...(job.stage3d ? { stage3d: job.stage3d } : {}),
+      ...(["running", "success"].includes(job.status) && job.poses?.length ? { poses: job.poses } : {}),
       ...(job.gate ? { gate: job.gate } : {}),
       ...(job.error ? { error: job.error } : {}),
       ...(job.matches ? { matches: job.matches } : {}),
@@ -682,15 +702,14 @@ export class AiService {
       );
     return this.repo.result(job);
   }
-  /** Serve one turntable frame the finished job actually published; the record, not a pattern, decides. */
+  /** Serve one studio pose the job has already published; the record, not a path pattern, decides. */
   async resultFile(owner: string, id: string, name: string): Promise<Buffer> {
     const job = await this.owned(owner, id);
     if (this.storageBlocked) throw new HttpError(503, "AI_QUEUE_STORAGE_FAILED", "Kho tác vụ tạm thời không khả dụng.");
-    // Frames depict the same product as the 2D result, so they follow the same withdrawal rule (VTO-03/11).
+    // Poses depict the same product as the 2D result, so they follow the same withdrawal rule (VTO-03/11).
     if (job.task === "virtual_try_on") await this.requireVtoSelectionSupported(job, 30_000);
-    const published = (job.frames3d || []).map((url) => url.split("/").pop());
-    if (job.status !== "success" || !published.includes(name))
-      throw new HttpError(409, "RESULT_UNAVAILABLE", "Kết quả 3D chưa sẵn sàng.");
+    if (!["running", "success"].includes(job.status) || !(job.poses || []).some((pose) => pose.id === name))
+      throw new HttpError(409, "RESULT_UNAVAILABLE", "Ảnh dáng này chưa sẵn sàng.");
     return this.repo.resultFile(job, name);
   }
   /**
@@ -759,15 +778,7 @@ export class AiService {
         const job = live
           .filter((row) => row.status === "queued")
           .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
-        if (!job) {
-          // 2D try-ons always go first; a 360° add-on only uses the GPU when nobody is waiting for a try-on.
-          const stage = live
-            .filter((row) => row.status === "success" && row.stage3d === "pending")
-            .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
-          if (!stage) break;
-          await this.renderTurntable(stage);
-          continue;
-        }
+        if (!job) break;
         if (!this.worker.ready(job.task)) {
           await this.repo.transition(job.id, ["queued"], { status: "failed", error: "AI_ENGINE_UNAVAILABLE" });
           continue;
@@ -781,17 +792,19 @@ export class AiService {
         job.status = "running";
         const controller = new AbortController();
         this.controllers.set(job.id, controller);
-        // VTO-09: the try-on itself gets 120 s from the moment it starts running. The optional 360° stage runs later
-        // as its own step, so it can never make the try-on time out.
-        const requested3d = job.task === "virtual_try_on" && job.worker.render_3d === true
-          && this.worker.turntableReady?.() === true;
-        const timeout = setTimeout(() => controller.abort("deadline"), job.task === "virtual_try_on" ? 120_000 : 60_000);
+        // VTO-09: the try-on gets 120 s from the moment it starts running. A studio job arms that bound per pose
+        // inside runStudio and keeps one overall cap of the same length for every pose.
+        const studio = job.task === "virtual_try_on" && job.worker.mode === "studio";
+        const poseCount = studio && Array.isArray(job.worker.pose_ids) ? job.worker.pose_ids.length : 1;
+        const timeout = setTimeout(
+          () => controller.abort("deadline"),
+          job.task === "virtual_try_on" ? 120_000 * poseCount : 60_000,
+        );
         timeout.unref();
         try {
-          const result = await this.worker.run(
-            job.directory,
-            controller.signal,
-          );
+          const result = studio
+            ? await this.runStudio(job, controller)
+            : await this.worker.run(job.directory, controller.signal);
           if (controller.signal.aborted) throw new Error("AI_JOB_TIMEOUT");
           const current = await this.repo.job(job.id);
           if (current?.status === "cancelled") continue;
@@ -818,7 +831,6 @@ export class AiService {
             await output.stats();
             job.result_url = `jobs/${job.id}/result`;
           }
-          if (requested3d && result.status === "success") job.stage3d = "pending";
           if (job.task === "image_embedding" && result.status === "success") {
             if (job.catalog_batch_metadata) {
               if (
@@ -900,7 +912,6 @@ export class AiService {
             continue;
           }
           job.status = "failed";
-          job.stage3d = undefined;
           // Only the deadline is a Timeout; a shutdown/deploy abort is an interruption and is not a user attempt.
           job.error = error instanceof HttpError ? error.code : controller.signal.aborted
             ? controller.signal.reason === "deadline" ? "AI_JOB_TIMEOUT" : "AI_JOB_INTERRUPTED"
@@ -914,69 +925,81 @@ export class AiService {
           gate: job.gate,
           error: job.error,
           result_url: job.result_url,
-          frames3d: job.frames3d,
-          stage3d: job.stage3d,
           matches: job.matches,
           index_summary: job.index_summary,
           processing_version: job.processing_version,
+          // A studio job runs for minutes; its viewing window starts when it finishes, not when it was queued.
+          ...(job.worker.mode === "studio" ? { expires_at: new Date(Date.now() + this.retentionSeconds() * 1000).toISOString() } : {}),
         });
       }
     } finally {
       this.pumping = false;
     }
   }
-
-  /** The 360° add-on runs after the try-on is already Success: it can add frames or mark itself failed, never demote. */
-  private async renderTurntable(job: AiJob): Promise<void> {
-    const controller = new AbortController();
-    this.controllers.set(job.id, controller);
-    // Own bound, independent of any adapter's internal timeout, so one stage can never hold the queue indefinitely.
-    const timeout = setTimeout(() => controller.abort("deadline"), 450_000);
-    timeout.unref();
-    let patch: Partial<AiJob>;
-    try {
-      const stage = await this.worker.turntable?.(job.directory, controller.signal);
-      if (!stage) throw new Error("AI_TURNTABLE_UNAVAILABLE");
-      patch = { frames3d: await this.publishTurntable(job, stage), stage3d: undefined };
-    } catch (error) {
-      console.error("AI_TURNTABLE_STAGE_FAILED", job.id, (error as Error).message?.slice(0, 120));
-      patch = { stage3d: "failed" };
-    } finally {
-      clearTimeout(timeout);
-      this.controllers.delete(job.id);
+  /** Studio preview: run the 2D try-on once per studio pose (standing model first), publishing each pose as it finishes. */
+  private async runStudio(job: AiJob, controller: AbortController): Promise<AiWorkerResult> {
+    const ids = Array.isArray(job.worker.pose_ids) ? job.worker.pose_ids.map(String) : [];
+    const labels = new Map(this.studioAssets().map((asset) => [asset.id, asset.label]));
+    const poses: AiPoseRef[] = [];
+    let standing: AiWorkerResult | undefined;
+    for (const id of ids) {
+      if (controller.signal.aborted) break;
+      const first = standing === undefined;
+      try {
+        const result = await this.runPose(job, id, controller, first);
+        // Only the standing pose decides the job's own status; later poses are best-effort extras.
+        if (first && result.status !== "success") return result;
+        if (result.status !== "success") continue;
+        const file = await this.verifyPose(job, id, result);
+        if (first) {
+          await writeFile(join(job.directory, "result.png"), file, { mode: 0o600 });
+          standing = result;
+        }
+        poses.push({ id, label: labels.get(id) || id });
+        if (!(await this.repo.transition(job.id, ["running"], { poses: [...poses] }))) break;
+      } catch (error) {
+        if (first || controller.signal.aborted) throw error;
+        console.error("AI_STUDIO_POSE_FAILED", job.id, id, (error as Error).message?.slice(0, 120));
+      }
     }
-    // Only a still-pending stage may be settled; never overwrite a stage another path already resolved.
-    await this.repo.transition(job.id, ["success"], patch, (row) => row.stage3d === "pending");
+    if (!standing) throw new Error(controller.signal.aborted ? "AI_JOB_TIMEOUT" : "AI_INFERENCE_FAILED");
+    return standing;
   }
 
-  /** Slice the worker's turntable sheet into strict-name frames under the job's render3d directory. */
-  private async publishTurntable(job: AiJob, stage: TurntableStage): Promise<string[]> {
-    const directory = join(job.directory, "render3d");
-    // Non-recursive: if purge already removed the job, fail instead of resurrecting an orphan frame folder.
-    await mkdir(directory, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "EEXIST") throw error;
-    });
-    const sheet = await sharp(stage.bytes, { failOn: "warning", limitInputPixels: 40_000_000 })
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    const { width, height, channels } = sheet.info;
-    if (width !== stage.columns * stage.tile || height !== stage.rows * stage.tile || channels < 3)
-      throw new Error("INVALID_IMAGE_RESULT");
-    const names: string[] = [];
-    for (let index = 0; index < stage.frames; index += 1) {
-      const left = (index % stage.columns) * stage.tile, top = Math.floor(index / stage.columns) * stage.tile;
-      const tile = Buffer.alloc(stage.tile * stage.tile * channels);
-      for (let row = 0; row < stage.tile; row += 1)
-        sheet.data.copy(
-          tile,
-          row * stage.tile * channels,
-          ((top + row) * width + left) * channels,
-          ((top + row) * width + left + stage.tile) * channels,
-        );
-      const name = `frame-${String(index).padStart(3, "0")}.png`;
-      await sharp(tile, { raw: { width: stage.tile, height: stage.tile, channels } }).png().toFile(join(directory, name));
-      names.push(`jobs/${job.id}/render3d/${name}`);
+  /** One pose = one ordinary 2D try-on in its own directory; a busy worker is retried here, never by restarting the job. */
+  private async runPose(job: AiJob, id: string, controller: AbortController, first: boolean): Promise<AiWorkerResult> {
+    const directory = join(job.directory, "poses", id);
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await copyFile(join(job.directory, "garment.image"), join(directory, "garment.image"));
+    await writeFile(join(directory, "person.image"), await this.catalog.studio(id), { mode: 0o600 });
+    await writeFile(join(directory, "job.json"), JSON.stringify(job.worker), { mode: 0o600 });
+    for (let attempt = 0; ; attempt += 1) {
+      const own = new AbortController();
+      // A slow standing pose fails the job as a timeout; a slow extra pose is only skipped.
+      const timer = setTimeout(() => (first ? controller : own).abort("deadline"), 120_000);
+      timer.unref();
+      try {
+        return await this.worker.run(directory, AbortSignal.any([controller.signal, own.signal]));
+      } catch (error) {
+        const busy = error instanceof HttpError && error.status === 429;
+        if (!busy || controller.signal.aborted || attempt >= 3) throw error;
+        await sleep(2500);
+      } finally {
+        clearTimeout(timer);
+      }
     }
-    return names;
+  }
+
+  /** A pose is published only with the same attested binding and a valid PNG as an ordinary try-on result. */
+  private async verifyPose(job: AiJob, id: string, result: AiWorkerResult): Promise<Buffer> {
+    if (!result.binding || result.binding.request_id !== job.id ||
+        result.binding.product_id !== job.product_id || result.binding.variant_id !== job.variant_id) throw new Error("AI_WORKER_BINDING_MISMATCH");
+    if (result.result_file !== "result.png" || result.gate?.valid !== true) throw new Error("INVALID_IMAGE_RESULT");
+    const bytes = await this.repo.result({ ...job, directory: join(job.directory, "poses", id) });
+    const output = sharp(bytes, { failOn: "warning", limitInputPixels: 20_000_000 });
+    const metadata = await output.metadata();
+    if (metadata.format !== "png" || (metadata.pages || 1) !== 1) throw new Error("INVALID_IMAGE_RESULT");
+    await output.stats();
+    return bytes;
   }
 }

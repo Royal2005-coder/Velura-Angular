@@ -146,6 +146,9 @@ describe('ProductDetailPage', () => {
 
     expect(page.isCombo()).toBe(true);
     expect(page.quantity()).toBe(1);
+    // Virtual try-on is scoped to single garments: a combo never feeds the workbench a product.
+    expect(page.aiWorkbenchProductId()).toBe('');
+    expect(page.aiWorkbenchVariantId()).toBe('');
 
     // Summary for quantity 1
     const summary1 = page.comboSummary();

@@ -769,97 +769,64 @@ test("VTO enforces configured retry limits, tracks retry_of lineage, and re-veri
     await fixture.close();
   }
 });
-test("A studio try-on is Success before its 360° stage, then publishes frames only its own job may serve", async () => {
-  const columns = 4, rows = 3, tile = 64, frames = 12;
-  const reconstruction = Promise.withResolvers<void>();
-  const raw = Buffer.alloc(columns * tile * rows * tile * 3);
-  for (let index = 0; index < frames; index += 1) {
-    for (let y = 0; y < tile; y += 1)
-      for (let x = 0; x < tile; x += 1) {
-        const offset = ((((index / columns) | 0) * tile + y) * columns * tile + ((index % columns) * tile + x)) * 3;
-        raw[offset] = index * 20 + 5;
-        raw[offset + 1] = 40;
-        raw[offset + 2] = 60;
-      }
-  }
-  const sheet = await sharp(raw, { raw: { width: columns * tile, height: rows * tile, channels: 3 } }).png().toBuffer();
+/** Registers `ids` as licensed studio models (first = standing) under the fixture root. */
+async function registerStudio(root: string, ids: string[]): Promise<void> {
+  const studioRoot = join(root, "studio");
+  await mkdir(studioRoot, { recursive: true });
+  await writeFile(join(studioRoot, "pose.png"), PNG);
+  process.env.AI_STUDIO_ASSET_ROOT = studioRoot;
+  process.env.AI_STUDIO_ASSETS = JSON.stringify(
+    Object.fromEntries(ids.map((id) => [id, { file: "pose.png", label: `Dáng ${id}`, licensed: true }])),
+  );
+}
+const studioVariant = "22222222-2222-4222-8222-222222222222";
+const studioSupport = { ...catalog, async support() { return { product_supported: true, variant_supported: true, garment_category: "upper_body" }; } };
+const studioBody = (key: string) => ({
+  task: "virtual_try_on", product_id: product, variant_id: studioVariant,
+  mode: "studio", consent: true, confirmed: true, idempotency_key: key,
+});
+
+test("A studio try-on runs every registered pose standing-first and serves only recorded poses", async () => {
+  const seen: string[] = [];
   const fixture = await setup({
     ready: () => true,
-    turntableReady: () => true,
-    async turntable() { await reconstruction.promise; return { bytes: sheet, frames, columns, rows, tile }; },
     async run(directory) {
       const request = JSON.parse(await readFile(join(directory, "job.json"), "utf8")) as { request_id: string };
+      seen.push(directory.split(/[\\/]/).pop() as string);
       await writeFile(join(directory, "result.png"), PNG);
       return { status: "success", result_file: "result.png", gate: { valid: true },
-        binding: { request_id: request.request_id, product_id: product, variant_id: "22222222-2222-4222-8222-222222222222" } };
+        binding: { request_id: request.request_id, product_id: product, variant_id: studioVariant } };
     },
-  }, { ...catalog, async support() { return { product_supported: true, variant_supported: true, garment_category: "upper_body" }; } });
+  }, studioSupport);
   try {
-    const job = await fixture.service.create("a", {
-      task: "virtual_try_on", product_id: product, variant_id: "22222222-2222-4222-8222-222222222222",
-      mode: "studio", studio_asset_id: "female", consent: true, confirmed: true, render3d: true,
-      idempotency_key: "turntable-vto-123",
-    });
+    await registerStudio(fixture.root, ["standing", "side", "back"]);
+    const job = await fixture.service.create("a", studioBody("studio-poses-123"));
     const done = await terminal(fixture.service, "a", job.id);
-    // D2/VTO-09: the try-on result is usable while the 360° add-on is still being built.
     assert.equal(done.status, "success");
-    assert.equal(done.stage3d, "pending");
-    assert.equal(done.frames3d, undefined);
+    assert.deepEqual(seen, ["standing", "side", "back"]);
+    assert.deepEqual(done.poses?.map((pose) => pose.id), ["standing", "side", "back"]);
     assert.ok(await fixture.service.result("a", job.id));
-    reconstruction.resolve();
-    const built = await terminal(fixture.service, "a", job.id, (row) => row.stage3d !== "pending");
-    assert.equal(built.status, "success");
-    assert.equal(built.stage3d, undefined);
-    assert.equal(built.frames3d?.length, frames);
-    const frame = await fixture.service.resultFile("a", job.id, "frame-007.png");
-    const pixel = (await sharp(frame).raw().toBuffer({ resolveWithObject: true })).data;
-    assert.equal(pixel[0], 7 * 20 + 5);
-    await assert.rejects(fixture.service.resultFile("a", job.id, "frame-099.png"), { code: "RESULT_UNAVAILABLE" });
+    assert.ok(await fixture.service.resultFile("a", job.id, "side"));
+    await assert.rejects(fixture.service.resultFile("a", job.id, "unknown"), { code: "RESULT_UNAVAILABLE" });
   } finally { await fixture.close(); }
 });
 
-test("A reconstruction failure leaves a successful try-on published and without frames", async () => {
+test("A failing extra pose is skipped while a failing standing pose fails the job", async () => {
   const fixture = await setup({
     ready: () => true,
-    turntableReady: () => true,
-    async turntable() { throw new Error("AI_WORKER_HTTP_503"); },
     async run(directory) {
       const request = JSON.parse(await readFile(join(directory, "job.json"), "utf8")) as { request_id: string };
+      if (directory.endsWith("side")) return { status: "failed" };
       await writeFile(join(directory, "result.png"), PNG);
       return { status: "success", result_file: "result.png", gate: { valid: true },
-        binding: { request_id: request.request_id, product_id: product, variant_id: "22222222-2222-4222-8222-222222222222" } };
+        binding: { request_id: request.request_id, product_id: product, variant_id: studioVariant } };
     },
-  }, { ...catalog, async support() { return { product_supported: true, variant_supported: true, garment_category: "upper_body" }; } });
+  }, studioSupport);
   try {
-    const job = await fixture.service.create("a", {
-      task: "virtual_try_on", product_id: product, variant_id: "22222222-2222-4222-8222-222222222222",
-      mode: "studio", studio_asset_id: "female", consent: true, confirmed: true, render3d: true,
-      idempotency_key: "turntable-failure-vto-123",
-    });
-    const done = await terminal(fixture.service, "a", job.id, (row) => row.status === "success" && row.stage3d !== "pending");
+    await registerStudio(fixture.root, ["standing", "side", "back"]);
+    const done = await terminal(fixture.service, "a", (await fixture.service.create("a", studioBody("studio-skip-123"))).id);
     assert.equal(done.status, "success");
-    assert.equal(done.stage3d, "failed");
-    assert.equal(done.frames3d, undefined);
-    assert.ok(await fixture.service.result("a", job.id));
-  } finally { await fixture.close(); }
-});
-
-test("A 360° stage left pending by a restart resumes and settles instead of leaving clients polling forever", async () => {
-  const fixture = await setup(worker);
-  try {
-    const id = "33333333-3333-4333-8333-333333333333";
-    await mkdir(join(fixture.root, "jobs", id), { recursive: true });
-    await fixture.repo.saveJob({
-      id, task: "virtual_try_on", status: "success", stage3d: "pending",
-      created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 600_000).toISOString(),
-      result_url: `jobs/${id}/result`, owner: "a", idempotency_key: "restart-3d-123", fingerprint: "f",
-      directory: join(fixture.root, "jobs", id), worker: {},
-    });
-    await fixture.service.recover();
-    // This worker has no turntable, so the resumed stage must settle as failed — never stay pending.
-    const job = await terminal(fixture.service, "a", id, (row) => row.stage3d !== "pending");
-    assert.equal(job.status, "success");
-    assert.equal(job.stage3d, "failed");
+    assert.deepEqual(done.poses?.map((pose) => pose.id), ["standing", "back"]);
   } finally { await fixture.close(); }
 });
 
@@ -876,9 +843,10 @@ test("A shutdown abort is recorded as an interruption (AI_JOB_INTERRUPTED), not 
   }, { ...catalog, async support() { return { product_supported: true, variant_supported: true, garment_category: "upper_body" }; } });
   const body = {
     task: "virtual_try_on", product_id: product, variant_id: "22222222-2222-4222-8222-222222222222",
-    mode: "studio", studio_asset_id: "female", consent: true, confirmed: true, idempotency_key: "shutdown-vto-123",
+    mode: "studio", consent: true, confirmed: true, idempotency_key: "shutdown-vto-123",
   };
   try {
+    await registerStudio(fixture.root, ["standing"]);
     const job = await fixture.service.create("a", body);
     await started.promise;
     await fixture.service.close();

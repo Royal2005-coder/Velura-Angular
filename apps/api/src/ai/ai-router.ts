@@ -162,6 +162,19 @@ export async function handleAiRoute(
     res.end(image.bytes);
     return true;
   }
+  if (action === "garment" && parts.length === offset + 1 && req.method === "GET") {
+    const query = new URL(req.url || "/", "http://localhost").searchParams;
+    const image = await service.garmentPreview(query.get("product_id") ?? "", query.get("variant_id") ?? "");
+    res.writeHead(200, {
+      ...headers,
+      "content-type": image.mime,
+      "cache-control": "private, no-store",
+      "content-disposition": 'inline; filename="garment-preview"',
+      "x-content-type-options": "nosniff",
+    });
+    res.end(image.bytes);
+    return true;
+  }
   recovery ??= service.recover();
   await recovery;
   if (req.method === "POST") {
@@ -248,7 +261,7 @@ export async function handleAiRoute(
       res.end(image);
       return true;
     }
-    if (parts[offset + 2] === "render3d" && parts[offset + 3] && req.method === "GET") {
+    if (parts[offset + 2] === "poses" && parts[offset + 3] && req.method === "GET") {
       const job = await service.get(owner, id);
       if (user && requiresMember(job)) requireAiMember(context);
       const name = parts[offset + 3];
@@ -257,7 +270,7 @@ export async function handleAiRoute(
         ...headers,
         "content-type": "image/png",
         "cache-control": "no-store",
-        "content-disposition": `inline; filename="${name}"`,
+        "content-disposition": `inline; filename="pose-${name}.png"`,
         "x-content-type-options": "nosniff",
       });
       res.end(bytes);

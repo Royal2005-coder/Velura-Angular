@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, Subject, throwError, timer, firstValueFrom } from 'rxjs';
 import { AiEngineService, AiJob } from '../../core/services/ai-engine.service';
@@ -15,13 +15,17 @@ const quality: AiJob = {
   gate: { valid: false, reasons: ['BLURRY'] },
 };
 describe('AiImageWorkbench', () => {
+  const poseBlobs = new WeakMap<Blob, string>();
   let model: {
     upload: Mock;
     create: Mock;
     cancel: Mock;
     studioPreview: Mock;
+    garmentPreview: Mock;
     job: Mock;
     capabilities: Mock;
+    pose: Mock;
+    result: Mock;
   };
   let api: {
     me: Mock;
@@ -42,8 +46,15 @@ describe('AiImageWorkbench', () => {
       create: vi.fn(() => of({ job: quality })),
       cancel: vi.fn(() => of({})),
       studioPreview: vi.fn(() => of(new Blob(['image'], { type: 'image/png' }))),
+      garmentPreview: vi.fn(() => of(new Blob(['garment'], { type: 'image/png' }))),
       job: vi.fn(() => of({ job: { ...quality, status: 'cancelled' as const } })),
       capabilities: vi.fn(() => of({ enabled: true, product_supported: true, variant_supported: true, tasks: [{ task: 'virtual_try_on', enabled: true }] })),
+      pose: vi.fn((_job: string, poseId: string) => {
+        const blob = new Blob([poseId], { type: 'image/png' });
+        poseBlobs.set(blob, poseId);
+        return of(blob);
+      }),
+      result: vi.fn(() => of(new Blob(['image'], { type: 'image/png' }))),
     };
     api = {
       me: vi.fn(() => of(verifiedMemberIdentity)),
@@ -56,16 +67,22 @@ describe('AiImageWorkbench', () => {
         { provide: ApiService, useValue: api },
       ],
     });
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      const id = poseBlobs.get(blob as Blob);
+      return id ? `blob:${id}` : 'blob:preview';
+    });
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
   });
   afterEach(() => vi.restoreAllMocks());
   function page() {
+    return pageFixture().componentInstance;
+  }
+  function pageFixture() {
     const fixture = TestBed.createComponent(AiImageWorkbench);
     fixture.componentRef.setInput('productId', 'product');
     fixture.componentRef.setInput('variantId', 'variant');
     fixture.detectChanges();
-    return fixture.componentInstance;
+    return fixture;
   }
   function ready(p: AiImageWorkbench) {
     p.capabilities.set({
@@ -131,7 +148,6 @@ describe('AiImageWorkbench', () => {
     ready(p);
     await photo(p);
     p.mode.set('studio');
-    p.studio.set('licensed-model');
     p.studioImage.set('blob:studio-model');
     p.consent.set(true);
     model.create.mockReturnValue(
@@ -188,11 +204,11 @@ describe('AiImageWorkbench', () => {
     const p = page();
     ready(p);
     await p.verifyMemberIdentity();
-    p.chooseMode('studio');
+    p.mode.set('studio');
     p.consent.set(true);
     const response = new Subject<Blob>();
     model.studioPreview.mockReturnValue(response);
-    const loading = p.selectStudio({ target: { value: 'licensed-model' } } as unknown as Event);
+    const loading = p.loadStudioPreview();
     expect(p.studioLoading()).toBe(true);
     p.setConsent({ target: { checked: true } } as unknown as Event);
     expect(p.consent()).toBe(false);
@@ -207,9 +223,8 @@ describe('AiImageWorkbench', () => {
   it('does not queue studio work when preview retrieval fails', async () => {
     const p = page();
     ready(p);
-    p.chooseMode('studio');
     model.studioPreview.mockReturnValue(throwError(() => new Error('not found')));
-    await p.selectStudio({ target: { value: 'licensed-model' } } as unknown as Event);
+    await p.loadStudioPreview();
     p.consent.set(true);
     await p.generate();
     expect(model.create).not.toHaveBeenCalled();
@@ -390,102 +405,196 @@ describe('AiImageWorkbench', () => {
     });
   });
 
-  describe('3D 360 viewer, scenarios, and female-only models', () => {
-    it('strictly filters for female models and excludes male or unspecified assets', () => {
-      const p = page();
+  describe('studio 10-pose preview', () => {
+    const poseIds = [
+      'female-front-relaxed-v1',
+      ...Array.from({ length: 9 }, (_, i) => `pose-${i + 1}`),
+    ];
+    const poseRefs = (count: number) =>
+      poseIds.slice(0, count).map((id, i) => ({ id, label: `Dáng ${i + 1}` }));
+    const vto = (status: AiJob['status'], count: number): AiJob => ({
+      ...quality,
+      id: 'studio-job',
+      task: 'virtual_try_on',
+      status,
+      expires_at: new Date(Date.now() + 600000).toISOString(),
+      product_id: 'product',
+      variant_id: 'variant',
+      poses: poseRefs(count),
+    });
+    function studio(p: AiImageWorkbench) {
       p.capabilities.set({
         enabled: true,
-        local_only: true,
+        product_supported: true,
+        variant_supported: true,
+        studio_assets: poseIds.map((id, i) => ({ id, label: `Dáng ${i + 1}`, gender: 'female' })),
+        tasks: [{ task: 'virtual_try_on', enabled: true }],
         max_upload_bytes: 100,
         private_ttl_seconds: 900,
-        tasks: [{ task: 'virtual_try_on', enabled: true }],
-        studio_assets: [
-          { id: 'f1', label: 'Người mẫu Nữ Studio', gender: 'female', occasion: 'basic', season: 'all' },
-          { id: 'm1', label: 'Người mẫu Nam Studio', gender: 'male', occasion: 'basic', season: 'all' },
-          { id: 'u1', label: 'Người mẫu Khác', gender: 'unspecified' },
-        ],
+        local_only: true,
       });
-      const filtered = p.filteredStudioAssets();
-      expect(filtered.length).toBe(1);
-      expect(filtered[0].id).toBe('f1');
-      expect(filtered[0].gender).toBe('female');
-    });
-
-    it('steps exactly one real frame per arrow key and returns to the front on Home', () => {
-      const p = page();
-      p.frames3d.set(Array.from({ length: 24 }, (_, i) => `blob:frame-${i}`));
-      const key = (k: string) => p.onStageKeydown(new KeyboardEvent('keydown', { key: k }));
-      key('ArrowRight');
-      expect(p.normalizedAngle()).toBe(15);
-      expect(p.currentDisplayImage()).toBe('blob:frame-1');
-      key('ArrowLeft');
-      key('ArrowLeft');
-      expect(p.normalizedAngle()).toBe(345);
-      expect(p.currentDisplayImage()).toBe('blob:frame-23');
-      key('Home');
-      expect(p.currentDisplayImage()).toBe('blob:frame-0');
-    });
-
-    it('does not rotate a flat 2D result: drag, keys and auto-spin need real turntable frames', () => {
-      const p = page();
-      p.result.set('blob:flat');
-      p.onStageKeydown(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-      p.toggleAutoSpin();
-      expect(p.normalizedAngle()).toBe(0);
-      expect(p.autoSpin()).toBe(false);
-      expect(p.currentDisplayImage()).toBe('blob:flat');
-    });
-
-    it('starts and stops autoSpin on real frames and cancels on close', () => {
-      const p = page();
-      p.frames3d.set(Array.from({ length: 12 }, (_, i) => `blob:frame-${i}`));
-      p.toggleAutoSpin();
-      expect(p.autoSpin()).toBe(true);
-      p.toggleAutoSpin();
-      expect(p.autoSpin()).toBe(false);
-      p.toggleAutoSpin();
-      p.close();
-      expect(p.autoSpin()).toBe(false);
-    });
-
-    it('tells the shopper the 360° view is still being built, or that it failed while the 2D result stays', () => {
-      const p = page();
+    }
+    async function studioReady(p: AiImageWorkbench) {
+      studio(p);
       p.mode.set('studio');
-      p.result.set('blob:tryon');
-      const done = { ...quality, task: 'virtual_try_on' as const, status: 'success' as const };
-      p.job.set({ ...done, stage3d: 'pending' });
-      expect(p.stage3dNote()?.tone).toBe('info');
-      p.job.set({ ...done, stage3d: 'failed' });
-      expect(p.stage3dNote()?.tone).toBe('warn');
-      expect(p.result()).toBe('blob:tryon');
+      await p.loadStudioPreview();
+      p.consent.set(true);
+    }
+    const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+    // Thumbnail labels ("Dáng 3", "Dáng 4") concatenate in textContent, so exclude that false match.
+    const legacyViewer = new RegExp(['\\u0033\\u0036\\u0030', '\\u0033D(?!áng)'].join('|'), 'i');
+    const thumbs = (f: ComponentFixture<AiImageWorkbench>) =>
+      Array.from<HTMLElement>(f.nativeElement.querySelectorAll('.pose-card'));
+    const cardSrc = (f: ComponentFixture<AiImageWorkbench>, index: number) =>
+      thumbs(f)[index].querySelector('img')?.getAttribute('src') ?? undefined;
+
+    it('loads the preview of the first studio pose as the standing model', async () => {
+      const p = page();
+      studio(p);
+      await p.loadStudioPreview();
+      expect(model.studioPreview).toHaveBeenCalledWith('female-front-relaxed-v1');
+      expect(p.studioImage()).toBe('blob:preview');
     });
 
-    it('clamps zoom levels within bounds and resets view', () => {
+    it('creates one studio job without a pose id or extra render flags', async () => {
       const p = page();
-      p.zoomIn();
-      expect(p.zoomLevel()).toBe(1.2);
-      p.zoomIn();
-      p.zoomIn();
-      p.zoomIn();
-      p.zoomIn();
-      p.zoomIn();
-      expect(p.zoomLevel()).toBe(1.8);
+      await studioReady(p);
+      model.create.mockReturnValue(of({ job: vto('success', 10) }));
+      await p.generate();
+      expect(model.create).toHaveBeenCalledTimes(1);
+      const body = model.create.mock.calls[0][0];
+      expect(body).toMatchObject({
+        task: 'virtual_try_on',
+        mode: 'studio',
+        product_id: 'product',
+        variant_id: 'variant',
+        consent: true,
+        confirmed: true,
+      });
+      const sent = JSON.parse(JSON.stringify(body)) as Record<string, unknown>;
+      expect(Object.keys(sent).sort()).toEqual(
+        ['confirmed', 'consent', 'idempotency_key', 'mode', 'person_check', 'product_id', 'task', 'variant_id'].sort(),
+      );
+      expect(body.person_asset_id).toBeUndefined();
+    });
 
-      p.zoomOut();
-      expect(p.zoomLevel()).toBe(1.6);
-      p.zoomOut();
-      p.zoomOut();
-      p.zoomOut();
-      p.zoomOut();
-      expect(p.zoomLevel()).toBe(1.0);
+    it('shows 10 thumbnails from job.poses and the standing pose first', async () => {
+      const fixture = pageFixture();
+      const p = fixture.componentInstance;
+      await studioReady(p);
+      model.create.mockReturnValue(of({ job: vto('success', 10) }));
+      await p.generate();
+      await flush();
+      fixture.detectChanges();
+      expect(model.pose).toHaveBeenCalledTimes(10);
+      expect(model.pose).toHaveBeenCalledWith('studio-job', 'female-front-relaxed-v1');
+      expect(thumbs(fixture)).toHaveLength(10);
+      expect(fixture.nativeElement.querySelectorAll('.pose-card__skeleton')).toHaveLength(0);
+      expect(p.poseProgress()).toBe('10/10 dáng');
+      expect(cardSrc(fixture, 0)).toBe('blob:female-front-relaxed-v1');
+      expect(fixture.nativeElement.textContent).toContain('Dáng 10');
+    });
 
-      p.frames3d.set(Array.from({ length: 12 }, (_, i) => `blob:frame-${i}`));
-      p.setAnglePreset(180);
-      p.zoomIn();
-      p.reset3DView();
-      expect(p.orbitAngle()).toBe(0);
-      expect(p.zoomLevel()).toBe(1.0);
-      expect(p.autoSpin()).toBe(false);
+    it('each finished pose downloads its own image from the grid', async () => {
+      const fixture = pageFixture();
+      const p = fixture.componentInstance;
+      await studioReady(p);
+      model.create.mockReturnValue(of({ job: vto('success', 10) }));
+      await p.generate();
+      await flush();
+      fixture.detectChanges();
+      expect(cardSrc(fixture, 0)).toBe('blob:female-front-relaxed-v1');
+      expect(cardSrc(fixture, 3)).toBe('blob:pose-3');
+      expect(model.create).toHaveBeenCalledTimes(1);
+      const hrefs: string[] = [];
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+        hrefs.push(this.href);
+      });
+      (fixture.nativeElement.querySelectorAll('.pose-card__download')[3] as HTMLButtonElement).click();
+      expect(hrefs).toEqual(['blob:pose-3']);
+    });
+
+    it('shows the chosen pose on the large stage and downloads it from there', async () => {
+      const fixture = pageFixture();
+      const p = fixture.componentInstance;
+      await studioReady(p);
+      model.create.mockReturnValue(of({ job: vto('success', 10) }));
+      await p.generate();
+      await flush();
+      fixture.detectChanges();
+      const stageSrc = () =>
+        fixture.nativeElement.querySelector('.pose-stage__img')?.getAttribute('src') ?? undefined;
+      expect(stageSrc()).toBe('blob:female-front-relaxed-v1');
+      (fixture.nativeElement.querySelectorAll('.pose-card__select')[3] as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(stageSrc()).toBe('blob:pose-3');
+      const hrefs: string[] = [];
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+        hrefs.push(this.href);
+      });
+      (fixture.nativeElement.querySelector('.pose-stage__download') as HTMLButtonElement).click();
+      expect(hrefs).toEqual(['blob:pose-3']);
+    });
+
+    it('fills the poses progressively and keeps unfinished ones as skeleton placeholders', async () => {
+      vi.useFakeTimers();
+      try {
+        const fixture = pageFixture();
+        const p = fixture.componentInstance;
+        await studioReady(p);
+        model.create.mockReturnValue(of({ job: vto('running', 1) }));
+        model.job
+          .mockReturnValueOnce(of({ job: vto('running', 3) }))
+          .mockReturnValueOnce(of({ job: vto('success', 10) }));
+        await p.generate();
+        await vi.advanceTimersByTimeAsync(0);
+        fixture.detectChanges();
+        expect(thumbs(fixture)).toHaveLength(10);
+        expect(fixture.nativeElement.querySelectorAll('.pose-card__skeleton')).toHaveLength(9);
+        expect(cardSrc(fixture, 1)).toBeUndefined();
+        expect(p.poseProgress()).toBe('Đã xong 1/10 dáng');
+        expect(cardSrc(fixture, 0)).toBe('blob:female-front-relaxed-v1');
+
+        await vi.advanceTimersByTimeAsync(1500);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelectorAll('.pose-card__skeleton')).toHaveLength(7);
+        expect(p.poseProgress()).toBe('Đã xong 3/10 dáng');
+        expect(model.pose).toHaveBeenCalledTimes(3);
+
+        await vi.advanceTimersByTimeAsync(1500);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelectorAll('.pose-card__skeleton')).toHaveLength(0);
+        expect(p.poseProgress()).toBe('10/10 dáng');
+        expect(p.busy()).toBe(false);
+        expect(model.pose).toHaveBeenCalledTimes(10);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('revokes the pose images when the viewer is reset', async () => {
+      const p = page();
+      await studioReady(p);
+      model.create.mockReturnValue(of({ job: vto('success', 2) }));
+      await p.generate();
+      await flush();
+      p.chooseMode('personal');
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:female-front-relaxed-v1');
+      expect(p.poseUrls()).toEqual({});
+    });
+
+    it('has no legacy turntable interface', async () => {
+      const fixture = pageFixture();
+      const p = fixture.componentInstance;
+      await studioReady(p);
+      model.create.mockReturnValue(of({ job: vto('success', 10) }));
+      await p.generate();
+      await flush();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).not.toMatch(legacyViewer);
+      expect(fixture.nativeElement.querySelector('[class*="stage-"]')).toBeNull();
+      expect(fixture.nativeElement.textContent).toContain('Thử đồ 10 dáng');
     });
   });
+
 });

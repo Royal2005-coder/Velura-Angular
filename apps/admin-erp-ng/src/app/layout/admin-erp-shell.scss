@@ -50,6 +50,10 @@
   width: 40px;
   height: 40px;
   object-fit: contain;
+  padding: 4px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 

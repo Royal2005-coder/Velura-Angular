@@ -5,7 +5,7 @@
   <section class="bi-hero">
     <div class="bi-hero__text">
       @if (activeCrossFilters().length === 0) {
-        <strong>Xin chào, Super Admin</strong>
+        <strong>Xin chào, {{ operatorName() }}</strong>
         <span>Báo cáo Điều hành</span>
       } @else {
         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">

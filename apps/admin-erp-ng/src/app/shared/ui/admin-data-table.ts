@@ -220,6 +220,11 @@ export interface AdminTableRowAction {
       table.table-fixed {
         table-layout: fixed;
       }
+      table.table-fixed th,
+      table.table-fixed td {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       th,
       td {
         padding: 12px 16px;

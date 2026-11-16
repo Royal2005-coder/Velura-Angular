@@ -24,6 +24,7 @@ import { CheckoutStore } from '../../core/services/checkout.store';
 import { ReturnTrackingComponent } from './return-tracking.component';
 import { VIETNAM_BANKS } from '../../core/models/vietnam-banks';
 import { OTP_COUNTDOWN_SECONDS } from '../../core/utils/otp-policy';
+import { NotificationsService } from '../../core/services/notifications.service';
 
 /**
  * Guest access, order actions and after-sales share one `OrderAccountModel` injection point:
@@ -49,6 +50,7 @@ export class OrderFlowPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly checkout = inject(CheckoutStore);
+  private readonly notifications = inject(NotificationsService);
   private readonly destroyRef = inject(DestroyRef);
   readonly view = signal<
     | 'lookup'
@@ -777,6 +779,7 @@ export class OrderFlowPage {
           this.requestId.set(request.id);
           this.error.set('');
           this.view.set('tracking');
+          void this.notifications.refresh();
         })
         .catch((error) => {
           this.error.set(orderAccountErrorMessage(error));

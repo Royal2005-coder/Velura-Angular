@@ -115,18 +115,9 @@ export async function sendRefundSuccessEmail(
     }
 
     const orderCode = asString(order.order_code) || orderId.slice(0, 8).toUpperCase();
-
-    if (!customerEmail || !customerEmail.includes("@")) {
-      console.warn(`[REFUND_EMAIL] No valid customer email found for return ${returnId} (order ${orderCode}).`);
-      return false;
-    }
-
-    customerName = customerName || "Quý khách";
-
     const trackingCode = asString(returnRecord.tracking_return_code) || returnId.slice(0, 8).toUpperCase();
     const refundAmount = item ? asNumber(item.refund_amount) : asNumber(returnRecord.refund_amount);
-    if (refundAmount <= 0) return false;
-    const amountFormatted = refundAmount.toLocaleString("vi-VN") + " đ";
+    const amountFormatted = refundAmount > 0 ? refundAmount.toLocaleString("vi-VN") + " đ" : "";
 
     const gateway: RefundGatewayLabel | null = options.method === "vnpay" || options.method === "momo" || options.method === "stripe" ? options.method : null;
     const paymentMethodText = gateway
@@ -141,6 +132,36 @@ export async function sendRefundSuccessEmail(
         : gateway === "stripe"
           ? "• Đối với thẻ quốc tế (Stripe): Tiền sẽ hoàn vào hạn mức thẻ trong vòng 3-7 ngày làm việc tùy chính sách ngân hàng phát hành thẻ."
           : "";
+
+    // 1. Kích hoạt notification lên icon chuông Storefront nếu người dùng là thành viên (user_id hợp lệ)
+    if (userId) {
+      const notifTitle = status === "succeeded"
+        ? `Hoàn tiền thành công cho đơn hàng #${orderCode}`
+        : status === "requested"
+          ? `Đã gửi lệnh hoàn tiền cho đơn hàng #${orderCode}`
+          : `Lệnh hoàn tiền chưa thành công cho đơn hàng #${orderCode}`;
+      const notifContent = status === "succeeded"
+        ? `Số tiền ${amountFormatted} đã được hoàn tất thủ tục hoàn về tài khoản/thẻ của bạn (${paymentMethodText}).`
+        : status === "requested"
+          ? `Yêu cầu hoàn số tiền ${amountFormatted} đã được gửi tới cổng thanh toán. Tiền sẽ về tài khoản của bạn sau vài ngày làm việc.`
+          : `Lệnh hoàn tiền chưa thể thực hiện tự động. CSKH sẽ liên hệ hỗ trợ hoàn tiền trực tiếp.`;
+
+      void createNotification(
+        userId,
+        "return_refunded",
+        notifTitle,
+        notifContent,
+        `/account/orders/${orderId}`
+      ).catch((err) => console.warn(`[REFUND_NOTIF] Failed to create notification: ${err}`));
+    }
+
+    if (!customerEmail || !customerEmail.includes("@")) {
+      console.warn(`[REFUND_EMAIL] No valid customer email found for return ${returnId} (order ${orderCode}).`);
+      return false;
+    }
+
+    customerName = customerName || "Quý khách";
+    if (refundAmount <= 0) return false;
 
     const subjectLine = status === "requested"
       ? `Velura đã gửi yêu cầu hoàn tiền cho đơn hàng #${orderCode} (Phiếu #${trackingCode}) tới ${gateway ? refundChannelName(gateway) : "ngân hàng"} và đang chờ cổng xác nhận.`
@@ -265,17 +286,6 @@ Trân trọng,
     console.log(`[REFUND_EMAIL] Sending refund ${status} email to ${customerEmail} for order #${orderCode}...`);
     const sent = await sendDirectEmail(customerEmail, subject, text, html);
 
-    // Kích hoạt notification lên icon chuông Storefront nếu người dùng là thành viên (user_id hợp lệ)
-    if (userId) {
-      void createNotification(
-        userId,
-        "return_refunded",
-        `Hoàn tiền thành công cho đơn hàng #${orderCode}`,
-        `Số tiền ${amountFormatted} đã được hoàn tất thủ tục hoàn về tài khoản/thẻ của bạn (${paymentMethodText}).`,
-        `/account/orders/${orderId}`
-      ).catch((err) => console.warn(`[REFUND_NOTIF] Failed to create notification: ${err}`));
-    }
-
     await insertRow("email_outbox", {
       recipient: customerEmail,
       template_code: templateCode,
@@ -332,6 +342,21 @@ export async function sendReturnApprovedEmail(returnId: string, returnItemId: st
         name = name || asString(user.full_name).trim();
       }
     }
+    const returnCode = asString(ret.return_code) || asString(ret.tracking_return_code);
+    const trackingLink = `https://velura.royalai.dev/account/orders/${asString(ret.order_id)}`;
+    const product = asString(itemInfo?.product_name) || "Sản phẩm đổi/trả";
+
+    // 1. Kích hoạt notification lên icon chuông Storefront nếu người dùng là thành viên (user_id hợp lệ)
+    if (userId) {
+      void createNotification(
+        userId,
+        "return_approved",
+        `Yêu cầu đổi/trả #${returnCode} đã được phê duyệt`,
+        `Yêu cầu cho sản phẩm ${product} (Đơn hàng #${order.order_code || returnCode}) đã được phê duyệt. Vui lòng đóng gói và bàn giao cho ĐVVC.`,
+        `/account/orders/${asString(ret.order_id)}`
+      ).catch((err) => console.warn(`[RETURN_APPROVED_NOTIF] Failed to create notification: ${err}`));
+    }
+
     if (!email.includes("@")) return false;
     name = name || "Quý khách";
 
@@ -343,10 +368,7 @@ export async function sendReturnApprovedEmail(returnId: string, returnItemId: st
       return true;
     }
 
-    const returnCode = asString(ret.return_code) || asString(ret.tracking_return_code);
     const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(returnCode)}`;
-    const trackingLink = `https://velura.royalai.dev/account/orders/${asString(ret.order_id)}`;
-    const product = asString(itemInfo?.product_name) || "Sản phẩm đổi/trả";
     const subject = `[Velura] Yêu cầu đổi/trả ${returnCode} đã được duyệt`;
     const text = `Kính chào ${name},
 
@@ -372,17 +394,6 @@ Theo dõi tại: ${trackingLink}`;
         </div>
       </div>`;
     const sent = await sendDirectEmail(email, subject, text, html);
-
-    // Kích hoạt notification lên icon chuông Storefront nếu người dùng là thành viên (user_id hợp lệ)
-    if (userId) {
-      void createNotification(
-        userId,
-        "return_approved",
-        `Yêu cầu đổi/trả #${returnCode} đã được phê duyệt`,
-        `Yêu cầu cho sản phẩm ${product} (Đơn hàng #${order.order_code || returnCode}) đã được phê duyệt. Vui lòng đóng gói và bàn giao cho ĐVVC.`,
-        `/account/orders/${asString(ret.order_id)}`
-      ).catch((err) => console.warn(`[RETURN_APPROVED_NOTIF] Failed to create notification: ${err}`));
-    }
 
     await insertRow("email_outbox", {
       recipient: email, template_code: "return_approved", subject, body: text,

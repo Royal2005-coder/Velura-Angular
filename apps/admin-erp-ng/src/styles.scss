@@ -239,6 +239,32 @@ p {
   color: var(--erp-muted);
 }
 
+.erp-required {
+  color: var(--erp-danger, #e11d48);
+  font-weight: 700;
+  margin-left: 3px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Angular Framework Form Validation Feedback */
+.erp-input.ng-invalid.ng-touched,
+.erp-select.ng-invalid.ng-touched,
+.erp-textarea.ng-invalid.ng-touched,
+.erp-input:invalid:not(:placeholder-shown):not(:focus),
+.erp-select:invalid:not(:focus),
+.erp-textarea:invalid:not(:placeholder-shown):not(:focus) {
+  border-color: var(--erp-danger, #e11d48);
+  background-color: var(--erp-danger-soft, #fff1f2);
+}
+
+.erp-input.ng-invalid.ng-touched:focus,
+.erp-select.ng-invalid.ng-touched:focus,
+.erp-textarea.ng-invalid.ng-touched:focus {
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.15);
+  border-color: var(--erp-danger, #e11d48);
+}
+
 .erp-input,
 .erp-select,
 .erp-textarea {

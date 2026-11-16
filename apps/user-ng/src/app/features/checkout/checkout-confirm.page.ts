@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { CheckoutStore } from '../../core/services/checkout.store';
+import { NotificationsService } from '../../core/services/notifications.service';
 import { useBodyClass } from '../../core/utils/body-class';
 
 @Component({
@@ -14,6 +15,7 @@ export class CheckoutConfirmPage {
   private readonly checkout = inject(CheckoutStore);
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(ApiService);
+  private readonly notifications = inject(NotificationsService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly created = this.checkout.readCreatedOrder();
   readonly activationRequired = computed(() => this.created?.activation_required === true);
@@ -59,6 +61,8 @@ export class CheckoutConfirmPage {
     useBodyClass('page-checkout');
     if (this.isStripeSuccess()) {
       this.verifyPayment();
+    } else {
+      void this.notifications.refresh();
     }
   }
 
@@ -79,7 +83,13 @@ export class CheckoutConfirmPage {
         })
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
-          next: (result) => this.verification.set(result.paid === true || result.payment_status === 'paid' ? 'paid' : 'pending'),
+          next: (result) => {
+            const isPaid = result.paid === true || result.payment_status === 'paid';
+            this.verification.set(isPaid ? 'paid' : 'pending');
+            if (isPaid) {
+              void this.notifications.refresh();
+            }
+          },
           error: (error: Error) => { this.verification.set('failed'); this.verificationError.set(error.message || 'Chưa xác minh được thanh toán.'); },
         });
   }

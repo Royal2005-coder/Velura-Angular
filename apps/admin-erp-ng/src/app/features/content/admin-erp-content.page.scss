@@ -35,6 +35,23 @@
   color: var(--erp-ink);
 }
 
+.content-head-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.content-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--erp-surface-muted);
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
 .content-search {
   flex: 1 1 260px;
   min-width: 220px;

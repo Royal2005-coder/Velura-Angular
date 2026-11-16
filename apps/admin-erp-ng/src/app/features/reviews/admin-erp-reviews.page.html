@@ -21,8 +21,7 @@
 <section class="erp-card reviews-panel" aria-labelledby="reviews-title">
   <div class="reviews-tabs">
     <div>
-      <span class="reviews-eyebrow">Moderation</span>
-      <h2 id="reviews-title">Hàng đợi đánh giá</h2>
+      <h2 id="reviews-title">Danh sách đánh giá</h2>
     </div>
     <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />
   </div>
@@ -230,7 +229,7 @@
         </section>
 
         <label class="erp-field">
-          <span>Nội dung phản hồi</span>
+          <span>Nội dung phản hồi <span class="erp-required" aria-hidden="true">*</span></span>
           <div class="review-emoji-bar">
             <span class="emoji-bar-label">Biểu cảm nhanh:</span>
             <div class="emoji-list">
@@ -263,7 +262,7 @@
 
       @if (actionType() === 'hide' || actionType() === 'escalate') {
         <label class="erp-field">
-          <span>{{ actionType() === 'hide' ? 'Lý do ẩn đánh giá' : 'Lý do tạo ticket CSKH' }}</span>
+          <span>{{ actionType() === 'hide' ? 'Lý do ẩn đánh giá' : 'Lý do tạo ticket CSKH' }} <span class="erp-required" aria-hidden="true">*</span></span>
           <textarea class="erp-input" name="value" rows="4" required></textarea>
         </label>
       }

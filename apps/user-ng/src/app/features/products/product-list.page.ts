@@ -691,14 +691,16 @@ export class ProductListPage implements AfterViewInit {
       this.pauseBannerTimer();
     });
 
-    this.catalog.getBanners('products_hero').pipe(takeUntilDestroyed(this.destroy)).subscribe({
-      next: (banners) => {
-        if (banners && banners.length > 0) {
-          this.heroBanners.set(banners);
-          this.resumeBannerTimer();
-        }
-      },
-    });
+    if (typeof this.catalog.getBanners === 'function') {
+      this.catalog.getBanners('products_hero').pipe(takeUntilDestroyed(this.destroy)).subscribe({
+        next: (banners) => {
+          if (banners && banners.length > 0) {
+            this.heroBanners.set(banners);
+            this.resumeBannerTimer();
+          }
+        },
+      });
+    }
     this.resumeBannerTimer();
     this.route.queryParamMap.pipe(tap((params) => {
       const category = params.get('category') || '';

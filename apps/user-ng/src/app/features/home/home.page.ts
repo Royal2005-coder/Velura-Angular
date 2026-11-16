@@ -236,25 +236,27 @@ export class HomePage implements AfterViewInit, OnDestroy {
     this.loading.set(true);
     this.loadError.set(null);
 
-    this.catalog.getBanners('home_hero').subscribe({
-      next: (banners) => {
-        if (banners && banners.length >= 3) {
-          const dynamicLooks: HeroLook[] = banners.map((b) => ({
-            id: b.banner_id,
-            collectionName: b.tag_label || 'Velura Collection',
-            title: b.title,
-            eyebrow: 'VELURA',
-            season: (b.metadata?.['season'] as string) || 'SPRING / SUMMER 2027',
-            description: b.subtitle || 'Những thiết kế thanh lịch tôn vinh phong cách riêng của bạn.',
-            badge: (b.metadata?.['badge'] as string) || 'ELEGANT',
-            looksCount: (b.metadata?.['looks_count'] as string) || '10 LOOKS',
-            image: b.media_url,
-            link: b.link_url || '/products',
-          }));
-          this.heroLooks.set(dynamicLooks);
-        }
-      },
-    });
+    if (typeof this.catalog.getBanners === 'function') {
+      this.catalog.getBanners('home_hero').subscribe({
+        next: (banners) => {
+          if (banners && banners.length >= 3) {
+            const dynamicLooks: HeroLook[] = banners.map((b) => ({
+              id: b.banner_id,
+              collectionName: b.tag_label || 'Velura Collection',
+              title: b.title,
+              eyebrow: 'VELURA',
+              season: (b.metadata?.['season'] as string) || 'SPRING / SUMMER 2027',
+              description: b.subtitle || 'Những thiết kế thanh lịch tôn vinh phong cách riêng của bạn.',
+              badge: (b.metadata?.['badge'] as string) || 'ELEGANT',
+              looksCount: (b.metadata?.['looks_count'] as string) || '10 LOOKS',
+              image: b.media_url,
+              link: b.link_url || '/products',
+            }));
+            this.heroLooks.set(dynamicLooks);
+          }
+        },
+      });
+    }
 
     forkJoin({
       categories: this.catalog.getCategories().pipe(catchError(() => of<CategorySummary[]>([]))),

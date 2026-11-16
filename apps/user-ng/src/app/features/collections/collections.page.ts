@@ -61,13 +61,15 @@ export class CollectionsPage {
 
   constructor() {
     useBodyClass('page-collections');
-    this.catalog.getCollections().subscribe({
-      next: (cols) => {
-        if (cols && cols.length > 0) {
-          this.lookbooks.set(cols);
-        }
-      },
-    });
+    if (typeof this.catalog.getCollections === 'function') {
+      this.catalog.getCollections().subscribe({
+        next: (cols) => {
+          if (cols && cols.length > 0) {
+            this.lookbooks.set(cols);
+          }
+        },
+      });
+    }
 
     this.catalog.getProducts().subscribe({
       next: (rows) => {

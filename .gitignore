@@ -28,7 +28,12 @@ __pycache__/
 *.pyc
 ~$*
 .pi/
-apps/admin-erp-ng/public/assets
+apps/admin-erp-ng/public/assets/*
+!apps/admin-erp-ng/public/assets/images/
+apps/admin-erp-ng/public/assets/images/*
+!apps/admin-erp-ng/public/assets/images/models/
+!apps/admin-erp-ng/public/assets/images/collections/
+apps/admin-erp-ng/public/assets/images/models/backup_original/
 .agents/
 .claude/
 skills-lock.json

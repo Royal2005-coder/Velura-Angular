@@ -239,13 +239,16 @@ export class AdminErpOrdersPage {
   readonly attentionTotal = computed(() => this.summary()?.attention ?? this.attentionCount());
   readonly paymentAttentionCount = computed(() => this.summary()?.payment_attention ?? this.paymentAttentionTotal());
 
-  readonly tabs = computed<readonly AdminErpTab[]>(() => [
-    { key: 'all', label: 'Tất cả', count: this.totalOrdersCount() },
-    { key: 'attention', label: 'Cần xử lý', count: this.attentionTotal() },
-    { key: 'payment', label: 'Lỗi thanh toán', count: this.paymentAttentionCount() },
-    { key: 'cancelled', label: 'Đã hủy', count: this.cancelledCount() },
-    { key: 'logs', label: 'Nhật ký', count: this.logsCount() },
-  ]);
+  readonly tabs = computed<readonly AdminErpTab[]>(() => {
+    const s = this.summary();
+    return [
+      { key: 'all', label: 'Tất cả', count: this.totalOrdersCount() },
+      { key: 'attention', label: 'Cần xử lý', count: s ? this.attentionTotal() : undefined },
+      { key: 'payment', label: 'Lỗi thanh toán', count: s ? this.paymentAttentionCount() : undefined },
+      { key: 'cancelled', label: 'Đã hủy', count: s ? this.cancelledCount() : undefined },
+      { key: 'logs', label: 'Nhật ký', count: this.logsCount() },
+    ];
+  });
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.count() / this.pageSize())));
   readonly rangeLabel = computed(() => adminRangeLabel(this.count(), this.page(), this.pageSize(), 'đơn hàng'));
   readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize())));

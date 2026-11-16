@@ -22,6 +22,7 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
         display: inline-block;
         max-width: 100%;
         vertical-align: middle;
+        overflow: hidden;
       }
       .badge {
         display: inline-flex;

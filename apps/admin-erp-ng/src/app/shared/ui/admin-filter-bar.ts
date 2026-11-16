@@ -39,11 +39,15 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, output }
         align-items: flex-end;
         gap: 10px;
       }
-      .filter-bar__fields .erp-field:has(input[type='search']),
-      .filter-bar__fields .erp-field:has(input[type='text']),
-      .filter-bar__fields .promotions-search {
-        flex: 1 1 280px;
-        min-width: 260px;
+      :host ::ng-deep .filter-bar__fields .erp-field:has(input[type='search']),
+      :host ::ng-deep .filter-bar__fields .erp-field:has(input[type='text']),
+      :host ::ng-deep .filter-bar__fields .promotions-search,
+      :host ::ng-deep .filter-bar__fields .desk-search,
+      :host ::ng-deep .filter-bar__fields .reviews-search,
+      :host ::ng-deep .filter-bar__fields .accounts-search,
+      :host ::ng-deep .filter-bar__fields .content-search {
+        flex: 1 1 360px;
+        min-width: 280px;
       }
       .filter-bar__actions {
         display: flex;

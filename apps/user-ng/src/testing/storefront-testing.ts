@@ -84,12 +84,14 @@ export function stubApiService(): ApiService {
   } as unknown as ApiService;
 }
 
-export function stubCatalogService(): Pick<CatalogService, 'getCategories' | 'getProducts' | 'getProduct' | 'likeReview'> {
+export function stubCatalogService(): Pick<CatalogService, 'getCategories' | 'getProducts' | 'getProduct' | 'likeReview' | 'getBanners' | 'getCollections'> {
   return {
     getCategories: () => of([{ category_id: 'c1', name: 'Áo', slug: 'ao' }]),
     getProducts: () => of([sampleProduct]),
     getProduct: () => of(sampleProduct),
     likeReview: (reviewId: string) => of({ success: true, review_id: reviewId, helpful_count: 1 }),
+    getBanners: () => of([]),
+    getCollections: () => of([]),
   };
 }
 

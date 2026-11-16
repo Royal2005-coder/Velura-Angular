@@ -32,5 +32,5 @@ export const REVIEW_SELECT = [
   "review_id", "product_id", "order_id", "user_id", "rating", "comment",
   "images", "review_tags", "status", "rejection_reason", "admin_reply",
   "moderated_by", "is_flagged_urgent", "submitted_at", "moderated_at", "version",
-  "product:product(product_id,name,sku)"
+  "product:product(product_id,name,sku,images)"
 ].join(",");

@@ -137,10 +137,12 @@ export function createOrderService({
     };
   }
 
+  let summaryCache: { data: unknown; expiresAt: number } | null = null;
+
   return {
     async list(context, searchParams) {
       requireOrderReader(context);
-      await maybeRunAutomation();
+      void maybeRunAutomation().catch(() => {});
       const payload = await repository.list(parseListFilters(searchParams), context.accessToken);
       const rows = Array.isArray(payload?.rows) ? payload.rows : [];
       const tags = await repository.tagsFor(rows.map((row) => asString(row.order_id)), context.accessToken);
@@ -152,7 +154,10 @@ export function createOrderService({
 
     async summary(context) {
       requireOrderReader(context);
-      await maybeRunAutomation();
+      if (summaryCache && Date.now() < summaryCache.expiresAt) {
+        return summaryCache.data;
+      }
+      void maybeRunAutomation().catch(() => {});
       const [byStatus, attention, paymentAttentionIds] = await Promise.all([
         repository.countByStatus(ORDER_STATUSES, context.accessToken),
         repository.countAttention(context.accessToken),
@@ -160,11 +165,13 @@ export function createOrderService({
           ? repository.orderIdsWithTags("PAYMENT_ATTENTION", context.accessToken).catch(() => [])
           : Promise.resolve([])
       ]);
-      return {
+      const result = {
         by_status: ORDER_STATUSES.map((status) => ({ status, label: ORDER_STATUS_LABELS[status], count: byStatus[status] ?? 0 })),
         attention,
         payment_attention: Array.isArray(paymentAttentionIds) ? paymentAttentionIds.length : 0
       };
+      summaryCache = { data: result, expiresAt: Date.now() + 10_000 };
+      return result;
     },
 
     async get(context, orderId) {
@@ -277,6 +284,7 @@ export function createOrderService({
       }
 
       const refund = result?.refund_required && refunds ? await refunds.refund(orderId) : null;
+      summaryCache = null;
       const fresh = await this.get(context, orderId);
       const freshObj = fresh as JsonObject | undefined;
       if (freshObj && (asString(freshObj.status) === "delivered" || asString(freshObj.status) === "completed")) {

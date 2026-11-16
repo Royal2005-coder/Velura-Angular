@@ -242,6 +242,7 @@ export class AdminErpPromotionsPage {
       image: (row) => this.campaignBanner(row as AdminPromotionRow),
       imageRatio: '16:9',
       truncate: '260px',
+      width: '280px',
     },
     { key: 'type', label: 'Loại', value: (row) => this.campaignType(row as AdminPromotionRow) },
     {
@@ -314,7 +315,9 @@ export class AdminErpPromotionsPage {
         this.promoCount.set(adminListCount(payload.promos));
       }
       if (this.view() !== 'vouchers') {
-        this.voucherCount.set(adminListCount(payload.vouchers));
+        const vCount = adminListCount(payload.vouchers);
+        const fallback = this.summary()?.activeVouchers ?? (payload.promos as { summary?: { activeVouchers?: number } })?.summary?.activeVouchers ?? 0;
+        this.voucherCount.set(vCount > 0 ? vCount : fallback);
       }
       this.logsCount.set(adminListCount(payload.logs));
     });

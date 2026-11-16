@@ -113,42 +113,44 @@ export interface AdminTableRowAction {
                     [style.max-width]="column.truncate || column.width"
                     [attr.title]="column.truncate ? column.value(row) : null"
                   >
-                    @if (badgeFor(column, row); as badge) {
-                      <app-erp-status-badge [label]="badge.label" [tone]="badge.tone" [dot]="true" />
-                    } @else if (imagesFor(column, row); as gallery) {
-                      @if (gallery.length) {
-                        <div class="cell-gallery">
-                          @for (img of gallery; track img; let idx = $index) {
-                            @if (idx < 3) {
-                              <button type="button" class="gallery-thumb-btn" (click)="$event.stopPropagation(); imageClick.emit(img)" title="Xem ảnh">
-                                <img [src]="img" alt="Ảnh đính kèm" class="gallery-thumb" loading="lazy" />
-                              </button>
+                    <div class="cell-box" [class.cell-box--clamped]="column.lineClamp === 2">
+                      @if (badgeFor(column, row); as badge) {
+                        <app-erp-status-badge [label]="badge.label" [tone]="badge.tone" [dot]="true" />
+                      } @else if (imagesFor(column, row); as gallery) {
+                        @if (gallery.length) {
+                          <div class="cell-gallery">
+                            @for (img of gallery; track img; let idx = $index) {
+                              @if (idx < 3) {
+                                <button type="button" class="gallery-thumb-btn" (click)="$event.stopPropagation(); imageClick.emit(img)" title="Xem ảnh">
+                                  <img [src]="img" alt="Ảnh đính kèm" class="gallery-thumb" loading="lazy" />
+                                </button>
+                              }
                             }
-                          }
-                          @if (gallery.length > 3) {
-                            <span class="gallery-more">+{{ gallery.length - 3 }}</span>
-                          }
-                        </div>
-                      } @else {
-                        <span class="cell-empty-dash">—</span>
-                      }
-                    } @else if (starsFor(column, row); as rating) {
-                      <span class="cell-stars" [attr.aria-label]="rating + ' sao'">
-                        <span class="cell-stars__icons">
-                          @for (star of [1, 2, 3, 4, 5]; track star) {
-                            <span class="star-icon" [class.is-filled]="star <= rating">★</span>
-                          }
+                            @if (gallery.length > 3) {
+                              <span class="gallery-more">+{{ gallery.length - 3 }}</span>
+                            }
+                          </div>
+                        } @else {
+                          <span class="cell-empty-dash">—</span>
+                        }
+                      } @else if (starsFor(column, row); as rating) {
+                        <span class="cell-stars" [attr.aria-label]="rating + ' sao'">
+                          <span class="cell-stars__icons">
+                            @for (star of [1, 2, 3, 4, 5]; track star) {
+                              <span class="star-icon" [class.is-filled]="star <= rating">★</span>
+                            }
+                          </span>
+                          <span class="cell-stars__val">{{ rating }}.0</span>
                         </span>
-                        <span class="cell-stars__val">{{ rating }}.0</span>
-                      </span>
-                    } @else if (imageFor(column, row); as thumb) {
-                      <span class="cell-media" [class.cell-media--16-9]="column.imageRatio === '16:9'">
-                        <img [src]="thumb" alt="" loading="lazy" />
-                        <span class="cell-media__text">{{ column.value(row) }}</span>
-                      </span>
-                    } @else {
-                      <span [class.cell-clamped]="column.lineClamp === 2">{{ column.value(row) }}</span>
-                    }
+                      } @else if (imageFor(column, row); as thumb) {
+                        <span class="cell-media" [class.cell-media--16-9]="column.imageRatio === '16:9'">
+                          <img [src]="thumb" alt="" loading="lazy" />
+                          <span class="cell-media__text">{{ column.value(row) }}</span>
+                        </span>
+                      } @else {
+                        <span [class.cell-clamped]="column.lineClamp === 2">{{ column.value(row) }}</span>
+                      }
+                    </div>
                   </td>
                 }
                 @if (rowActions(); as actionsFor) {
@@ -214,7 +216,7 @@ export interface AdminTableRowAction {
       }
       table {
         width: 100%;
-        min-width: 760px;
+        min-width: 1000px;
         border-collapse: collapse;
       }
       table.table-fixed {
@@ -227,7 +229,7 @@ export interface AdminTableRowAction {
       }
       th,
       td {
-        padding: 12px 16px;
+        padding: 12px 14px;
         border-bottom: 1px solid var(--erp-line-subtle);
         text-align: left;
         vertical-align: middle;
@@ -235,6 +237,28 @@ export interface AdminTableRowAction {
       }
       td.is-clamped {
         white-space: normal;
+      }
+      .cell-box {
+        display: block;
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .cell-box--clamped {
+        white-space: normal;
+      }
+      .cell-box app-erp-status-badge {
+        display: inline-block;
+        max-width: 100%;
+        vertical-align: middle;
+      }
+      .is-right .cell-box {
+        text-align: right;
+      }
+      .is-center .cell-box {
+        text-align: center;
       }
       th {
         position: sticky;

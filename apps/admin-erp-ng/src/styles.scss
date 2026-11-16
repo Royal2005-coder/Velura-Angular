@@ -395,3 +395,18 @@ svg.admin-line-icon,
   box-shadow: 0 0 0 1px var(--erp-danger, #b4233e) !important;
 }
 
+/* Global Filter Bar Search Field Responsive Width */
+.filter-bar__fields {
+  .erp-field:has(input[type='search']),
+  .erp-field:has(input[type='text']),
+  .desk-search,
+  .promotions-search,
+  .accounts-search,
+  .content-search,
+  .reviews-search {
+    flex: 1 1 360px !important;
+    min-width: 280px !important;
+  }
+}
+
+

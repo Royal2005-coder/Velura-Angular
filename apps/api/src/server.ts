@@ -51,6 +51,13 @@ import { handleContentRoute } from "./content/content-router.js";
 import { createContentAdminRepository } from "./content/content-admin-repository.js";
 import { createContentAdminService } from "./content/content-admin-service.js";
 import { handleContentAdminRoute } from "./content/content-admin-router.js";
+import { createBannerRepository } from "./banners/banner-repository.js";
+import { createBannerService } from "./banners/banner-service.js";
+import { handleBannerRoute } from "./banners/banner-router.js";
+import { createCollectionRepository } from "./collections/collection-repository.js";
+import { createCollectionService } from "./collections/collection-service.js";
+import { handleCollectionRoute } from "./collections/collection-router.js";
+import { handleAdminMediaUpload } from "./content/media-upload.js";
 import { createMemberService } from "./members/member-service.js";
 import { handleMemberRoute } from "./members/member-router.js";
 import { createMemberRepository } from "./members/member-repository.js";
@@ -99,6 +106,8 @@ const auditLogService = createAuditLogService({ repository: createAuditLogReposi
 const chatbotService: ChatbotService = createChatbotService({ repository: createChatbotRepository() });
 const contentService = createContentService({ repository: createContentRepository() });
 const contentAdminService = createContentAdminService({ repository: createContentAdminRepository() });
+const bannerService = createBannerService({ repository: createBannerRepository() });
+const collectionService = createCollectionService({ repository: createCollectionRepository() });
 const memberService = createMemberService({ repository: createMemberRepository() });
 const personalColorService = createPersonalColorService(getAiService());
 const enhancementApprovalService = new EnhancementApprovalService(getAiService(), new SupabaseEnhancementApprovalRepository());
@@ -176,6 +185,9 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       });
       if (handled) return;
     }
+
+    if (await handleBannerRoute({ req, res, url, parts, headers: corsHeaders, context, service: bannerService })) return;
+    if (await handleCollectionRoute({ req, res, url, parts, headers: corsHeaders, context, service: collectionService })) return;
 
     if (req.method === "GET" && parts[1] === "auth" && parts[2] === "google") {
       let redirectTo = "";
@@ -416,6 +428,9 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       if (await handleEnhancementApprovalRoute({ req, res, url, parts, context, headers: corsHeaders, service: enhancementApprovalService })) return;
       if (await handleCatalogContentRoute({ req, res, url, parts, context, headers: corsHeaders, service: catalogContentService })) return;
       if (await handleContentAdminRoute({ req, res, url, parts, context, headers: corsHeaders, service: contentAdminService })) return;
+      if (await handleAdminMediaUpload({ req, res, url, parts, context, headers: corsHeaders })) return;
+      if (await handleBannerRoute({ req, res, url, parts, headers: corsHeaders, context, service: bannerService })) return;
+      if (await handleCollectionRoute({ req, res, url, parts, headers: corsHeaders, context, service: collectionService })) return;
       if (await handleMemberRoute({ req, res, url, parts, context, headers: corsHeaders, service: memberService })) return;
       const dashboardHandled = await handleDashboardRoute({
         req,

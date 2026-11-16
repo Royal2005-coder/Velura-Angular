@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { COLLECTION_LOOKBOOKS } from '../../core/models/collection-lookbook';
+import { COLLECTION_LOOKBOOKS, CollectionLookbook } from '../../core/models/collection-lookbook';
 import { ProductSummary } from '../../core/models/product.interface';
 import { CartLine, CartStore } from '../../core/services/cart.store';
 import { CatalogService } from '../../core/services/catalog.service';
@@ -24,7 +24,7 @@ export class CollectionsPage {
   readonly loading = signal(true);
   readonly products = signal<ProductSummary[]>([]);
   readonly filter = signal('all');
-  readonly lookbooks = computed(() => COLLECTION_LOOKBOOKS);
+  readonly lookbooks = signal<CollectionLookbook[]>(COLLECTION_LOOKBOOKS);
 
   readonly groups = computed(() => {
     const filter = this.filter();
@@ -61,6 +61,16 @@ export class CollectionsPage {
 
   constructor() {
     useBodyClass('page-collections');
+    if (typeof this.catalog.getCollections === 'function') {
+      this.catalog.getCollections().subscribe({
+        next: (cols) => {
+          if (cols && cols.length > 0) {
+            this.lookbooks.set(cols);
+          }
+        },
+      });
+    }
+
     this.catalog.getProducts().subscribe({
       next: (rows) => {
         this.products.set(rows);
@@ -68,6 +78,22 @@ export class CollectionsPage {
       },
       error: () => this.loading.set(false),
     });
+  }
+
+  /**
+   * Safely resolves a cutout model image by index with fallback to default cutout assets.
+   */
+  getModelCutout(lookbook: CollectionLookbook, index: number): string {
+    const list = lookbook.models || [];
+    if (list[index]) return list[index];
+    const defaultModels = [
+      '/assets/images/models/model_cutout_1.png',
+      '/assets/images/models/model_cutout_2.png',
+      '/assets/images/models/model_cutout_3.png',
+      '/assets/images/models/model_cutout_4.png',
+      '/assets/images/models/model_cutout_5.png',
+    ];
+    return defaultModels[index % defaultModels.length];
   }
 
   /**

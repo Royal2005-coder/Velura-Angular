@@ -18,9 +18,17 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
   `,
   styles: [
     `
+      :host {
+        display: inline-block;
+        max-width: 100%;
+        vertical-align: middle;
+      }
       .badge {
         display: inline-flex;
         align-items: center;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
         gap: 6px;
         padding: 2px 10px;
         border-radius: 999px;

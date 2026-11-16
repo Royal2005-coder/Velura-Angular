@@ -292,8 +292,8 @@ export class AdminErpReturnsPage {
     {
       key: 'customer',
       label: 'Khách',
-      width: '190px',
-      truncate: '190px',
+      width: '180px',
+      truncate: '180px',
       value: (row) => {
         const record = row as AdminReturnRow;
         return [record.customer_name, record.customer_phone].filter(Boolean).join(' · ') || '—';
@@ -328,7 +328,8 @@ export class AdminErpReturnsPage {
     {
       key: 'status',
       label: 'Trạng thái',
-      width: '230px',
+      width: '240px',
+      truncate: '240px',
       value: (row) => returnStatusLabel((row as AdminReturnRow).status),
       badge: (row) => ({
         label: returnStatusLabel((row as AdminReturnRow).status),

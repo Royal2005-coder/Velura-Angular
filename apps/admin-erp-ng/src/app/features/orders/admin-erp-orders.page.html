@@ -255,7 +255,7 @@
             } @else {
               <form class="evidence-form" (submit)="submitEvidence($event)">
                 <label class="erp-field">
-                  <span>Ảnh/video bằng chứng cho “{{ stageLabel(selectedStage()) }}”</span>
+                  <span>Ảnh/video bằng chứng cho “{{ stageLabel(selectedStage()) }}” <span class="erp-required" aria-hidden="true">*</span></span>
                   <input class="erp-input" type="file" name="evidenceFile" accept="image/*,video/*" (change)="onEvidenceFile($event)" required />
                 </label>
                 <label class="erp-field">
@@ -545,7 +545,7 @@
           <option value="mark_failed">Thanh toán thất bại</option>
         </select>
       </label>
-      <label class="erp-field"><span>Lý do</span><textarea class="erp-input" name="reason" rows="3" required></textarea></label>
+      <label class="erp-field"><span>Lý do <span class="erp-required" aria-hidden="true">*</span></span><textarea class="erp-input" name="reason" rows="3" required></textarea></label>
       @if (actionError()) {
         <p class="erp-error" role="alert">{{ actionError() }}</p>
       }

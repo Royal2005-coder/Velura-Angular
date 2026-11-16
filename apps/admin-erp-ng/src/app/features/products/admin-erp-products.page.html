@@ -278,7 +278,7 @@
         }
       </div>
       <label class="erp-field">
-        <span>Lý do (tối thiểu {{ minReasonLength }} ký tự, được ghi vào nhật ký)</span>
+        <span>Lý do (tối thiểu {{ minReasonLength }} ký tự, được ghi vào nhật ký) <span class="erp-required" aria-hidden="true">*</span></span>
         <textarea class="erp-input" name="reason" rows="3" required></textarea>
       </label>
       @if (statusError()) {
@@ -300,7 +300,7 @@
         <span>{{ product.sku || '—' }} · v{{ product.version ?? '—' }}</span>
       </div>
       <label class="erp-field">
-        <span>Giá gốc</span>
+        <span>Giá gốc <span class="erp-required" aria-hidden="true">*</span></span>
         <input class="erp-input" name="basePrice" type="number" min="0" step="1000" [value]="product.base_price ?? 0" required />
       </label>
       <label class="erp-field">
@@ -308,7 +308,7 @@
         <input class="erp-input" name="salePrice" type="number" min="0" step="1000" [value]="product.sale_price ?? ''" />
       </label>
       <label class="erp-field">
-        <span>Lý do (tối thiểu {{ minReasonLength }} ký tự)</span>
+        <span>Lý do (tối thiểu {{ minReasonLength }} ký tự) <span class="erp-required" aria-hidden="true">*</span></span>
         <textarea class="erp-input" name="reason" rows="2" required></textarea>
       </label>
       @if (priceError()) {

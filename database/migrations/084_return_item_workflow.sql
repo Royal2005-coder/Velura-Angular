@@ -91,7 +91,9 @@ update public.return_manual_refund m set return_item_id=p.return_item_id from pu
 update public.return_item i set resolution_type=r.return_type::text,
  item_status=case r.status::text when 'CANCELLED' then case when r.cancelled_by='admin' then 'REJECTED' else 'CANCELLED' end
    when 'REFUNDED' then 'COMPLETED' when 'RETURN_IN_TRANSIT' then 'RETURN_SHIPPING'
-   when 'REFUND_PROCESSING' then 'REFUND_PENDING' when 'CONTACTING' then 'REQUESTED' else r.status::text end,
+   when 'REFUND_PROCESSING' then 'REFUND_PENDING' when 'CONTACTING' then 'REQUESTED'
+   -- Legacy header IN_PROGRESS only ever followed an approved item moving to WAITING_RETURN.
+   when 'IN_PROGRESS' then 'WAITING_RETURN' else r.status::text end,
  decision_status=case when r.status::text='CANCELLED' and r.cancelled_by='admin' then 'rejected'
    when r.status::text in ('REQUESTED','CONTACTING','CANCELLED') then 'pending' else 'approved' end,
  reason=coalesce(r.rejection_reason,r.description), exchange_order_id=r.exchange_order_id,

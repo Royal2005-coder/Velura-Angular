@@ -1,5 +1,5 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout } from 'rxjs';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import { ApiRequestError } from '../models/api-request-error';
@@ -1051,7 +1051,9 @@ export class OrderAccountApiStore implements OrderAccountModel {
       if (!context.userId) params.set('guest_access_token', context.guestToken);
       const formData = new FormData();
       formData.append('file', file, file.name);
-      const result = await firstValueFrom(this.api.post<{ storage_ref?: string }>(`/api/user/upload/evidence?${params}`, formData));
+      const result = await firstValueFrom(
+        this.api.post<{ storage_ref?: string }>(`/api/user/upload/evidence?${params}`, formData).pipe(timeout(90_000)),
+      );
       this.assertCurrent(context);
       if (!result.storage_ref) throw new Error('Chưa tải được bằng chứng riêng tư.');
       (video ? uploaded.videos : uploaded.images).push(result.storage_ref);

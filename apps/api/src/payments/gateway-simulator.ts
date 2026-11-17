@@ -387,7 +387,7 @@ async function simulatedVnpayApi(body: JsonObject, credentials: GatewayCredentia
       vnp_PayDate: vnpayDate(new Date(asString(refund.updated_at) || Date.now())),
       vnp_TransactionNo: gatewayTransactionNo(`refund:${reference}`),
       vnp_TransactionType: Number(refund.amount) < Number(row?.amount || 0) ? "03" : "02",
-      vnp_TransactionStatus: status === "succeeded" ? "00" : status === "failed" ? "09" : "05",
+      vnp_TransactionStatus: gatewayRefundState(refund) === "settled" ? "00" : gatewayRefundState(refund) === "refused" ? "09" : "05",
       vnp_OrderInfo: asString(body.vnp_OrderInfo), vnp_PromotionCode: "", vnp_PromotionAmount: ""
     }, VNPAY_QUERY_RESPONSE_SIGNED, credentials);
   }
@@ -453,12 +453,12 @@ async function simulatedMomoApi(body: JsonObject, credentials: GatewayCredential
   if (isRefundQuery) {
     const operation = await refundOperation(reference);
     if (!operation) return { resultCode: 42, message: "Invalid refund orderId", orderId: reference, responseTime: Date.now() };
-    const status = asString(operation.status);
+    const state = gatewayRefundState(operation);
     return {
       partnerCode: credentials.merchantId, orderId: reference, requestId: asString(body.requestId),
       amount: Number(operation.amount), transId: Number(gatewayTransactionNo(`refund:${reference}`)),
-      resultCode: status === "succeeded" ? 0 : status === "failed" ? 1081 : 7000,
-      message: status === "succeeded" ? "Hoàn tiền sandbox đã tất toán" : status === "failed" ? "Hoàn tiền sandbox bị từ chối" : "Hoàn tiền sandbox đang xử lý",
+      resultCode: state === "settled" ? 0 : state === "refused" ? 1081 : 7000,
+      message: state === "settled" ? "Hoàn tiền sandbox đã tất toán" : state === "refused" ? "Hoàn tiền sandbox bị từ chối" : "Hoàn tiền sandbox đang xử lý",
       responseTime: Date.now()
     };
   }
@@ -485,6 +485,18 @@ async function simulatedMomoApi(body: JsonObject, credentials: GatewayCredential
     message: state === "paid" ? "Giao dịch thành công (sandbox)" : state === "pending" ? "Chờ khách xác nhận (sandbox)" : "Giao dịch thất bại (sandbox)",
     responseTime: Date.now()
   };
+}
+
+/**
+ * Trạng thái lệnh hoàn theo góc nhìn của CỔNG, không phải của sổ ledger Velura. Lệnh đã được cổng nhận
+ * (có `provider_ref`) thì cổng coi là đã hoàn; nếu bước ghi sổ phía Velura hỏng giữa chừng, đối soát
+ * phải đọc được "đã hoàn" để tự đóng ledger — trả `đang xử lý` theo ledger `pending` sẽ khoá vòng lặp.
+ */
+function gatewayRefundState(operation: JsonObject): "settled" | "refused" | "processing" {
+  const status = asString(operation.status);
+  if (status === "failed") return "refused";
+  if (status === "succeeded" || asString(operation.provider_ref)) return "settled";
+  return "processing";
 }
 
 /** Lệnh hoàn mới nhất trên một payment — nguồn sự thật để simulator trả lời QueryDR sau khi hoàn. */

@@ -145,12 +145,15 @@ p {
   align-self: start;
 }
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  /* Block flow, not flex: the label text and its .req asterisk stay on one line. */
+  display: block;
   margin-bottom: 16px;
   font-size: 14px;
   font-weight: 500;
+}
+.field > :not(.req):not(:first-child) {
+  display: block;
+  margin-top: 8px;
 }
 .field input,
 .field select,

@@ -352,7 +352,8 @@
           }
         </div>
       }
-      <div class="header-action-btn header-account-dropdown">
+      <div class="header-account-dropdown">
+        <button type="button" class="header-action-btn account-dropdown-trigger" [attr.aria-label]="isLoggedIn() ? 'Tài khoản của tôi' : 'Tài khoản'" aria-haspopup="menu" [attr.aria-expanded]="accountOpen()" (click)="toggleAccount()">
         <span class="btn-icon-wrapper u-inline-8410c989c9">
           @if (isLoggedIn() && avatarUrl() && !avatarImgError()) {
             <img class="header-avatar" [src]="avatarUrl()!" [alt]="displayName()" width="28" height="28" (error)="avatarImgError.set(true)" />
@@ -362,10 +363,11 @@
             <svg class="icon icon-user u-inline-327c178e39"><use href="#icon-user"></use></svg>
           }
         </span>
-        <div class="account-dropdown-menu" role="menu">
+        </button>
+        <div class="account-dropdown-menu" role="menu" [class.is-open]="accountOpen()">
           <div class="account-dropdown-arrow"></div>
           @if (isLoggedIn()) {
-            <a routerLink="/account/profile" class="account-dropdown-user-card" title="Xem thông tin tài khoản">
+            <a routerLink="/account/profile" class="account-dropdown-user-card" title="Xem thông tin tài khoản" (click)="closeAccount()">
               <div class="account-dropdown-avatar">
                 @if (avatarUrl() && !avatarImgError()) {
                   <img [src]="avatarUrl()!" [alt]="displayName()" (error)="avatarImgError.set(true)" />
@@ -380,14 +382,14 @@
               </div>
             </a>
             <div class="account-dropdown-divider"></div>
-            <a routerLink="/account/profile" class="account-dropdown-item">
+            <a routerLink="/account/profile" class="account-dropdown-item" (click)="closeAccount()">
               <svg class="account-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                 <circle cx="12" cy="7" r="4"></circle>
               </svg>
               <span>Thông tin tài khoản</span>
             </a>
-            <a routerLink="/account/orders" class="account-dropdown-item">
+            <a routerLink="/account/orders" class="account-dropdown-item" (click)="closeAccount()">
               <svg class="account-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
                 <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -395,21 +397,14 @@
               </svg>
               <span>Đơn hàng của tôi</span>
             </a>
-            <a routerLink="/account/track" class="account-dropdown-item">
-              <svg class="account-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-              <span>Tra cứu đơn hàng</span>
-            </a>
-            <a routerLink="/wishlist" class="account-dropdown-item">
+            <a routerLink="/wishlist" class="account-dropdown-item" (click)="closeAccount()">
               <svg class="account-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
               </svg>
               <span>Sản phẩm yêu thích</span>
             </a>
             <div class="account-dropdown-divider"></div>
-            <button type="button" class="account-dropdown-item account-dropdown-item--logout" (click)="logout()">
+            <button type="button" class="account-dropdown-item account-dropdown-item--logout" (click)="closeAccount(); logout()">
               <svg class="account-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                 <polyline points="16 17 21 12 16 7"></polyline>
@@ -418,7 +413,7 @@
               <span>Đăng xuất</span>
             </button>
           } @else {
-            <a routerLink="/auth/signin" class="account-dropdown-item">
+            <a routerLink="/auth/signin" class="account-dropdown-item" (click)="closeAccount()">
               <svg class="account-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
                 <polyline points="10 17 15 12 10 7"></polyline>
@@ -426,7 +421,7 @@
               </svg>
               <span>Đăng nhập</span>
             </a>
-            <a routerLink="/auth/signup" class="account-dropdown-item">
+            <a routerLink="/auth/signup" class="account-dropdown-item" (click)="closeAccount()">
               <svg class="account-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                 <circle cx="8.5" cy="7" r="4"></circle>
@@ -436,7 +431,7 @@
               <span>Đăng ký</span>
             </a>
             <div class="account-dropdown-divider"></div>
-            <a routerLink="/account/track" class="account-dropdown-item">
+            <a routerLink="/account/track" class="account-dropdown-item" (click)="closeAccount()">
               <svg class="account-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>

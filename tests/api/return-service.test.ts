@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { config } from "../../apps/api/src/config.js";
+import { earliestPickupSlot } from "../../apps/api/src/returns/return-pickup.js";
 import { createReturnService } from "../../apps/api/src/returns/return-service.js";
 import type { ReturnListFilters, ReturnRepository } from "../../apps/api/src/returns/return-repository.js";
 import { HttpError } from "../../apps/api/src/http.js";
@@ -617,4 +619,65 @@ test("approval with both packing photo and video reports nothing missing", async
   } as unknown as ReturnRepository });
   const result = await service.actOnItem(context("super_admin"), RETURN_ID, ITEM_ID, { action: "approve", expectedVersion: 3, reason: "Da xac minh voi khach qua dien thoai" });
   assert.equal(result.packing_evidence_missing, undefined);
+});
+
+/** Runs `run` with PostgREST stubbed and returns every request path the (fire-and-forget) email lookup issued. */
+async function emailLookupPaths(run: () => Promise<unknown>): Promise<string[]> {
+  const originalFetch = globalThis.fetch;
+  const before = { url: config.supabaseUrl, key: config.supabaseServiceRoleKey };
+  const paths: string[] = [];
+  config.supabaseUrl = "https://postgrest.test";
+  config.supabaseServiceRoleKey = "service-key-for-tests";
+  globalThis.fetch = (async (input: URL | string) => {
+    paths.push(new URL(String(input)).pathname);
+    return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    await run();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return paths;
+  } finally {
+    globalThis.fetch = originalFetch;
+    config.supabaseUrl = before.url;
+    config.supabaseServiceRoleKey = before.key;
+  }
+}
+
+function gatewayRefundService(result: { status: "refunded" | "requested" | "failed" | "skipped"; message?: string; code?: string }) {
+  return createReturnService({
+    repository: {
+      getRefundOperation: async () => null,
+      getReturn: async () => COD_RETURN, listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+      getItemRefundableAmount: async () => 200000, getPaymentByOrderId: async () => ({ payment_provider: "stripe" })
+    } as unknown as ReturnRepository,
+    refunds: { refund: async () => result }
+  });
+}
+
+test("an unknown refund outcome (GATEWAY_REFUND_TIMEOUT) sends no 'refund requested' email, a plain requested one does", async () => {
+  const admin = context("admin_operator_cskh_dt");
+  const timeoutPaths = await emailLookupPaths(async () => {
+    const res = await gatewayRefundService({ status: "requested", code: "GATEWAY_REFUND_TIMEOUT" }).triggerStripeRefund(admin, RETURN_ID, MANUAL_BODY);
+    assert.equal(res.success, true);
+  });
+  assert.deepEqual(timeoutPaths, [], "no customer email lookup/send while the outcome is unknown");
+  const requestedPaths = await emailLookupPaths(async () => {
+    await gatewayRefundService({ status: "requested" }).triggerStripeRefund(admin, RETURN_ID, MANUAL_BODY);
+  });
+  assert.ok(requestedPaths.length > 0, "a confirmed-requested refund still notifies the customer");
+});
+
+test("a retryable lookup failure is reported as 503 GATEWAY_REFUND_LOOKUP_UNAVAILABLE, not a manual-transfer failure", async () => {
+  const service = gatewayRefundService({ status: "failed", code: "GATEWAY_REFUND_LOOKUP_UNAVAILABLE", message: "Thử lại sau" });
+  await assert.rejects(() => service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY), hasCode("GATEWAY_REFUND_LOOKUP_UNAVAILABLE", 503));
+});
+
+test("earliestPickupSlot picks the earliest valid instant across lines and ignores blanks", () => {
+  assert.equal(earliestPickupSlot([]), null);
+  assert.equal(earliestPickupSlot([{ pickup_scheduled_at: null }, { pickup_scheduled_at: "not a date" }]), null);
+  assert.equal(earliestPickupSlot([
+    { pickup_scheduled_at: "2026-11-20T09:00:00+07:00" },
+    { pickup_scheduled_at: "2026-11-20T01:30:00Z" },
+    { pickup_scheduled_at: "" }
+  ]), "2026-11-20T01:30:00Z");
 });

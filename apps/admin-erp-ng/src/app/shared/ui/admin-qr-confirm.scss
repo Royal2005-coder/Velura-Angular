@@ -1,5 +1,7 @@
 .qr-confirm {
   display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
   gap: 12px;
   margin-bottom: 14px;
   padding: 14px;

@@ -79,6 +79,9 @@ describe('service desk per-part rules', () => {
     }
     expect(gatewayNote({ status: 'failed', message: 'VNPay từ chối hoàn tiền vì ngoài thời gian cho phép' }))
       .toBe('VNPay từ chối hoàn tiền vì ngoài thời gian cho phép');
+    expect(gatewayNote({ status: 'requested', message: 'Cổng phản hồi quá chậm, đang chờ xác nhận' }))
+      .toBe('Cổng phản hồi quá chậm, đang chờ xác nhận');
+    expect(gatewayNote({ status: 'requested' })).toContain('chờ cổng xác nhận');
   });
 
   it('offers the gateway refund on every online channel and the hand transfer only after a refusal', () => {

@@ -28,6 +28,7 @@ export const ORDER_SELECT = [
   "subtotal",
   "total_amount",
   "payment_method",
+  "order_kind",
   "internal_note",
   "ai_source",
   "cancelled_reason",

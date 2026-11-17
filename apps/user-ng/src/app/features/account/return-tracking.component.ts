@@ -53,6 +53,7 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
               @if (part.refundAmount !== undefined) { <p>Tiền hoàn phần này: {{ part.refundAmount }} ₫</p> }
               @if (part.reason) { <p>Lý do: {{ part.reason }}</p> }
               @if (part.attentionStatus && part.attentionStatus !== 'none') { <p>Lưu ý: {{ part.attentionStatus }}</p> }
+              @if (part.pickupScheduledAt) { <p>Lịch ĐVVC đến lấy hàng: <strong>{{ date(part.pickupScheduledAt) }}</strong></p> }
               @if (part.updatedAt) { <p class="muted">Cập nhật: {{ date(part.updatedAt) }}</p> }
               @if (part.completedAt) { <p class="muted">Hoàn tất: {{ date(part.completedAt) }}</p> }
             </article>

@@ -1,6 +1,6 @@
 import { Subscription, catchError, forkJoin, of } from 'rxjs';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink, type ParamMap } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink, type ParamMap } from '@angular/router';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -138,6 +138,7 @@ export class AdminErpReturnsPage {
   private readonly session = inject(AdminErpSessionService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private listRequest = new Subscription();
   private detailRequestId = 0;
   /** Safety valve: a detail request that never settles must not hold the blocking layer. */
@@ -709,6 +710,12 @@ export class AdminErpReturnsPage {
       if (flow === 'manual' || flow === 'stripe') {
         if (!this.canFinance() || !itemRefundAllowed(line)) return;
       } else if (!returnItemActions(line, this.canApprove()).includes(flow)) return;
+    }
+    if (flow === 'ship_exchange' && line?.exchange_order_id) {
+      // Shipping an exchange is the Orders module's job (print label, stick, scan, hand over);
+      // the handover there advances this part to EXCHANGE_SHIPPING.
+      void this.router.navigate(['/orders'], { queryParams: { focus: line.exchange_order_id } });
+      return;
     }
     this.flowLine.set(line);
     this.flow.set(flow);

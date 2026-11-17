@@ -490,9 +490,8 @@ export function createReturnRepository() {
      * Đọc qua `return_item` (phiếu ↔ dòng đơn) nhân với đơn giá đã bán tại thời điểm
      * đặt, chứ không lấy giá hiện hành của sản phẩm.
      */
-    async getRefundableAmount(returnId: string, accessToken: string): Promise<number> {
-      const res = await callRpc("velura_return_refundable_amount", {p_return_id:returnId}, {accessToken}).catch(() => null);
-      if (res != null) return asNumber(res);
+    async getRefundableAmount(returnId: string): Promise<number> {
+      // EXECUTE is granted to service_role only (084); a user-token attempt always 403s and floods SUPABASE_ERROR_LOG.
       return asNumber(await callRpc("velura_return_refundable_amount", {p_return_id:returnId}));
     },
 

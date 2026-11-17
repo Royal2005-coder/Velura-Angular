@@ -1,6 +1,7 @@
-import { Observable, finalize, forkJoin, of, switchMap } from 'rxjs';
+import { Observable, finalize, forkJoin, map, of, switchMap } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
-import { AdminErpApiService, AdminOrderRow, AdminReturnDisposition, AdminReturnItemAction, AdminReturnItemActionInput, AdminReturnLine, AdminReturnReplacementChoice, AdminReturnRow } from '../../core/admin-erp-api.service';
+import { AdminErpApiService, AdminOrderRow, AdminReturnDisposition, AdminReturnItemAction, AdminReturnItemActionInput, AdminReturnItemActionResult, AdminReturnLine, AdminReturnReplacementChoice, AdminReturnRow } from '../../core/admin-erp-api.service';
 import { CONTACT_RESULTS, MIN_NOTE_LENGTH, MIN_TRANSFER_REFERENCE_LENGTH, gatewayNote, gatewayRefundRefused, isGatewayRefundChannel, itemRefundAllowed, refundReceiverBlocked, returnItemActions } from '../../core/admin-erp-service-desk';
 import { adminErrorMessage } from '../../core/admin-erp-http';
 import { adminMoney } from '../../core/admin-erp-format';
@@ -14,6 +15,24 @@ import { AdminErpQrConfirm, QrConfirmFacts } from '../../shared/ui/admin-qr-conf
  * while the API dispatches on the provider of the captured payment (Stripe, VNPay, MoMo).
  */
 export type ReturnFlowKind = AdminReturnItemAction | 'contact' | 'refund-info' | 'manual' | 'stripe' | null;
+
+/** True when the API refused `prepare_exchange` because another operator already created the exchange order. */
+function alreadyPrepared(error: unknown): boolean {
+  if (!(error instanceof HttpErrorResponse)) return false;
+  const payload = error.error as { error?: { code?: string } | string } | null;
+  return typeof payload?.error === 'object' && payload.error?.code === 'EXCHANGE_ALREADY_PREPARED';
+}
+
+/** What the page should do once a part action has been saved. */
+export type ReturnFlowNext =
+  | { readonly kind: 'prepare_exchange'; readonly returnItemId: string }
+  | { readonly kind: 'open_exchange_order'; readonly exchangeOrderId: string };
+
+/** Saved outcome of one flow: the operator message for `done` and the optional hand-off for `next`. */
+interface ReturnFlowOutcome {
+  readonly message: string;
+  readonly next: ReturnFlowNext | null;
+}
 
 /** Operator labels shared by the drawer and its versioned item form. */
 export const RETURN_ITEM_ACTION_LABELS: Readonly<Record<Exclude<ReturnFlowKind, null>, string>> = {
@@ -58,6 +77,8 @@ export class ReturnFlowComponent {
   readonly canFinance = input(false);
   /** Tracking supplied by the carrier-demo scan; the operator can still correct it. */
   readonly presetTracking = input('');
+  /** Emitted right before {@link done} when the saved action hands over to the next exchange step. */
+  readonly next = output<ReturnFlowNext>();
   readonly done = output<string>();
   readonly dismissed = output<void>();
   readonly quantity = signal(1);
@@ -529,22 +550,30 @@ export class ReturnFlowComponent {
     if (!record || !flow || !this.canSubmit()) return;
     this.saving.set(true); this.error.set(null);
     this.buildRequest(record, flow).pipe(finalize(() => this.saving.set(false))).subscribe({
-      next: (message) => this.done.emit(message),
-      error: (error: unknown) => this.error.set(adminErrorMessage(error, 'Không ghi nhận được thao tác. Làm mới hồ sơ nếu phiên bản đã thay đổi.')),
+      next: (outcome) => {
+        if (outcome.next) this.next.emit(outcome.next);
+        this.done.emit(outcome.message);
+      },
+      error: (error: unknown) => {
+        // Hai người cùng bấm tạo đơn đổi: phần hàng đã có đơn đổi, chỉ cần đọc lại phiếu.
+        if (flow === 'prepare_exchange' && alreadyPrepared(error)) { this.done.emit(''); return; }
+        this.error.set(adminErrorMessage(error, 'Không ghi nhận được thao tác. Làm mới hồ sơ nếu phiên bản đã thay đổi.'));
+      },
     });
   }
 
-  private buildRequest(record: AdminReturnRow, flow: Exclude<ReturnFlowKind, null>): Observable<string> {
+  private buildRequest(record: AdminReturnRow, flow: Exclude<ReturnFlowKind, null>): Observable<ReturnFlowOutcome> {
+    const plain = (message: string): ReturnFlowOutcome => ({ message, next: null });
     const note = this.note().trim();
-    if (flow === 'contact') return this.api.recordReturnContact(record.return_id, { result: this.contactResult(), note, expectedVersion: Number(record.version) }).pipe(switchMap(() => of('')));
-    if (flow === 'refund-info') return this.api.requestRefundInfo(record.return_id, { message: note, expectedVersion: Number(record.version) }).pipe(switchMap(() => of('')));
+    if (flow === 'contact') return this.api.recordReturnContact(record.return_id, { result: this.contactResult(), note, expectedVersion: Number(record.version) }).pipe(map(() => plain('')));
+    if (flow === 'refund-info') return this.api.requestRefundInfo(record.return_id, { message: note, expectedVersion: Number(record.version) }).pipe(map(() => plain('')));
     const line = this.line()!;
     const version = Number(line.version);
     const itemId = line.return_item_id!;
-    if (flow === 'stripe') return this.api.triggerStripeRefund(record.return_id, { expectedVersion: version, returnItemId: itemId }).pipe(switchMap((result) => {
+    if (flow === 'stripe') return this.api.triggerStripeRefund(record.return_id, { expectedVersion: version, returnItemId: itemId }).pipe(map((result) => {
       // Cổng từ chối là lỗi của thao tác, không phải thành công: giữ hộp thoại mở để người vận hành đọc lý do.
       if (result.refund?.status === 'failed') throw new Error(gatewayNote(result.refund));
-      return of(gatewayNote(result.refund));
+      return plain(gatewayNote(result.refund));
     }));
     const proof = this.proofFile();
     const proof$ = proof ? this.api.uploadReturnEvidence(record.return_id, proof, flow === 'manual' ? 'refund_proof' : 'qa_photo', note) : of(null);
@@ -557,7 +586,7 @@ export class ReturnFlowComponent {
       if (flow === 'manual') return this.api.recordManualRefund(record.return_id, {
         returnItemId: itemId, expectedVersion: version, transferReference: this.transferReference().trim(),
         amount: this.refundable(), transferredAt: new Date(this.transferredAt()).toISOString(), imageProof: proofRef!, adminNote: note,
-      }).pipe(switchMap(() => of('Đã ghi nhận đối soát phần hàng.')));
+      }).pipe(map(() => plain('Đã ghi nhận đối soát phần hàng.')));
       const body: AdminReturnItemActionInput = { action: flow, expectedVersion: version,
         ...(this.canSplit() ? { quantity: this.quantity() } : {}), ...(note ? { reason: note } : {}) };
       if (this.needsConsent()) body.customerConsent = this.customerConsent();
@@ -576,8 +605,25 @@ export class ReturnFlowComponent {
         body.pickedUpAt = new Date(this.pickedUpAt()).toISOString();
         if (evidence.video?.storage_ref) body.videoUrl = evidence.video.storage_ref;
       }
-      return this.api.actOnReturnItem(record.return_id, itemId, body).pipe(switchMap(() => of('')));
+      return this.api.actOnReturnItem(record.return_id, itemId, body).pipe(map((result) => ({ message: '', next: this.nextStep(flow, result) })));
     }));
+  }
+
+  /**
+   * Decides the hand-off after a saved item action: a passed exchange receipt goes on to
+   * `prepare_exchange` (the page opens its confirm modal) and a created exchange order opens in Orders.
+   * The target is the acted part from the response, never the pre-action line, because a receive may
+   * have split a remainder part.
+   */
+  private nextStep(flow: Exclude<ReturnFlowKind, null>, result: AdminReturnItemActionResult): ReturnFlowNext | null {
+    const item = result.item;
+    if (flow === 'receive' && item.item_status === 'RECEIVED' && item.resolution_type === 'exchange' && !item.exchange_order_id && item.return_item_id) {
+      return { kind: 'prepare_exchange', returnItemId: item.return_item_id };
+    }
+    if (flow === 'prepare_exchange' && item.exchange_order_id) {
+      return { kind: 'open_exchange_order', exchangeOrderId: item.exchange_order_id };
+    }
+    return null;
   }
 
   /**

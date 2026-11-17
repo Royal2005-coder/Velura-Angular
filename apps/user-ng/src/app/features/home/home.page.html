@@ -123,7 +123,7 @@
                 class="runway-model__image"
                 [src]="look.image"
                 [alt]="look.title"
-                (error)="onModelImgError($event, look.image)"
+                (error)="onModelImgError($event, i)"
                 draggable="false"
               />
               @if (dist === 0) {

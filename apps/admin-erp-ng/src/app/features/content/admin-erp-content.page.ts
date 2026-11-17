@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, of, switchMap } from 'rxjs';
+import { Subject, catchError, debounceTime, distinctUntilChanged, finalize, forkJoin, of, switchMap } from 'rxjs';
 import {
   AdminBannerRow,
   AdminBlogProduct,
@@ -26,6 +26,18 @@ import {
   blogStatusChoices,
   blogTags,
   emptyBlogDraft,
+  BANNER_FIELD_LIMITS,
+  COLLECTION_COMBO_MAX,
+  COLLECTION_FIELD_LIMITS,
+  COLLECTION_MODEL_SLOTS,
+  HOME_MODEL_SLOTS,
+  bannerRequestBody,
+  collectionRequestBody,
+  homeRunwaySummary,
+  moveListItem,
+  resolveStorefrontAsset,
+  validateBannerDraft,
+  validateCollectionDraft,
   validateBlogDraft,
   type BlogDraft,
 } from '../../core/admin-erp-content';
@@ -48,6 +60,7 @@ import { AdminErpKpiCard } from '../../shared/ui/admin-kpi-card';
 import { AdminErpModal } from '../../shared/ui/admin-modal';
 import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
 import { AdminErpPagination } from '../../shared/ui/admin-pagination';
+import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 
 type ContentTab = 'all' | 'draft' | 'published' | 'archived' | 'banners' | 'collections' | 'subscribers';
@@ -56,6 +69,29 @@ type EditorTab = 'content' | 'seo' | 'products';
 const EMPTY_BLOGS: AdminListPayload<AdminBlogRow> = { rows: [], count: 0 };
 const TABS: readonly ContentTab[] = ['all', 'draft', 'published', 'archived', 'banners', 'collections', 'subscribers'];
 const EDITOR_TABS: readonly EditorTab[] = ['content', 'seo', 'products'];
+const COMBO_SELLABLE_STATUSES: Readonly<Record<string, true>> = { on_sale: true, out_of_stock: true };
+const CURRENT_RUNWAY_KEY = '__current__';
+/** Errors that do not belong to a text box the operator can blur, so they are visible as soon as they apply. */
+const ALWAYS_VISIBLE_COLLECTION_ERRORS: Readonly<Record<string, true>> = { models: true, banner_url: true, home_model_url: true, show_on_home: true, product_ids: true };
+
+/** `cover`, `home`, or `model-<0..4>`. */
+type CollectionImageSlot = 'cover' | 'home' | `model-${number}`;
+
+interface RunwayEntry {
+  key: string;
+  name: string;
+  is_active: boolean;
+  show_on_home: boolean;
+  home_model_url: string;
+  home_sort_order: number;
+  sort_order: number;
+}
+
+interface ComboSelection {
+  id: string;
+  product: AdminBlogProduct | null;
+  unavailable: boolean;
+}
 const PRODUCT_STATUS_LABELS: Readonly<Record<string, string>> = {
   on_sale: 'Đang bán',
   hidden: 'Đang ẩn',
@@ -106,6 +142,7 @@ function isSubscriberRow(row: unknown): row is SubscriberRow {
     AdminErpPagination,
     AdminErpModal,
     AdminErpIcon,
+    AdminErpStatusBadge,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-erp-content.page.html',
@@ -179,10 +216,9 @@ export class AdminErpContentPage {
     return draft.productIds.map((id) => cache[id] || { product_id: id, name: 'Sản phẩm đang tải…' });
   });
 
-  // --- BANNERS MANAGEMENT (KAN-108) ---
+  // --- BANNERS (KAN-116: `products_hero` is the only placement with a storefront consumer) ---
   readonly banners = signal<AdminBannerRow[]>([]);
   readonly bannerLoading = signal(false);
-  readonly bannerPlacementFilter = signal<string>('all');
   readonly bannerModalOpen = signal(false);
   readonly bannerEditing = signal<AdminBannerRow | null>(null);
   readonly bannerDraft = signal<Partial<AdminBannerRow>>({
@@ -196,30 +232,97 @@ export class AdminErpContentPage {
   readonly bannerSaving = signal(false);
   readonly bannerUploading = signal(false);
   readonly bannerError = signal<string | null>(null);
+  /** Banner fields the operator has left; their inline error is shown from then on. */
+  readonly bannerTouched = signal<Readonly<Record<string, boolean>>>({});
+  readonly bannerErrors = computed(() => validateBannerDraft(this.bannerDraft()));
+  readonly bannerInvalid = computed(() => Object.keys(this.bannerErrors()).length > 0);
+  readonly bannerLimits = BANNER_FIELD_LIMITS;
+  readonly activeBannerCount = computed(() => this.banners().filter((banner) => banner.is_active).length);
 
-  readonly filteredBanners = computed(() => {
-    const filter = this.bannerPlacementFilter();
-    const list = this.banners();
-    if (filter === 'all') return list;
-    return list.filter((b) => b.placement === filter);
-  });
+  /** The blog queue footer ("Hiển thị … bài viết") only describes blog/subscriber lists. */
+  readonly showPagination = computed(() => this.tab() !== 'banners' && this.tab() !== 'collections');
 
-  // --- COLLECTIONS MANAGEMENT (KAN-108) ---
+  /** URLs whose image failed to load; templates swap them for a neutral placeholder instead of a black box. */
+  readonly brokenImages = signal<Readonly<Record<string, true>>>({});
+
+  // --- COLLECTIONS (KAN-116) ---
   readonly collectionsList = signal<AdminCollectionRow[]>([]);
   readonly collectionLoading = signal(false);
   readonly collectionModalOpen = signal(false);
   readonly collectionEditing = signal<AdminCollectionRow | null>(null);
-  readonly collectionDraft = signal<Partial<AdminCollectionRow>>({
-    badge: 'ELEGANT',
-    is_active: true,
-    sort_order: 0,
-    hero_gradient: 'linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%)',
-    models: [],
-    story_paragraphs: [],
-  });
+  readonly collectionDraft = signal<Partial<AdminCollectionRow>>({});
   readonly collectionSaving = signal(false);
-  readonly collectionUploading = signal(false);
   readonly collectionError = signal<string | null>(null);
+  readonly collectionTouched = signal<Readonly<Record<string, boolean>>>({});
+  /** In-flight uploads per image slot (`cover`, `home`, `model-0..4`) so parallel uploads never clobber each other. */
+  readonly collectionUploads = signal<Readonly<Record<string, boolean>>>({});
+  readonly collectionSlotErrors = signal<Readonly<Record<string, string>>>({});
+  readonly collectionUploading = computed(() => Object.values(this.collectionUploads()).some(Boolean));
+  readonly collectionLimits = COLLECTION_FIELD_LIMITS;
+  readonly comboMax = COLLECTION_COMBO_MAX;
+  readonly homeSlots = HOME_MODEL_SLOTS;
+  readonly modelSlotIndexes: readonly number[] = Array.from({ length: COLLECTION_MODEL_SLOTS }, (_, index) => index);
+
+  /** Active collections other than the open one that already hold a homepage runway slot. */
+  private readonly otherHomeSlotsUsed = computed(() => {
+    const editingId = this.collectionEditing()?.collection_id;
+    return this.collectionsList().filter((c) => c.collection_id !== editingId && c.is_active && c.show_on_home).length;
+  });
+  readonly collectionErrors = computed(() =>
+    validateCollectionDraft(this.collectionDraft(), { editing: this.collectionEditing() !== null, otherHomeSlotsUsed: this.otherHomeSlotsUsed() }),
+  );
+  readonly collectionInvalid = computed(() => Object.keys(this.collectionErrors()).length > 0);
+  /** Five fixed model positions for `/collections`; an empty string is a free slot. */
+  readonly modelSlots = computed(() => this.modelSlotIndexes.map((index) => (this.collectionDraft().models ?? [])[index] ?? ''));
+
+  /** Homepage runway as the storefront will render it right now (FR-14). */
+  readonly homeRunway = computed(() => homeRunwaySummary(this.collectionsList()));
+  private readonly runwayEntries = computed<RunwayEntry[]>(() => {
+    const editingId = this.collectionEditing()?.collection_id;
+    const entries: RunwayEntry[] = this.collectionsList()
+      .filter((c) => c.collection_id !== editingId)
+      .map((c) => ({ key: c.collection_id, name: c.name, is_active: c.is_active, show_on_home: c.show_on_home, home_model_url: c.home_model_url ?? '', home_sort_order: c.home_sort_order ?? 0, sort_order: c.sort_order ?? 0 }));
+    if (!this.collectionModalOpen()) return entries;
+    const draft = this.collectionDraft();
+    entries.push({
+      key: CURRENT_RUNWAY_KEY,
+      name: draft.name?.trim() || 'Bộ sưu tập đang sửa',
+      is_active: draft.is_active !== false,
+      show_on_home: Boolean(draft.show_on_home),
+      home_model_url: draft.home_model_url ?? '',
+      home_sort_order: draft.home_sort_order ?? 0,
+      sort_order: draft.sort_order ?? 0,
+    });
+    return entries;
+  });
+  /** Runway counts if the open form were saved as it stands. */
+  readonly modalHomeRunway = computed(() => homeRunwaySummary(this.runwayEntries()));
+  /** Up to five runway positions in storefront order, for the mini preview. */
+  readonly modalRunwayLooks = computed(() =>
+    this.runwayEntries()
+      .filter((entry) => entry.is_active && entry.show_on_home && entry.home_model_url.trim())
+      .sort((a, b) => a.home_sort_order - b.home_sort_order || a.sort_order - b.sort_order)
+      .slice(0, HOME_MODEL_SLOTS)
+      .map((entry) => ({ name: entry.name, url: entry.home_model_url, current: entry.key === CURRENT_RUNWAY_KEY })),
+  );
+
+  /** Combo/set picker: debounced search over `isCombo=true` products plus a cache that names the selected ids. */
+  readonly comboQuery = signal('');
+  readonly comboResults = signal<AdminBlogProduct[]>([]);
+  readonly comboSearching = signal(false);
+  readonly comboError = signal<string | null>(null);
+  private readonly comboCache = signal<Readonly<Record<string, AdminBlogProduct>>>({});
+  private readonly comboResolved = signal(false);
+  private readonly comboSearch$ = new Subject<string>();
+  readonly comboSelected = computed<ComboSelection[]>(() => {
+    const cache = this.comboCache();
+    const resolved = this.comboResolved();
+    return (this.collectionDraft().product_ids ?? []).map((id) => {
+      const product = cache[id] ?? null;
+      const sellable = product !== null && (!product.status || COMBO_SELLABLE_STATUSES[product.status] === true);
+      return { id, product, unavailable: resolved && !sellable };
+    });
+  });
 
   readonly canRead = computed(() => this.session.can('read', 'content'));
   readonly canCreate = computed(() => this.session.can('create', 'content'));
@@ -361,6 +464,14 @@ export class AdminErpContentPage {
         this.fetchProducts();
       });
 
+    this.comboSearch$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.fetchCombos());
+
     effect(() => {
       const session = this.editorSession();
       const element = this.editor()?.nativeElement;
@@ -470,16 +581,17 @@ export class AdminErpContentPage {
     }
   }
 
-  // --- BANNERS ACTION HANDLERS ---
+  // --- BANNER HANDLERS ---
+  /** Loads every banner; the list is short, so it is never paginated. */
   loadBanners(): void {
     this.bannerLoading.set(true);
     this.bannerError.set(null);
     this.api.listBanners().subscribe({
       next: (res) => {
-        this.banners.set(res?.data || (res as any)?.rows || []);
+        this.banners.set(res?.data ?? []);
         this.bannerLoading.set(false);
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.bannerError.set(adminErrorMessage(err, 'Không tải được danh sách banner.'));
         this.bannerLoading.set(false);
       },
@@ -502,6 +614,7 @@ export class AdminErpContentPage {
       sort_order: this.banners().length,
       metadata: { autoplay: true, sound_default: false },
     });
+    this.bannerTouched.set({});
     this.bannerError.set(null);
     this.bannerModalOpen.set(true);
   }
@@ -509,6 +622,7 @@ export class AdminErpContentPage {
   openEditBanner(banner: AdminBannerRow): void {
     this.bannerEditing.set(banner);
     this.bannerDraft.set({ ...banner });
+    this.bannerTouched.set({});
     this.bannerError.set(null);
     this.bannerModalOpen.set(true);
   }
@@ -519,14 +633,21 @@ export class AdminErpContentPage {
     this.bannerError.set(null);
   }
 
+  /** Marks a banner field as visited so its inline error becomes visible. */
+  touchBanner(field: string): void {
+    this.bannerTouched.update((current) => ({ ...current, [field]: true }));
+  }
+
+  /** Inline error for one banner field, empty until the operator leaves the field or tries to save. */
+  bannerFieldError(field: string): string {
+    return this.bannerTouched()[field] ? (this.bannerErrors()[field] ?? '') : '';
+  }
+
   saveBanner(): void {
-    const draft = this.bannerDraft();
-    if (!draft.title?.trim()) {
-      this.bannerError.set('Tiêu đề banner là bắt buộc.');
-      return;
-    }
-    if (!draft.media_url?.trim()) {
-      this.bannerError.set('Hình ảnh hoặc video banner là bắt buộc.');
+    if (this.bannerSaving() || this.bannerUploading()) return;
+    const problems = this.bannerErrors();
+    if (Object.keys(problems).length) {
+      this.bannerTouched.set(Object.fromEntries(Object.keys(problems).map((field) => [field, true])));
       return;
     }
 
@@ -534,9 +655,8 @@ export class AdminErpContentPage {
     this.bannerError.set(null);
 
     const editing = this.bannerEditing();
-    const request$ = editing
-      ? this.api.updateBanner(editing.banner_id, draft)
-      : this.api.createBanner(draft);
+    const body = bannerRequestBody(this.bannerDraft());
+    const request$ = editing ? this.api.updateBanner(editing.banner_id, body) : this.api.createBanner(body);
 
     request$.subscribe({
       next: () => {
@@ -545,7 +665,7 @@ export class AdminErpContentPage {
         this.notice.set(editing ? 'Đã cập nhật banner thành công.' : 'Đã tạo banner mới thành công.');
         this.loadBanners();
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.bannerSaving.set(false);
         this.bannerError.set(adminErrorMessage(err, 'Lưu banner thất bại.'));
       },
@@ -559,7 +679,7 @@ export class AdminErpContentPage {
         this.notice.set('Đã xóa banner thành công.');
         this.loadBanners();
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.bannerError.set(adminErrorMessage(err, 'Xóa banner thất bại.'));
       },
     });
@@ -571,12 +691,13 @@ export class AdminErpContentPage {
         this.notice.set(`Đã ${!banner.is_active ? 'bật' : 'tắt'} banner "${banner.title}".`);
         this.loadBanners();
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.bannerError.set(adminErrorMessage(err, 'Cập nhật trạng thái thất bại.'));
       },
     });
   }
 
+  /** Uploads the banner media (image or video) and, for an image, mirrors the type into the draft. */
   onBannerMediaUploaded(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -587,15 +708,35 @@ export class AdminErpContentPage {
     this.api.uploadCmsMedia(file, 'banner').subscribe({
       next: (res) => {
         this.bannerUploading.set(false);
-        this.bannerDraft.update((current) => ({
-          ...current,
-          media_url: res.url,
-          media_type: res.mediaType,
-        }));
+        input.value = '';
+        this.bannerDraft.update((current) => ({ ...current, media_url: res.url, media_type: res.mediaType }));
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.bannerUploading.set(false);
+        input.value = '';
         this.bannerError.set(adminErrorMessage(err, 'Tải tệp lên thất bại.'));
+      },
+    });
+  }
+
+  /** Uploads the still image shown in the admin list and as the video poster. */
+  onBannerPosterUploaded(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    this.bannerUploading.set(true);
+    this.bannerError.set(null);
+    this.api.uploadCmsMedia(file, 'banner').subscribe({
+      next: (res) => {
+        this.bannerUploading.set(false);
+        input.value = '';
+        this.bannerDraft.update((current) => ({ ...current, poster_url: res.url }));
+      },
+      error: (err: unknown) => {
+        this.bannerUploading.set(false);
+        input.value = '';
+        this.bannerError.set(adminErrorMessage(err, 'Tải ảnh poster thất bại.'));
       },
     });
   }
@@ -606,16 +747,42 @@ export class AdminErpContentPage {
     this.bannerDraft.update((current) => ({ ...current, [field]: value }));
   }
 
-  // --- COLLECTIONS ACTION HANDLERS ---
+  /** Resolves a CMS `/assets/...` path against the storefront origin (FR-17). */
+  asset(url: string | null | undefined): string {
+    return resolveStorefrontAsset(url);
+  }
+
+  /** Still image for a banner card: the image itself, or a video's poster. Cards never embed a `<video>`. */
+  bannerThumb(banner: AdminBannerRow): string {
+    return (banner.media_type === 'video' ? banner.poster_url : banner.media_url)?.trim() || '';
+  }
+
+  /** Typed slot id for one of the five `/collections` cutouts. */
+  modelSlot(index: number): CollectionImageSlot {
+    return `model-${index}`;
+  }
+
+  /** Remembers an image that failed to load so the template can show a placeholder. */
+  markImageBroken(url: string | null | undefined): void {
+    const key = String(url ?? '');
+    if (!key) return;
+    this.brokenImages.update((current) => (current[key] ? current : { ...current, [key]: true }));
+  }
+
+  imageBroken(url: string | null | undefined): boolean {
+    return Boolean(this.brokenImages()[String(url ?? '')]);
+  }
+
+  // --- COLLECTION HANDLERS ---
   loadCollectionsList(): void {
     this.collectionLoading.set(true);
     this.collectionError.set(null);
     this.api.listCollections().subscribe({
       next: (res) => {
-        this.collectionsList.set(res?.data || (res as any)?.rows || []);
+        this.collectionsList.set(res?.data ?? []);
         this.collectionLoading.set(false);
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.collectionError.set(adminErrorMessage(err, 'Không tải được danh sách bộ sưu tập.'));
         this.collectionLoading.set(false);
       },
@@ -627,11 +794,13 @@ export class AdminErpContentPage {
     this.collectionDraft.set({
       code: '',
       name: '',
-      label: 'Thanh lịch & Kiêu sa',
       col_number: `COLLECTION 0${this.collectionsList().length + 1} · SPECIAL EDITION`,
       script: 'golden muse',
       hero_gradient: 'linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%)',
+      banner_url: '',
+      hero_mode: 'models',
       badge: 'ELEGANT',
+      home_story: '',
       kicker: 'THE ART OF SOFTNESS',
       story_headline: 'Dịu dàng, có chủ ý.',
       story_desc: '',
@@ -640,25 +809,44 @@ export class AdminErpContentPage {
       products_sub: 'SELECTED FOR YOU',
       products_title: 'Những thiết kế nổi bật',
       closing_quote: 'Một chút lãng mạn, vừa đủ cho riêng bạn.',
-      quote: '',
       models: [],
+      home_model_url: '',
+      show_on_home: false,
+      home_sort_order: this.collectionsList().length,
+      product_ids: [],
       story_paragraphs: [],
       is_active: true,
       sort_order: this.collectionsList().length,
     });
-    this.collectionError.set(null);
-    this.collectionModalOpen.set(true);
+    this.resetCollectionForm();
   }
 
   openEditCollection(collection: AdminCollectionRow): void {
     this.collectionEditing.set(collection);
     this.collectionDraft.set({
       ...collection,
+      hero_mode: collection.hero_mode === 'cover' ? 'cover' : 'models',
+      home_model_url: collection.home_model_url ?? '',
+      show_on_home: Boolean(collection.show_on_home),
+      home_sort_order: collection.home_sort_order ?? 0,
       models: Array.isArray(collection.models) ? [...collection.models] : [],
+      product_ids: Array.isArray(collection.product_ids) ? [...collection.product_ids] : [],
       story_paragraphs: Array.isArray(collection.story_paragraphs) ? [...collection.story_paragraphs] : [],
     });
+    this.resetCollectionForm();
+  }
+
+  private resetCollectionForm(): void {
+    this.collectionTouched.set({});
+    this.collectionUploads.set({});
+    this.collectionSlotErrors.set({});
     this.collectionError.set(null);
+    this.comboQuery.set('');
+    this.comboResults.set([]);
+    this.comboError.set(null);
+    this.comboResolved.set(false);
     this.collectionModalOpen.set(true);
+    this.fetchCombos();
   }
 
   closeCollectionModal(): void {
@@ -667,18 +855,25 @@ export class AdminErpContentPage {
     this.collectionError.set(null);
   }
 
+  /** Marks a collection field as visited so its inline error becomes visible. */
+  touchCollection(field: string): void {
+    this.collectionTouched.update((current) => ({ ...current, [field]: true }));
+  }
+
+  /**
+   * Inline error for one collection field. Image, slot and cross-row rules show immediately because the
+   * operator cannot "leave" a button; text rules wait for blur or a save attempt.
+   */
+  collectionFieldError(field: string): string {
+    const message = this.collectionErrors()[field] ?? '';
+    return message && (ALWAYS_VISIBLE_COLLECTION_ERRORS[field] === true || this.collectionTouched()[field]) ? message : '';
+  }
+
   saveCollection(): void {
-    const draft = this.collectionDraft();
-    if (!draft.name?.trim()) {
-      this.collectionError.set('Tên bộ sưu tập là bắt buộc.');
-      return;
-    }
-    if (!draft.code?.trim()) {
-      this.collectionError.set('Mã định danh (slug) là bắt buộc.');
-      return;
-    }
-    if (!draft.story_desc?.trim()) {
-      this.collectionError.set('Mô tả câu chuyện cảm hứng là bắt buộc.');
+    if (this.collectionSaving() || this.collectionUploading()) return;
+    const problems = this.collectionErrors();
+    if (Object.keys(problems).length) {
+      this.collectionTouched.set(Object.fromEntries(Object.keys(problems).map((field) => [field, true])));
       return;
     }
 
@@ -686,9 +881,8 @@ export class AdminErpContentPage {
     this.collectionError.set(null);
 
     const editing = this.collectionEditing();
-    const request$ = editing
-      ? this.api.updateCollection(editing.collection_id, draft)
-      : this.api.createCollection(draft);
+    const body = collectionRequestBody(this.collectionDraft(), editing !== null);
+    const request$ = editing ? this.api.updateCollection(editing.collection_id, body) : this.api.createCollection(body);
 
     request$.subscribe({
       next: () => {
@@ -697,7 +891,7 @@ export class AdminErpContentPage {
         this.notice.set(editing ? 'Đã cập nhật bộ sưu tập thành công.' : 'Đã tạo bộ sưu tập mới thành công.');
         this.loadCollectionsList();
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.collectionSaving.set(false);
         this.collectionError.set(adminErrorMessage(err, 'Lưu bộ sưu tập thất bại.'));
       },
@@ -711,7 +905,7 @@ export class AdminErpContentPage {
         this.notice.set('Đã xóa bộ sưu tập thành công.');
         this.loadCollectionsList();
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.collectionError.set(adminErrorMessage(err, 'Xóa bộ sưu tập thất bại.'));
       },
     });
@@ -723,54 +917,56 @@ export class AdminErpContentPage {
         this.notice.set(`Đã ${!collection.is_active ? 'bật' : 'tắt'} bộ sưu tập "${collection.name}".`);
         this.loadCollectionsList();
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.collectionError.set(adminErrorMessage(err, 'Cập nhật trạng thái thất bại.'));
       },
     });
   }
 
-  onCollectionModelUploaded(event: Event): void {
+  /**
+   * Uploads one image into one slot: the 16:9 cover, the homepage cutout, or `/collections` cutout 0-4.
+   * Cutouts go through the `collection-model` category so the server can verify the background was removed.
+   */
+  onCollectionImageSelected(slot: CollectionImageSlot, event: Event): void {
     const input = event.target as HTMLInputElement;
-    const files = input.files;
-    if (!files || !files.length) return;
+    const file = input.files?.[0];
+    if (!file) return;
 
-    this.collectionUploading.set(true);
-    this.collectionError.set(null);
-
-    const file = files[0];
-    this.api.uploadCmsMedia(file, 'collection').subscribe({
-      next: (res) => {
-        this.collectionUploading.set(false);
-        this.collectionDraft.update((current) => ({
-          ...current,
-          models: [...(current.models || []), res.url],
-        }));
-      },
-      error: (err) => {
-        this.collectionUploading.set(false);
-        this.collectionError.set(adminErrorMessage(err, 'Tải ảnh người mẫu thất bại.'));
-      },
-    });
+    this.collectionUploads.update((current) => ({ ...current, [slot]: true }));
+    this.collectionSlotErrors.update((current) => ({ ...current, [slot]: '' }));
+    const category = slot === 'cover' ? 'collection-cover' : 'collection-model';
+    this.api
+      .uploadCmsMedia(file, category)
+      .pipe(finalize(() => {
+        input.value = '';
+        this.collectionUploads.update((current) => ({ ...current, [slot]: false }));
+      }))
+      .subscribe({
+        next: (res) => this.setCollectionImage(slot, res.url),
+        error: (err: unknown) => {
+          this.collectionSlotErrors.update((current) => ({ ...current, [slot]: adminErrorMessage(err, 'Tải ảnh lên thất bại.') }));
+        },
+      });
   }
 
-  removeCollectionModel(index: number): void {
+  /** Clears one image slot without touching the others. */
+  clearCollectionImage(slot: CollectionImageSlot): void {
+    this.setCollectionImage(slot, '');
+  }
+
+  isSlotUploading(slot: CollectionImageSlot): boolean {
+    return Boolean(this.collectionUploads()[slot]);
+  }
+
+  private setCollectionImage(slot: CollectionImageSlot, url: string): void {
     this.collectionDraft.update((current) => {
-      const models = [...(current.models || [])];
-      models.splice(index, 1);
+      if (slot === 'cover') return { ...current, banner_url: url };
+      if (slot === 'home') return { ...current, home_model_url: url };
+      const models = this.modelSlotIndexes.map((index) => (current.models ?? [])[index] ?? '');
+      models[Number(slot.slice('model-'.length))] = url;
+      while (models.length && !models[models.length - 1]) models.pop();
       return { ...current, models };
     });
-  }
-
-  onModelImgError(event: Event, path?: string): void {
-    const img = event.target as HTMLImageElement;
-    if (!img) return;
-    if (!img.dataset['fallback']) {
-      img.dataset['fallback'] = '1';
-      img.src = path && path.startsWith('http') ? path : `https://velura.royalai.dev${path || '/assets/images/models/model_cutout_1.png'}`;
-    } else if (img.dataset['fallback'] === '1') {
-      img.dataset['fallback'] = '2';
-      img.src = '/assets/images/models/model_cutout_1.png';
-    }
   }
 
   onCollectionField(field: keyof AdminCollectionRow, event: Event): void {
@@ -779,8 +975,64 @@ export class AdminErpContentPage {
     this.collectionDraft.update((current) => ({ ...current, [field]: value }));
   }
 
+  setCollectionHeroMode(mode: 'models' | 'cover'): void {
+    this.collectionDraft.update((current) => ({ ...current, hero_mode: mode }));
+  }
+
   setCollectionGradient(gradient: string): void {
     this.collectionDraft.update((current) => ({ ...current, hero_gradient: gradient }));
+  }
+
+  // --- COMBO / SET PICKER ---
+  onComboQueryInput(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.comboQuery.set(value);
+    this.comboSearch$.next(value.trim());
+  }
+
+  /**
+   * Searches combo products. An empty query lists the first combos so the ids already attached can be named;
+   * the server filter is `isCombo=true` and sellability is filtered here because its valid `status` values are not fixed.
+   */
+  fetchCombos(): void {
+    const q = this.comboQuery().trim();
+    this.comboSearching.set(true);
+    this.comboError.set(null);
+    this.api
+      .listProducts({ isCombo: 'true', q, limit: q ? '20' : '100', offset: '0' })
+      .pipe(
+        catchError((error: unknown) => {
+          this.comboError.set(adminErrorMessage(error, 'Không tìm được combo/set.'));
+          return of({ rows: [], count: 0 } as AdminListPayload<AdminProductRow>);
+        }),
+      )
+      .subscribe((payload) => {
+        const products = adminListRows(payload).map((row) => this.toBlogProduct(row));
+        this.comboCache.update((cache) => {
+          const next = { ...cache };
+          for (const product of products) next[product.product_id] = product;
+          return next;
+        });
+        this.comboResults.set(products.filter((product) => !product.status || COMBO_SELLABLE_STATUSES[product.status] === true).slice(0, 20));
+        this.comboSearching.set(false);
+        if (!q) this.comboResolved.set(true);
+      });
+  }
+
+  addCombo(product: AdminBlogProduct): void {
+    this.collectionDraft.update((current) => {
+      const ids = current.product_ids ?? [];
+      if (ids.includes(product.product_id) || ids.length >= COLLECTION_COMBO_MAX) return current;
+      return { ...current, product_ids: [...ids, product.product_id] };
+    });
+  }
+
+  removeCombo(productId: string): void {
+    this.collectionDraft.update((current) => ({ ...current, product_ids: (current.product_ids ?? []).filter((id) => id !== productId) }));
+  }
+
+  moveCombo(index: number, direction: -1 | 1): void {
+    this.collectionDraft.update((current) => ({ ...current, product_ids: moveListItem(current.product_ids ?? [], index, index + direction) }));
   }
 
   /**

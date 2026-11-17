@@ -1,7 +1,7 @@
 import { deleteRows, insertRow, selectOne, selectRows, updateRows } from "../supabase.js";
 import type { Collection, CreateCollectionInput, UpdateCollectionInput } from "./collection-types.js";
 
-const COLLECTION_SELECT = "collection_id,code,name,label,banner_url,decor_url,home_story,col_number,script,hero_gradient,badge,kicker,story_headline,story_desc,explore_cta,category_link,products_sub,products_title,closing_quote,quote,models,story_paragraphs,styling_metadata,is_active,sort_order,created_at,updated_at";
+const COLLECTION_SELECT = "collection_id,code,name,label,banner_url,decor_url,home_story,col_number,script,hero_gradient,badge,kicker,story_headline,story_desc,explore_cta,category_link,products_sub,products_title,closing_quote,quote,models,story_paragraphs,styling_metadata,hero_mode,home_model_url,show_on_home,home_sort_order,product_ids,is_active,sort_order,created_at,updated_at";
 
 export interface CollectionRepository {
   listCollections(filter?: { is_active?: boolean }): Promise<Collection[]>;
@@ -10,6 +10,11 @@ export interface CollectionRepository {
   createCollection(input: CreateCollectionInput): Promise<Collection>;
   updateCollection(id: string, input: UpdateCollectionInput): Promise<Collection | null>;
   deleteCollection(id: string): Promise<boolean>;
+  /**
+   * Tra cứu sản phẩm theo id. Trả về map `product_id -> is_combo`; id không tồn tại
+   * trong catalog sẽ vắng mặt trong map.
+   */
+  findComboProductIds(ids: string[]): Promise<Map<string, boolean>>;
 }
 
 export function createCollectionRepository(): CollectionRepository {
@@ -47,7 +52,7 @@ export function createCollectionRepository(): CollectionRepository {
       const row = await insertRow("collections", {
         code: input.code,
         name: input.name,
-        label: input.label,
+        label: input.label || input.name,
         banner_url: input.banner_url ?? null,
         decor_url: input.decor_url ?? null,
         home_story: input.home_story ?? null,
@@ -67,6 +72,11 @@ export function createCollectionRepository(): CollectionRepository {
         models: input.models || [],
         story_paragraphs: input.story_paragraphs || [],
         styling_metadata: input.styling_metadata || {},
+        hero_mode: input.hero_mode || "models",
+        home_model_url: input.home_model_url ?? null,
+        show_on_home: input.show_on_home ?? false,
+        home_sort_order: input.home_sort_order ?? 0,
+        product_ids: input.product_ids || [],
         is_active: input.is_active !== undefined ? input.is_active : true,
         sort_order: input.sort_order ?? 0,
       });
@@ -99,6 +109,11 @@ export function createCollectionRepository(): CollectionRepository {
       if (input.models !== undefined) updateData.models = input.models;
       if (input.story_paragraphs !== undefined) updateData.story_paragraphs = input.story_paragraphs;
       if (input.styling_metadata !== undefined) updateData.styling_metadata = input.styling_metadata;
+      if (input.hero_mode !== undefined) updateData.hero_mode = input.hero_mode;
+      if (input.home_model_url !== undefined) updateData.home_model_url = input.home_model_url;
+      if (input.show_on_home !== undefined) updateData.show_on_home = input.show_on_home;
+      if (input.home_sort_order !== undefined) updateData.home_sort_order = input.home_sort_order;
+      if (input.product_ids !== undefined) updateData.product_ids = input.product_ids;
       if (input.is_active !== undefined) updateData.is_active = input.is_active;
       if (input.sort_order !== undefined) updateData.sort_order = input.sort_order;
 
@@ -109,6 +124,19 @@ export function createCollectionRepository(): CollectionRepository {
     async deleteCollection(id: string) {
       await deleteRows("collections", { collection_id: `eq.${id}` });
       return true;
+    },
+
+    async findComboProductIds(ids: string[]) {
+      const result = new Map<string, boolean>();
+      if (ids.length === 0) return result;
+      const res = await selectRows("product", {
+        product_id: `in.(${ids.join(",")})`,
+        select: "product_id,is_combo",
+      }, { count: "none" });
+      for (const row of res.rows || []) {
+        result.set(String(row.product_id), row.is_combo === true);
+      }
+      return result;
     },
   };
 }

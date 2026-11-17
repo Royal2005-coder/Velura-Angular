@@ -1,6 +1,7 @@
 import type { JsonObject } from "../types.js";
 
-export type BannerPlacement = "home_hero" | "products_hero" | "collections_hero";
+/** Vị trí banner. Chỉ `products_hero` có nơi hiển thị thật (trang /products). */
+export type BannerPlacement = "products_hero";
 export type BannerMediaType = "image" | "video";
 
 export interface Banner {

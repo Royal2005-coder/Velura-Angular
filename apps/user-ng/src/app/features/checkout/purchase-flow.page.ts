@@ -17,6 +17,7 @@ import { OrderAccountApiStore } from '../../core/services/order-account-api.stor
 import { CheckoutStore, type CheckoutShipping } from '../../core/services/checkout.store';
 import { VoucherService } from '../../core/services/voucher.service';
 import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
+import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import type { AppliedVoucher, CheckoutQuote, VoucherChangedDetails } from '../../core/models/voucher.interface';
 import { ApiRequestError } from '../../core/models/api-request-error';
 import {
@@ -44,7 +45,7 @@ import { toDataURL } from 'qrcode';
 /** Checkout một trang của KAN-27; mọi mutation đơn hàng đi qua Model API KAN-28. */
 @Component({
   selector: 'app-purchase-flow',
-  imports: [FormsModule, RouterLink, AddressSelector, VoucherWallet],
+  imports: [FormsModule, RouterLink, AddressSelector, VoucherWallet, LoadingOverlay],
   templateUrl: './purchase-flow.page.html',
   styleUrls: [
     '../shared/purchase-flow.css',

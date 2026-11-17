@@ -1,4 +1,4 @@
-export type BannerPlacement = 'home_hero' | 'products_hero' | 'collections_hero';
+export type BannerPlacement = 'products_hero';
 export type BannerMediaType = 'image' | 'video';
 
 export interface BannerSummary {

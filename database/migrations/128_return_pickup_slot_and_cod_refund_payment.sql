@@ -8,8 +8,11 @@
 --     differently-worded twin that nothing calls) raised PT422 COD_PAYMENT_REQUIRED for a COD order
 --     with no payment row or a payment row whose provider is not stripe/vnpay/momo. A COD order is
 --     paid in cash at delivery, so the missing ledger row is synthesised as `paid` instead.
---     `velura_prepare_return_refund` also accepts a COD payment that is still `pending`.
+--     `velura_prepare_return_refund` also accepts a COD payment that is still `pending`. Synthesis and
+--     promotion require a delivered/completed order (091 semantics), amount comes only from
+--     orders.total_amount, and both functions lock `orders` first so the synthesis is serialised.
 begin;
+set local lock_timeout='5s';
 
 alter table public.return_item add column if not exists pickup_scheduled_at timestamptz;
 comment on column public.return_item.pickup_scheduled_at is
@@ -27,15 +30,16 @@ begin
   return new;
 end; $$;
 
--- 084 is the running version; the only addition is promoting a COD payment that is still pending
--- (cash is collected at delivery, so a returned COD part is by definition already captured).
+-- 084 is the running version; the only addition is promoting a COD payment that is still pending on a
+-- delivered/completed order (cash is collected at delivery, so a returned COD part is already captured).
 create or replace function public.velura_prepare_return_refund(
  p_return_id uuid,p_order_id uuid,p_expected_version integer,p_return_item_id uuid)
 returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $$
 declare i public.return_item%rowtype; p public.payment%rowtype; op public.payment_refund%rowtype;
- amount_due numeric; reserved numeric;
+ amount_due numeric; reserved numeric; v_order_status text;
 begin
- perform 1 from public.orders where order_id=p_order_id for update;
+ select status::text into v_order_status from public.orders where order_id=p_order_id for update;
+ if not found then raise sqlstate 'PT404' using message='RETURN_NOT_FOUND'; end if;
  perform 1 from public.return_exchange where return_id=p_return_id and order_id=p_order_id for update;
  if not found then raise sqlstate 'PT404' using message='RETURN_NOT_FOUND'; end if;
  select * into i from public.return_item where return_item_id=p_return_item_id and return_id=p_return_id for update;
@@ -51,9 +55,11 @@ begin
  order by created_at desc limit 1 for update;
  if not found then
   select * into p from public.payment where order_id=p_order_id and payment_status::text='pending'
-   and payment_method::text='COD' order by created_at desc limit 1 for update;
+   and payment_method::text='COD' and v_order_status in ('delivered','completed')
+   order by created_at desc limit 1 for update;
   if not found then raise sqlstate 'PT422' using message='CAPTURED_PAYMENT_REQUIRED'; end if;
-  update public.payment set payment_status='paid',paid_at=coalesce(paid_at,now()),version=version+1,updated_at=now()
+  update public.payment set payment_status='paid',paid_at=coalesce(paid_at,now()),
+   gateway_response_code='COD_MANUAL_REFUND_BACKFILL',version=version+1,updated_at=now()
    where payment_id=p.payment_id returning * into p;
  end if;
  if p.payment_method::text='COD' and not public.velura_return_refund_receiver_ready(p_return_id) then
@@ -76,16 +82,26 @@ end; $$;
 revoke all on function public.velura_prepare_return_refund(uuid,uuid,integer,uuid) from public,anon,authenticated;
 grant execute on function public.velura_prepare_return_refund(uuid,uuid,integer,uuid) to service_role;
 
--- 113 is the running version; COD is now decided by the order as well as by the payment row.
+-- 113 is the running version; COD is now decided by the order as well as by the payment row, and the
+-- order row is locked first (same order as velura_prepare_return_refund) so two concurrent returns on
+-- one legacy COD order cannot both synthesise a paid payment row.
 create or replace function public.velura_record_manual_return_refund(
  p_return_id uuid,p_expected_version integer,p_reference text,p_amount numeric,p_transferred_at timestamptz,
  p_proof text,p_note text,p_actor_id uuid,p_return_item_id uuid)
 returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $$
 declare h public.return_exchange%rowtype; p public.payment%rowtype; receiver public.return_refund_receiver%rowtype;
  op jsonb; prior public.return_manual_refund%rowtype; reference_value text:=btrim(p_reference);
- kind text; gateway_refund_failed boolean; v_order_pm text; v_order_total numeric; has_payment boolean;
+ kind text; gateway_refund_failed boolean; v_order_pm text; v_order_status text; v_order_total numeric;
+ v_order_id uuid; has_payment boolean; cod_collected boolean;
 begin
  perform public.velura_require_return_actor(p_actor_id);
+ -- Khoá `orders` TRƯỚC (cùng thứ tự với velura_prepare_return_refund: orders -> return_exchange -> payment)
+ -- để hai yêu cầu hoàn cùng một đơn COD đời đầu xếp hàng, và dòng thanh toán chỉ được tạo một lần.
+ select order_id into v_order_id from public.return_exchange where return_id=p_return_id;
+ if not found then raise sqlstate 'PT404' using message='RETURN_NOT_FOUND'; end if;
+ select payment_method::text,status::text,total_amount into v_order_pm,v_order_status,v_order_total
+  from public.orders where order_id=v_order_id for update;
+ if not found then raise sqlstate 'PT404' using message='RETURN_NOT_FOUND'; end if;
  select * into h from public.return_exchange where return_id=p_return_id for update;
  if not found then raise sqlstate 'PT404' using message='RETURN_NOT_FOUND'; end if;
  select * into prior from public.return_manual_refund where return_item_id=p_return_item_id;
@@ -93,24 +109,36 @@ begin
   if upper(prior.reference)=upper(reference_value) and prior.amount=p_amount then return to_jsonb(prior); end if;
   raise sqlstate 'PT409' using message='REFUND_ALREADY_REQUESTED';
  end if;
- select payment_method::text,coalesce(total_amount,p_amount) into v_order_pm,v_order_total
-  from public.orders where order_id=h.order_id;
+ -- Đọc dòng thanh toán SAU khi đã giữ khoá đơn: không thể thấy trạng thái cũ của giao dịch khác.
  select * into p from public.payment where order_id=h.order_id order by created_at desc limit 1 for update;
  has_payment:=found;
+ cod_collected:=v_order_status in ('delivered','completed');
  if not has_payment then
-   -- Đơn COD đời đầu chưa có dòng thanh toán: tiền mặt đã thu khi giao nên ghi nhận đã thu.
+   -- Đơn COD đời đầu chưa có dòng thanh toán: chỉ khi đã giao (tiền mặt đã thu, như backfill 091).
    if upper(coalesce(v_order_pm,''))<>'COD' then raise sqlstate 'PT422' using message='COD_PAYMENT_REQUIRED'; end if;
+   if not cod_collected then raise sqlstate 'PT422' using message='CAPTURED_PAYMENT_REQUIRED'; end if;
+   if v_order_total is null or v_order_total<=0 then
+     raise sqlstate 'PT422' using message='CAPTURED_PAYMENT_REQUIRED', detail='orders.total_amount is missing'; end if;
+   if not exists(select 1 from public.return_item where return_item_id=p_return_item_id and return_id=p_return_id
+       and item_status='RECEIVED') then raise sqlstate 'PT422' using message='WAREHOUSE_QA_REQUIRED'; end if;
    insert into public.payment(order_id,payment_method,payment_provider,amount,payment_status,paid_at,
      gateway_response_code,created_at,updated_at)
-   values(h.order_id,'COD'::public.payment_method,'cod',coalesce(v_order_total,p_amount),'paid'::public.payment_status,now(),
-     'COD_MANUAL_REFUND_BACKFILL',now(),now())
+   select h.order_id,'COD'::public.payment_method,'cod',v_order_total,'paid'::public.payment_status,now(),
+     'COD_MANUAL_REFUND_BACKFILL',now(),now()
+   where not exists(select 1 from public.payment x where x.order_id=h.order_id)
    returning * into p;
+   if not found then
+     select * into p from public.payment where order_id=h.order_id order by created_at desc limit 1 for update;
+   end if;
    kind:='cod';
  elsif upper(coalesce(p.payment_method::text,''))='COD'
     or (upper(coalesce(v_order_pm,''))='COD' and coalesce(p.payment_provider::text,'') not in ('stripe','vnpay','momo')) then
    kind:='cod';
    if p.payment_status::text='pending' then
-     update public.payment set payment_status='paid',paid_at=coalesce(paid_at,now()),version=version+1,updated_at=now()
+     -- Chỉ đơn COD đã giao mới coi là đã thu tiền; pending trên đơn chưa giao giữ nguyên lỗi.
+     if not cod_collected then raise sqlstate 'PT422' using message='CAPTURED_PAYMENT_REQUIRED'; end if;
+     update public.payment set payment_status='paid',paid_at=coalesce(paid_at,now()),
+      gateway_response_code='COD_MANUAL_REFUND_BACKFILL',version=version+1,updated_at=now()
       where payment_id=p.payment_id returning * into p;
    end if;
  elsif p.payment_provider::text in ('stripe','vnpay','momo') then
@@ -157,3 +185,14 @@ drop function if exists public.velura_record_return_manual_refund(uuid,integer,t
 
 notify pgrst,'reload schema';
 commit;
+
+-- Rollback notes (not executed):
+--  * `return_item.pickup_scheduled_at` is additive and nullable; leaving it in place is safe.
+--    Rows already in WAITING_RETURN before this migration keep a null pickup_scheduled_at (the
+--    UI handles null) and are not backfilled.
+--  * To revert the functions, re-apply the previous definitions: velura_auto_wait_return from 090,
+--    velura_prepare_return_refund from 084, velura_record_manual_return_refund from 113 (the 107
+--    twin velura_record_return_manual_refund was dead code and is not restored).
+--  * COD payment rows created/promoted here carry payment.gateway_response_code
+--    'COD_MANUAL_REFUND_BACKFILL' until the refund reservation overwrites it with 'REFUND_REQUESTED'.
+--    Synthesised rows have payment_provider 'cod'; no unique index is added (production duplicates unknown).

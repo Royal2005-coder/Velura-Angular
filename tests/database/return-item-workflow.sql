@@ -1,4 +1,4 @@
--- Disposable PostgreSQL/Supabase only, after migrations 084,085,086.
+-- Disposable PostgreSQL/Supabase only, after migrations 084,085,086 and 128.
 -- psql -v ON_ERROR_STOP=1 -f tests/database/return-item-workflow.sql
 -- Requires canonical tables, enums, auth helpers and existing 038 order-service RPC;
 -- fixture insertion alone bypasses triggers/FKs, all business assertions run with triggers ON.
@@ -167,5 +167,94 @@ begin
  perform public.velura_reserve_return_units(i);
  if exists(select 1 from public.return_item_unit m join public.return_unit u using(order_item_id,unit_number)
    where m.return_item_id=i and u.legacy_overflow) then raise exception 'New request reused a legacy overflow unit'; end if;
+end $$;
+
+-- COD manual refund without a captured payment row (migration 128): synthesise once, promote pending,
+-- never touch gateway orders, never synthesise for an undelivered order.
+set local session_replication_role=replica;
+insert into public.orders(order_id,user_id,order_code,status,shipping_name,shipping_phone,shipping_address,subtotal,discount_amount,total_amount,shipping_fee,payment_method,delivered_at) values
+ ('94000000-0000-4000-8000-000000000101','94000000-0000-4000-8000-000000000001','RET-COD-NOROW','delivered','Return Customer','0900000101','Test address',200000,0,200000,0,'COD',now()-interval '1 day'),
+ ('94000000-0000-4000-8000-000000000102','94000000-0000-4000-8000-000000000001','RET-COD-PENDING','delivered','Return Customer','0900000102','Test address',100000,0,100000,0,'COD',now()-interval '1 day'),
+ ('94000000-0000-4000-8000-000000000103','94000000-0000-4000-8000-000000000001','RET-GATEWAY','delivered','Return Customer','0900000103','Test address',100000,0,100000,0,'ONLINE_PAYMENT',now()-interval '1 day'),
+ ('94000000-0000-4000-8000-000000000104','94000000-0000-4000-8000-000000000001','RET-COD-UNDELIVERED','confirmed','Return Customer','0900000104','Test address',100000,0,100000,0,'COD',null);
+insert into public.order_item(item_id,order_id,variant_id,product_name,quantity,unit_price,subtotal_item) values
+ ('94000000-0000-4000-8000-000000000111','94000000-0000-4000-8000-000000000101','94000000-0000-4000-8000-000000000031','COD no payment row',2,100000,200000),
+ ('94000000-0000-4000-8000-000000000112','94000000-0000-4000-8000-000000000102','94000000-0000-4000-8000-000000000031','COD pending payment',1,100000,100000),
+ ('94000000-0000-4000-8000-000000000113','94000000-0000-4000-8000-000000000103','94000000-0000-4000-8000-000000000031','Gateway order',1,100000,100000),
+ ('94000000-0000-4000-8000-000000000114','94000000-0000-4000-8000-000000000104','94000000-0000-4000-8000-000000000031','COD undelivered',1,100000,100000);
+insert into public.payment(payment_id,order_id,payment_method,payment_provider,amount,payment_status) values
+ ('94000000-0000-4000-8000-000000000122','94000000-0000-4000-8000-000000000102','COD','cod',100000,'pending'),
+ ('94000000-0000-4000-8000-000000000123','94000000-0000-4000-8000-000000000103','ONLINE_PAYMENT','stripe',100000,'paid');
+insert into public.return_exchange(return_id,order_id,user_id,return_type,status,description) values
+ ('94000000-0000-4000-8000-000000000133','94000000-0000-4000-8000-000000000103','94000000-0000-4000-8000-000000000001','refund','REQUESTED','Gateway order return'),
+ ('94000000-0000-4000-8000-000000000134','94000000-0000-4000-8000-000000000104','94000000-0000-4000-8000-000000000001','refund','REQUESTED','Undelivered COD return');
+insert into public.return_item(return_item_id,return_id,order_item_id,quantity) values
+ ('94000000-0000-4000-8000-000000000143','94000000-0000-4000-8000-000000000133','94000000-0000-4000-8000-000000000113',1),
+ ('94000000-0000-4000-8000-000000000144','94000000-0000-4000-8000-000000000134','94000000-0000-4000-8000-000000000114',1);
+set local session_replication_role=origin;
+
+do $$
+declare
+ actor uuid:='94000000-0000-4000-8000-000000000001'; cskh uuid:='94000000-0000-4000-8000-000000000002';
+ order_id_value uuid; order_item_value uuid; h uuid; i uuid; version_value integer; message_value text; r integer;
+ receipt jsonb:='{"receivedQuantity":1,"matchesProduct":true,"tagsIntact":true,"conditionAcceptable":true,"packageMatch":true,"sealIntact":true,"disposition":"restock","receiptProofRef":"storage://return-evidence-private/fixture/qa.png"}';
+begin
+ -- r=1,2: two returns on one delivered COD order that has no payment row; r=3: delivered COD order with a pending payment.
+ for r in 1..3 loop
+  order_id_value:=case when r<3 then '94000000-0000-4000-8000-000000000101'::uuid else '94000000-0000-4000-8000-000000000102'::uuid end;
+  order_item_value:=case when r<3 then '94000000-0000-4000-8000-000000000111'::uuid else '94000000-0000-4000-8000-000000000112'::uuid end;
+  insert into public.return_exchange(order_id,user_id,return_type,status,description) values(order_id_value,actor,'refund','REQUESTED','COD refund fixture '||r) returning return_id into h;
+  insert into public.return_item(return_id,order_item_id,quantity) values(h,order_item_value,1) returning return_item_id into i;
+  perform public.velura_reserve_return_units(i);
+  insert into public.return_evidence(return_id,kind,storage_bucket,storage_path,mime_type,uploaded_by_role,uploaded_by) values
+   (h,'qa_photo','return-evidence-private','fixture/qa.png','image/png','admin',cskh),
+   (h,'refund_proof','return-evidence-private','fixture/refund.png','image/png','admin',cskh),
+   (h,'pickup_photo','return-evidence-private','fixture/pickup.png','image/png','carrier',cskh);
+  perform public.velura_return_item_action(h,i,'approve','{"reason":"Approve COD refund fixture"}',1,actor);
+  select version into version_value from public.return_item where return_item_id=i;
+  perform public.velura_return_item_action(h,i,'pickup',jsonb_build_object('carrier','Fixture carrier','trackingNumber','FIXTURE-COD-'||r,'photoUrls',jsonb_build_array('storage://return-evidence-private/fixture/pickup.png'),'pickedUpBy','Shipper Le','pickedUpAt',now()),version_value,cskh);
+  select version into version_value from public.return_item where return_item_id=i;
+  perform public.velura_return_item_action(h,i,'receive',receipt,version_value,cskh);
+  select version into version_value from public.return_item where return_item_id=i;
+  perform public.velura_set_return_refund_receiver(h,actor,'Fixture Bank','0123456789','Fixture Customer');
+  perform public.velura_record_manual_return_refund(h,version_value,'COD-FIXTURE-'||r,100000,now(),'storage://return-evidence-private/fixture/refund.png','COD transfer',cskh,i);
+  if (select item_status from public.return_item where return_item_id=i)<>'COMPLETED' and (select item_status from public.return_item where return_item_id=i)<>'REFUNDED' then
+   raise exception 'COD manual refund % did not complete the item', r;
+  end if;
+  if r=1 and (select count(*) from public.payment where order_id=order_id_value and payment_provider='cod' and payment_status::text<>'pending' and amount=200000 and paid_at is not null)<>1 then
+   raise exception 'COD delivered order without payment row was not synthesised as one paid cod row';
+  end if;
+ end loop;
+ -- The second return on the no-row order must reuse the synthesised row, not insert another.
+ if (select count(*) from public.payment where order_id='94000000-0000-4000-8000-000000000101')<>1 then
+  raise exception 'Second return on a legacy COD order created a duplicate payment row';
+ end if;
+ -- Pending COD payment was promoted by the manual refund, not duplicated.
+ if (select count(*) from public.payment where order_id='94000000-0000-4000-8000-000000000102')<>1
+    or exists(select 1 from public.payment where order_id='94000000-0000-4000-8000-000000000102' and (payment_status::text='pending' or paid_at is null)) then
+  raise exception 'Pending COD payment was not promoted to paid exactly once';
+ end if;
+ -- Gateway orders still require the gateway refund path first.
+ begin
+  perform public.velura_record_manual_return_refund('94000000-0000-4000-8000-000000000133',1,'GATEWAY-FIXTURE',100000,now(),'storage://return-evidence-private/fixture/refund.png',null,cskh,'94000000-0000-4000-8000-000000000143');
+  raise exception 'Gateway order accepted a manual refund';
+ exception when sqlstate 'PT422' then
+  get stacked diagnostics message_value=message_text;
+  if message_value<>'GATEWAY_REFUND_REQUIRED' then raise exception 'Wrong gateway error %',message_value; end if;
+ end;
+ if (select count(*) from public.payment where order_id='94000000-0000-4000-8000-000000000103' and payment_provider='cod')<>0 then
+  raise exception 'Gateway order got a synthesised COD payment row';
+ end if;
+ -- An undelivered COD order has no collected cash: never synthesise a paid row.
+ begin
+  perform public.velura_record_manual_return_refund('94000000-0000-4000-8000-000000000134',1,'UNDELIVERED-FIXTURE',100000,now(),'storage://return-evidence-private/fixture/refund.png',null,cskh,'94000000-0000-4000-8000-000000000144');
+  raise exception 'Undelivered COD order accepted a manual refund';
+ exception when sqlstate 'PT422' then
+  get stacked diagnostics message_value=message_text;
+  if message_value<>'CAPTURED_PAYMENT_REQUIRED' then raise exception 'Wrong undelivered error %',message_value; end if;
+ end;
+ if exists(select 1 from public.payment where order_id='94000000-0000-4000-8000-000000000104') then
+  raise exception 'Undelivered COD order got a synthesised payment row';
+ end if;
 end $$;
 rollback;

@@ -91,19 +91,72 @@ describe('QR contracts for orders, shipments and returns', () => {
 });
 
 describe('demo shipment payload', () => {
-  it('derives a stable demo tracking code from the order code', () => {
-    expect(demoTrackingCode('VLR7F20D76F6')).toBe('GHN7F20D76F6');
-    expect(demoTrackingCode('vl-1001')).toBe('GHNVL1001');
-    expect(demoTrackingCode('')).toBe('GHNDEMO00001');
+  /**
+   * Expected values are the output of `createWaybill` (apps/api/src/carrier/carrier-gateway-simulator.ts)
+   * for the same inputs, so the client sample label cannot drift from the label the server prints.
+   */
+  const SERVER_WAYBILLS: ReadonlyArray<{ orderCode: string; orderId?: string; trackingCode: string; qr: string }> = [
+    {
+      orderCode: 'VLR7F20D76F6',
+      trackingCode: 'GHN7F20D76F6',
+      qr: 'velura:shipment:1?order=VLR7F20D76F6&carrier=GHN&tracking=GHN7F20D76F6&url=https%3A%2F%2Fdonhang.ghn.vn%2F%3Forder_code%3DGHN7F20D76F6',
+    },
+    {
+      orderCode: 'vl-1001',
+      trackingCode: 'GHNVL1001',
+      qr: 'velura:shipment:1?order=vl-1001&carrier=GHN&tracking=GHNVL1001&url=https%3A%2F%2Fdonhang.ghn.vn%2F%3Forder_code%3DGHNVL1001',
+    },
+    {
+      orderCode: 'AB',
+      trackingCode: 'GHNAB000',
+      qr: 'velura:shipment:1?order=AB&carrier=GHN&tracking=GHNAB000&url=https%3A%2F%2Fdonhang.ghn.vn%2F%3Forder_code%3DGHNAB000',
+    },
+    {
+      orderCode: 'X',
+      trackingCode: 'GHNX000',
+      qr: 'velura:shipment:1?order=X&carrier=GHN&tracking=GHNX000&url=https%3A%2F%2Fdonhang.ghn.vn%2F%3Forder_code%3DGHNX000',
+    },
+    {
+      orderCode: '  vlr 12-ab  ',
+      trackingCode: 'GHNVLR12AB',
+      qr: 'velura:shipment:1?order=vlr+12-ab&carrier=GHN&tracking=GHNVLR12AB&url=https%3A%2F%2Fdonhang.ghn.vn%2F%3Forder_code%3DGHNVLR12AB',
+    },
+    {
+      orderCode: '',
+      trackingCode: 'GHN000',
+      qr: 'velura:shipment:1?carrier=GHN&tracking=GHN000&url=https%3A%2F%2Fdonhang.ghn.vn%2F%3Forder_code%3DGHN000',
+    },
+    {
+      orderCode: '',
+      orderId: '11111111-2222-4333-8444-555555555555',
+      trackingCode: 'GHN555555555',
+      qr: 'velura:shipment:1?carrier=GHN&tracking=GHN555555555&url=https%3A%2F%2Fdonhang.ghn.vn%2F%3Forder_code%3DGHN555555555',
+    },
+  ];
+
+  it('derives the same tracking code, url and label QR as the server waybill', () => {
+    for (const sample of SERVER_WAYBILLS) {
+      const facts = demoShipmentFacts({ order_code: sample.orderCode, order_id: sample.orderId });
+      expect(demoTrackingCode(sample.orderCode, sample.orderId)).toBe(sample.trackingCode);
+      expect(facts.trackingCode).toBe(sample.trackingCode);
+      expect(facts.trackingUrl).toBe(`https://donhang.ghn.vn/?order_code=${sample.trackingCode}`);
+      expect(
+        buildShipmentQr({
+          orderCode: sample.orderCode || undefined,
+          carrier: facts.carrier,
+          trackingCode: facts.trackingCode,
+          trackingUrl: facts.trackingUrl,
+        }),
+      ).toBe(sample.qr);
+    }
   });
 
-  it('prefers facts already stored on the order', () => {
-    expect(demoShipmentFacts({ order_code: 'VLR7F20D76F6' })).toEqual({
+  it('prefers facts already stored on the order and never invents a shipper', () => {
+    const facts = demoShipmentFacts({ order_code: 'VLR7F20D76F6' });
+    expect(facts).toEqual({
       carrier: 'GHN',
       trackingCode: 'GHN7F20D76F6',
       trackingUrl: 'https://donhang.ghn.vn/?order_code=GHN7F20D76F6',
-      shipperName: 'Nguyễn Văn Giao (demo)',
-      shipperPhone: '0909000111',
     });
     expect(demoShipmentFacts({ order_code: 'X', carrier: 'GHN', tracking_code: 'VN9-1' }).trackingCode).toBe('VN9-1');
   });

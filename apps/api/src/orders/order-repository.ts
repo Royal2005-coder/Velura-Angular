@@ -282,7 +282,8 @@ export function orderErrorMessage(code: string): string {
     INVALID_PAYMENT_DECISION: "Quyết định đối soát không hợp lệ.",
     ORDER_TERMINAL: "Đơn đã kết thúc, không sửa được.",
     PAYMENT_NOT_RESOLVABLE: "Thanh toán này không cần đối soát bằng tay.",
-    CARRIER_SIMULATION_DENIED: "Chỉ super_admin được mô phỏng kết quả của đơn vị vận chuyển."
+    CARRIER_SIMULATION_DENIED: "Chỉ super_admin được mô phỏng kết quả của đơn vị vận chuyển.",
+    CARRIER_LABEL_NOT_ALLOWED: "Chỉ đơn đang chuẩn bị hàng hoặc đơn đổi đã xác nhận mới có nhãn vận đơn."
   };
   return messages[code] || "Không xử lý được đơn hàng.";
 }

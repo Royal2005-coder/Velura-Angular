@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { config } from "../../apps/api/src/config.js";
-import { localGatewayConfigured, momoSignature, verifyMomoNotification, verifyVnpayNotification, vnpaySigningData } from "../../apps/api/src/payments/local-gateways.js";
+import { HttpError } from "../../apps/api/src/http.js";
+import { buildGatewayReadiness } from "../../apps/api/src/payments/gateway-readiness.js";
+import { assertLocalGatewayReady, gatewayNotReadyReason, localGatewayConfigured, momoSignature, verifyMomoNotification, verifyVnpayNotification, vnpaySigningData } from "../../apps/api/src/payments/local-gateways.js";
 import { classifyStripeEvent } from "../../apps/api/src/payments/stripe.js";
 import { validateCheckoutExtras } from "../../apps/api/src/user/order-router.js";
 
@@ -72,6 +74,32 @@ test("production never enables demo wallets even with sandbox credentials", () =
     config.momoPartnerCode = "partner"; config.momoAccessKey = "access"; config.momoSecretKey = "secret";
     assert.equal(localGatewayConfigured("VNPAY"), false);
     assert.equal(localGatewayConfigured("MOMO"), false);
+  } finally {
+    Object.assign(config, before);
+  }
+});
+
+test("gatewayNotReadyReason names the failed precondition and the readiness report never leaks secrets", () => {
+  const before = {
+    nodeEnv: config.nodeEnv, apiPublicOrigin: config.apiPublicOrigin, paymentGatewaySimulator: config.paymentGatewaySimulator,
+    paymentGatewayEnvironment: config.paymentGatewayEnvironment, vnpayTmnCode: config.vnpayTmnCode, vnpayHashSecret: config.vnpayHashSecret,
+  };
+  try {
+    config.nodeEnv = "production"; config.paymentGatewayEnvironment = "sandbox"; config.paymentGatewaySimulator = true;
+    config.vnpayTmnCode = ""; config.vnpayHashSecret = "";
+    config.apiPublicOrigin = "http://api.velura.test";
+    assert.equal(gatewayNotReadyReason("VNPAY"), "API_PUBLIC_ORIGIN_NOT_HTTPS");
+    config.apiPublicOrigin = "https://api.velura.test";
+    assert.equal(gatewayNotReadyReason("VNPAY"), null, "sandbox declared + simulator on falls back to the simulator");
+    config.paymentGatewaySimulator = false;
+    assert.equal(gatewayNotReadyReason("VNPAY"), "CREDENTIALS_MISSING");
+    assert.throws(() => assertLocalGatewayReady("VNPAY"), (error: unknown) => error instanceof HttpError && error.code === "GATEWAY_NOT_CONFIGURED");
+    config.paymentGatewayEnvironment = ""; // production + default sandbox host
+    assert.equal(gatewayNotReadyReason("VNPAY"), "SANDBOX_NOT_ALLOWED_IN_PRODUCTION");
+    config.vnpayTmnCode = "merchant-secret-value"; config.vnpayHashSecret = "hash-secret-value";
+    const report = buildGatewayReadiness();
+    assert.equal(report.providers.vnpay.credentials.VNPAY_TMN_CODE, true);
+    assert.equal(JSON.stringify(report).includes("secret-value"), false);
   } finally {
     Object.assign(config, before);
   }

@@ -27,7 +27,7 @@
     }
 
     @if (loadingList()) {
-      <p class="desk-muted">Đang tải hàng đợi…</p>
+      <p class="desk-muted"><span class="erp-spinner" aria-hidden="true"></span> Đang tải hàng đợi…</p>
     } @else if (!sessions().length) {
       <app-erp-empty-state title="Không có hội thoại" message="Hàng đợi trống với bộ lọc hiện tại." icon="support" />
     } @else {
@@ -119,7 +119,7 @@
 
       <div class="desk-transcript">
         @if (loadingMessages()) {
-          <p class="desk-muted">Đang tải hội thoại…</p>
+          <p class="desk-muted"><span class="erp-spinner" aria-hidden="true"></span> Đang tải hội thoại…</p>
         } @else {
           @for (message of messages(); track message.message_id) {
             <button

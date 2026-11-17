@@ -454,13 +454,19 @@ describe('AdminErpContentPage banners & collections (KAN-116)', () => {
   it('does not paginate the banner and collection tabs but still paginates the blog list', () => {
     const { fixture, page } = boot();
     expect(el(fixture).querySelector('app-erp-pagination')).not.toBeNull();
+    // Preloads banner and collection badge counts on initial paint before switching tabs.
+    expect(page.tabs().find((t) => t.key === 'banners')?.count).toBe(1);
+    expect(page.tabs().find((t) => t.key === 'collections')?.count).toBe(1);
     page.setTab('banners');
     fixture.detectChanges();
     expect(el(fixture).querySelector('app-erp-pagination')).toBeNull();
+    expect(el(fixture).querySelector('app-erp-filter-bar')).toBeNull();
+    expect(el(fixture).querySelector('.content-view-toggle')).toBeNull();
     expect(el(fixture).textContent).not.toContain('Hiển thị');
     page.setTab('collections');
     fixture.detectChanges();
     expect(el(fixture).querySelector('app-erp-pagination')).toBeNull();
+    expect(el(fixture).querySelector('app-erp-filter-bar')).toBeNull();
   });
 
   it('renders banner cards as still images with a status badge and no embedded video', () => {

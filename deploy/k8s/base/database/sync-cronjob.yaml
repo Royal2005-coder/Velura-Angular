@@ -1,0 +1,164 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: supabase-sync-script
+  namespace: database
+data:
+  sync.mjs: |
+    import pg from "pg";
+    const { Client } = pg;
+    const CLOUD_URL = process.env.CLOUD_DATABASE_URL;
+    const LOCAL_URL = process.env.LOCAL_DATABASE_URL;
+
+    async function main() {
+      console.log("[Sync CronJob] Starting incremental synchronization...");
+      const cloudClient = new Client({ connectionString: CLOUD_URL, ssl: { rejectUnauthorized: false } });
+      const localClient = new Client({ connectionString: LOCAL_URL });
+      await cloudClient.connect();
+      await localClient.connect();
+      try {
+        await localClient.query(`
+          CREATE TABLE IF NOT EXISTS public._sync_checkpoint (
+            id integer PRIMARY KEY DEFAULT 1,
+            last_synced_at timestamptz NOT NULL DEFAULT (now() - interval '30 days')
+          );
+          INSERT INTO public._sync_checkpoint (id, last_synced_at)
+          VALUES (1, now() - interval '30 days')
+          ON CONFLICT (id) DO NOTHING;
+        `);
+        const cp = await localClient.query("SELECT last_synced_at FROM public._sync_checkpoint WHERE id = 1;");
+        const lastSync = cp.rows[0]?.last_synced_at || new Date(0);
+        console.log("[Sync CronJob] Last checkpoint:", lastSync.toISOString());
+
+        const tablesRes = await cloudClient.query(`
+          SELECT table_name FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name NOT LIKE '_sync_%'
+          ORDER BY table_name;
+        `);
+        const tables = tablesRes.rows.map(r => r.table_name);
+        await localClient.query("SET session_replication_role = 'replica';");
+        let total = 0;
+        const now = new Date();
+
+        for (const t of tables) {
+          try {
+            const cols = await cloudClient.query("SELECT column_name, data_type, is_generated FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1", [t]);
+            const hasUpdated = cols.rows.some(r => r.column_name === 'updated_at');
+            const writable = cols.rows.filter(r => r.is_generated === 'NEVER');
+            const colNames = writable.map(r => r.column_name);
+
+            let q = `SELECT * FROM public."${t}"`;
+            let params = [];
+            if (hasUpdated) {
+              q += " WHERE updated_at >= $1 - interval '2 minutes'";
+              params.push(lastSync);
+            }
+            const data = await cloudClient.query(q, params);
+            if (data.rows.length === 0) continue;
+
+            const pkRes = await localClient.query(`
+              SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+              WHERE i.indrelid = 'public."' || $1 || '"'::regclass AND i.indisprimary;
+            `, [t]).catch(() => ({ rows: [] }));
+            const pks = pkRes.rows.map(r => r.attname);
+
+            for (const row of data.rows) {
+              const placeholders = colNames.map((_, i) => `$${i + 1}`).join(", ");
+              const values = colNames.map(col => {
+                let v = row[col];
+                const info = writable.find(c => c.column_name === col);
+                if (info && info.data_type === 'ARRAY' && Array.isArray(v)) return v;
+                if (typeof v === 'object' && v !== null) return JSON.stringify(v);
+                return v;
+              });
+
+              let insertSql = `INSERT INTO public."${t}" (${colNames.map(c => `"${c}"`).join(", ")}) VALUES (${placeholders})`;
+              if (pks.length > 0) {
+                const updateSet = colNames.filter(c => !pks.includes(c)).map(c => `"${c}" = EXCLUDED."${c}"`).join(", ");
+                if (updateSet) insertSql += ` ON CONFLICT (${pks.map(c => `"${c}"`).join(", ")}) DO UPDATE SET ${updateSet}`;
+                else insertSql += ` ON CONFLICT (${pks.map(c => `"${c}"`).join(", ")}) DO NOTHING`;
+              } else {
+                insertSql += ` ON CONFLICT DO NOTHING`;
+              }
+              await localClient.query(insertSql, values).catch(() => {});
+            }
+            total += data.rows.length;
+            console.log(`  ✓ Synced ${t}: ${data.rows.length} rows`);
+          } catch(e) {}
+        }
+        await localClient.query("UPDATE public._sync_checkpoint SET last_synced_at = $1 WHERE id = 1;", [now]);
+        await localClient.query("SET session_replication_role = 'origin';");
+        console.log(`[Sync CronJob] Completed! Synced ${total} rows.`);
+      } finally {
+        await cloudClient.end().catch(() => {});
+        await localClient.end().catch(() => {});
+      }
+    }
+    main().catch(err => { console.error(err); process.exit(1); });
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: supabase-cloud-sync
+  namespace: database
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app: supabase-cloud-sync
+        spec:
+          restartPolicy: OnFailure
+          priorityClassName: velura-batch
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          imagePullSecrets:
+          - name: velura-registry
+          containers:
+          - name: syncer
+            image: ghcr.io/royal2005-coder/velura-api@sha256:b4ad23afb741fbd19a803a31a7d9d1fec7ebe15a92dc628e8e927117a4da4ae0
+            command: ["node", "/etc/sync/sync.mjs"]
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            env:
+            # Credentials come from Secrets only; never inline them in Git.
+            - name: CLOUD_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-sync-credentials
+                  key: CLOUD_DATABASE_URL
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: LOCAL_DATABASE_URL
+              value: "postgres://postgres:$(POSTGRES_PASSWORD)@postgres.database.svc:5432/velura"
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                cpu: 250m
+                memory: 128Mi
+            volumeMounts:
+            - name: sync-script
+              mountPath: /etc/sync
+          volumes:
+          - name: sync-script
+            configMap:
+              name: supabase-sync-script

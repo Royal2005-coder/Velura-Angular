@@ -42,7 +42,15 @@
               <div class="collection-hero__glow" aria-hidden="true"></div>
               <span class="collection-hero__script" aria-hidden="true">{{ group.lookbook.script }}</span>
               @if (group.lookbook.heroMode === 'cover' && group.lookbook.banner) {
-                <img [src]="group.lookbook.banner" alt="" class="collection-hero__cover" loading="lazy" />
+                <img
+                  [src]="group.lookbook.banner"
+                  alt=""
+                  class="collection-hero__cover"
+                  loading="lazy"
+                  [style.object-position]="coverFraming(group.lookbook).objectPosition"
+                  [style.transform-origin]="coverFraming(group.lookbook).transformOrigin"
+                  [style.transform]="coverFraming(group.lookbook).transform"
+                />
               } @else {
                 <img [src]="getModelCutout(group.lookbook, 0)" alt="" class="collection-model model-1" loading="lazy" />
                 <img [src]="getModelCutout(group.lookbook, 1)" alt="" class="collection-model model-2" loading="lazy" />

@@ -1,4 +1,5 @@
 import { HttpError } from "../http.js";
+import type { JsonObject } from "../types.js";
 import {
   assertLinkUrl,
   assertMaxLength,
@@ -108,6 +109,40 @@ function normalizeProductIds(value: unknown): string[] {
   return ids;
 }
 
+function isPlainObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Chuẩn hóa `styling_metadata` (vị trí kéo/cắt ảnh bìa `cover_x`, `cover_y`, `cover_zoom`
+ * cùng các khóa cấu hình giao diện hợp lệ), loại bỏ khóa prototype nguy hiểm.
+ */
+function normalizeStylingMetadata(value: unknown): JsonObject {
+  if (!isPlainObject(value)) {
+    throw new HttpError(400, "FIELD_INVALID", "Dữ liệu căn chỉnh ảnh bìa không hợp lệ");
+  }
+  const out: JsonObject = {};
+  for (const [key, rawVal] of Object.entries(value)) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+    if (key === "cover_x" || key === "cover_y") {
+      if (typeof rawVal !== "number" || !Number.isFinite(rawVal)) {
+        throw new HttpError(400, "FIELD_INVALID", "Tọa độ căn chỉnh ảnh bìa không hợp lệ");
+      }
+      const clamped = Math.min(100, Math.max(0, rawVal));
+      out[key] = Math.round(clamped * 10) / 10;
+    } else if (key === "cover_zoom") {
+      if (typeof rawVal !== "number" || !Number.isFinite(rawVal)) {
+        throw new HttpError(400, "FIELD_INVALID", "Độ thu phóng ảnh bìa không hợp lệ");
+      }
+      const clamped = Math.min(2.4, Math.max(1, rawVal));
+      out[key] = Math.round(clamped * 100) / 100;
+    } else {
+      out[key] = rawVal;
+    }
+  }
+  return out;
+}
+
 /** Kiểm từng trường có mặt trong patch (không kiểm trường vắng mặt để không chặn dữ liệu cũ). */
 function normalizePatch(input: UpdateCollectionInput): UpdateCollectionInput {
   const out: UpdateCollectionInput = { ...input };
@@ -163,6 +198,7 @@ function normalizePatch(input: UpdateCollectionInput): UpdateCollectionInput {
   if (input.sort_order !== undefined) out.sort_order = assertSortOrder(input.sort_order, "Thứ tự");
   if (input.home_sort_order !== undefined) out.home_sort_order = assertSortOrder(input.home_sort_order, "Thứ tự trang chủ");
   if (input.product_ids !== undefined) out.product_ids = normalizeProductIds(input.product_ids);
+  if (input.styling_metadata !== undefined) out.styling_metadata = normalizeStylingMetadata(input.styling_metadata);
   return out;
 }
 
@@ -305,6 +341,10 @@ export function createCollectionService(deps: { repository: CollectionRepository
       }
 
       if (patch.product_ids) await assertComboProducts(patch.product_ids);
+      if (patch.styling_metadata !== undefined) {
+        const baseMeta = isPlainObject(existing.styling_metadata) ? existing.styling_metadata : {};
+        patch.styling_metadata = { ...baseMeta, ...patch.styling_metadata };
+      }
 
       const merged = { ...existing, ...patch };
       await assertCrossRules(

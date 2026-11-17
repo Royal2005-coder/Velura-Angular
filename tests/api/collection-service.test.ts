@@ -72,6 +72,7 @@ function mockCollectionRepo(initial: Collection[] = [baseCollection()], catalog?
         home_sort_order: input.home_sort_order ?? 0,
         product_ids: input.product_ids || [],
         banner_url: input.banner_url ?? null,
+        styling_metadata: input.styling_metadata || {},
         is_active: input.is_active ?? true,
         sort_order: input.sort_order ?? 0,
       });
@@ -363,4 +364,37 @@ test("migration 133 refreshes return_exchange aggregate status after exchange or
   assert.match(sql, /perform\s+public\.velura_refresh_return_aggregate\(v_item\.return_id\)/i);
   assert.doesNotMatch(sql, /\bdrop\b/i);
   assert.doesNotMatch(sql, /\bdelete\s+from\b/i);
+});
+
+test("CollectionService: validates, clamps, and shallow-merges styling_metadata cover framing", async () => {
+  const { svc } = service([
+    baseCollection({
+      styling_metadata: { theme: "luxury", cover_x: 50, cover_y: 16, cover_zoom: 1 },
+    }),
+  ]);
+
+  // Reject non-plain objects and invalid numeric fields
+  await rejectsWith(svc.updateCollection("c-1", { styling_metadata: [] as never }), "FIELD_INVALID", 400);
+  await rejectsWith(svc.updateCollection("c-1", { styling_metadata: { cover_x: "bad" } as never }), "FIELD_INVALID", 400);
+  await rejectsWith(svc.updateCollection("c-1", { styling_metadata: { cover_zoom: Number.NaN } }), "FIELD_INVALID", 400);
+
+  // Clamp & merge without wiping existing `theme` key
+  const updated = await svc.updateCollection("c-1", {
+    styling_metadata: { cover_x: -12, cover_y: 18.44, cover_zoom: 3.5 },
+  });
+  assert.deepEqual(updated.styling_metadata, {
+    theme: "luxury",
+    cover_x: 0,
+    cover_y: 18.4,
+    cover_zoom: 2.4,
+  });
+
+  // Omitting styling_metadata on partial toggle leaves framing untouched
+  const toggled = await svc.updateCollection("c-1", { is_active: false });
+  assert.deepEqual(toggled.styling_metadata, {
+    theme: "luxury",
+    cover_x: 0,
+    cover_y: 18.4,
+    cover_zoom: 2.4,
+  });
 });

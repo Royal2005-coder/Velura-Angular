@@ -34,6 +34,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  height: var(--erp-topbar-h);
   min-height: var(--erp-topbar-h);
   padding: 0 16px;
   border-bottom: 1px solid var(--erp-line);
@@ -153,6 +154,7 @@
   background: var(--erp-sidebar-active-bg);
   color: var(--erp-sidebar-active);
   font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--erp-accent);
 }
 
 .nav-link.is-planned:not(.is-active) {
@@ -262,13 +264,13 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  height: 52px;
-  min-height: 52px;
+  height: var(--erp-topbar-h);
+  min-height: var(--erp-topbar-h);
   padding: 0 20px;
   border-bottom: 1px solid var(--erp-line);
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(10px);
-  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.03);
 }
 
 .topbar__menu {

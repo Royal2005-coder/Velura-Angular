@@ -6,7 +6,9 @@ import {
   blogStatusChoices,
   blogStatusLabel,
   blogStatusTone,
+  collectionCodeFromName,
   collectionRequestBody,
+  computeMediaFraming,
   emptyBlogDraft,
   homeRunwaySummary,
   moveListItem,
@@ -162,5 +164,31 @@ describe('admin CMS collection rules', () => {
     expect(summary.complete).toBe(false);
     expect(summary.missingModel).toEqual(['B']);
     expect(summary.duplicateModel).toEqual(['A', 'C']);
+  });
+
+  it('generates clean collection slugs without trailing hyphens and forwards styling_metadata framing', () => {
+    expect(collectionCodeFromName('Bộ Sưu Tập Mùa Thu Đông — Ánh Hoàng Hôn Rực Rỡ Giữa Phố Thị 2027')).not.toMatch(/-$/);
+    expect(collectionCodeFromName('Midnight Mirage · After Dark')).toBe('midnight-mirage-after-dark');
+
+    const framed = computeMediaFraming(42.54, 14.22, 1.35, 16);
+    expect(framed.objectPosition).toBe('42.5% 14.2%');
+    expect(framed.transform).toBe('scale(1.35)');
+    expect(computeMediaFraming(undefined, undefined, 1, 16)).toEqual({
+      posX: 50,
+      posY: 16,
+      zoom: 1,
+      objectPosition: '50% 16%',
+      transformOrigin: '50% 16%',
+      transform: null,
+    });
+
+    const editBody = collectionRequestBody(
+      { ...base, styling_metadata: { cover_x: 42.5, cover_y: 14.2, cover_zoom: 1.35 } },
+      true,
+    );
+    expect(editBody.styling_metadata).toEqual({ cover_x: 42.5, cover_y: 14.2, cover_zoom: 1.35 });
+    expect('hero_gradient' in editBody).toBe(false);
+    expect('category_link' in editBody).toBe(false);
+    expect(validateCollectionDraft({ ...base, category_link: `/${'a'.repeat(260)}` }, ctx)['category_link']).toBeTruthy();
   });
 });

@@ -38,17 +38,31 @@ export interface AdminErpTab {
   `,
   styles: [
     `
+      :host {
+        display: inline-flex;
+        max-width: 100%;
+        min-width: 0;
+      }
       .tabs {
         display: inline-flex;
+        align-items: center;
         gap: 3px;
         padding: 3px;
+        max-width: 100%;
+        overflow-x: auto;
+        scrollbar-width: none;
         border: 1px solid var(--erp-line);
         border-radius: var(--erp-radius-md);
         background: var(--erp-surface-muted);
       }
+      .tabs::-webkit-scrollbar {
+        display: none;
+      }
       .tabs__item {
         display: inline-flex;
         align-items: center;
+        flex-shrink: 0;
+        white-space: nowrap;
         gap: 6px;
         min-height: 32px;
         padding: 0 12px;
@@ -89,11 +103,13 @@ export interface AdminErpTab {
         box-shadow: var(--erp-shadow-sm);
       }
       .tabs__count {
-        min-width: 18px;
+        min-width: 20px;
         padding: 1px 6px;
         border-radius: 999px;
         background: var(--erp-accent-soft);
         color: var(--erp-accent);
+        font-family: var(--erp-font-mono);
+        font-variant-numeric: tabular-nums;
         font-size: 11px;
         font-weight: 600;
         text-align: center;

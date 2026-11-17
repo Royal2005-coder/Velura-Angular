@@ -35,8 +35,8 @@ export interface AdminTableColumn {
 export interface AdminTableRowAction {
   /** Verb naming the action ("Duyệt", "Ẩn"), also used as the accessible name. */
   label: string;
-  /** `primary` for the row's main next step, `danger` for destructive ones. */
-  tone?: 'primary' | 'ghost' | 'danger';
+  /** `primary` for the row's main next step, `outline`/`ghost` for secondary, `danger`/`danger-outline` for destructive ones. */
+  tone?: 'primary' | 'outline' | 'ghost' | 'danger' | 'danger-outline';
   disabled?: boolean;
   run: () => void;
 }
@@ -144,7 +144,9 @@ export interface AdminTableRowAction {
                         </span>
                       } @else if (imageFor(column, row); as thumb) {
                         <span class="cell-media" [class.cell-media--16-9]="column.imageRatio === '16:9'">
-                          <img [src]="thumb" alt="" loading="lazy" />
+                          <span class="cell-media__frame">
+                            <img [src]="thumb" alt="" loading="lazy" />
+                          </span>
                           <span class="cell-media__text">{{ column.value(row) }}</span>
                         </span>
                       } @else {
@@ -163,6 +165,7 @@ export interface AdminTableRowAction {
                           [class.erp-btn--primary]="action.tone === 'primary'"
                           [class.erp-btn--ghost]="!action.tone || action.tone === 'ghost'"
                           [class.erp-btn--danger]="action.tone === 'danger'"
+                          [class.erp-btn--danger-outline]="action.tone === 'danger-outline'"
                           [disabled]="action.disabled || loading()"
                           (click)="action.run()"
                         >
@@ -294,7 +297,7 @@ export interface AdminTableRowAction {
         cursor: pointer;
       }
       tr.is-clickable:focus-visible {
-        outline: 2px solid var(--erp-rose);
+        outline: 2px solid var(--erp-accent);
         outline-offset: -2px;
       }
       .is-right {
@@ -325,16 +328,22 @@ export interface AdminTableRowAction {
         gap: 10px;
         min-width: 0;
       }
-      .cell-media img {
+      .cell-media__frame {
+        display: inline-flex;
         width: 34px;
         height: 34px;
         flex: 0 0 34px;
-        object-fit: cover;
+        overflow: hidden;
         border: 1px solid var(--erp-line);
         border-radius: var(--erp-radius-sm);
         background: var(--erp-surface-muted);
       }
-      .cell-media--16-9 img {
+      .cell-media img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .cell-media--16-9 .cell-media__frame {
         width: 68px;
         height: 38px;
         flex: 0 0 68px;

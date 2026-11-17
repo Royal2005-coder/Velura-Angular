@@ -3,8 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AdminBlogRow, AdminContentCategory, AdminErpApiService } from '../../core/admin-erp-api.service';
+import { AdminErpConfirmService } from '../../core/admin-erp-confirm.service';
 import { emptyBlogDraft } from '../../core/admin-erp-content';
 import { AdminErpSessionService, type AdminAuthMe } from '../../core/admin-erp-session.service';
+import { AdminErpToastService } from '../../shared/ui/admin-toast';
 import { AdminErpContentPage } from './admin-erp-content.page';
 
 const POSTS: AdminBlogRow[] = [
@@ -451,22 +453,39 @@ describe('AdminErpContentPage banners & collections (KAN-116)', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  it('does not paginate the banner and collection tabs but still paginates the blog list', () => {
+  it('supports Cards/Table switching and instant client filtering on banner & collection tabs without pagination', () => {
     const { fixture, page } = boot();
     expect(el(fixture).querySelector('app-erp-pagination')).not.toBeNull();
     // Preloads banner and collection badge counts on initial paint before switching tabs.
     expect(page.tabs().find((t) => t.key === 'banners')?.count).toBe(1);
     expect(page.tabs().find((t) => t.key === 'collections')?.count).toBe(1);
+
     page.setTab('banners');
     fixture.detectChanges();
     expect(el(fixture).querySelector('app-erp-pagination')).toBeNull();
-    expect(el(fixture).querySelector('app-erp-filter-bar')).toBeNull();
-    expect(el(fixture).querySelector('.content-view-toggle')).toBeNull();
+    expect(el(fixture).querySelector('app-erp-filter-bar')).not.toBeNull();
+    expect(el(fixture).querySelector('.content-view-toggle')).not.toBeNull();
     expect(el(fixture).textContent).not.toContain('Hiển thị');
+
+    // Switch to Table view on Banners
+    page.setViewMode('table');
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('app-erp-data-table')).not.toBeNull();
+    expect(el(fixture).textContent).toContain(BANNER.title);
+
+    // Client search filters banners without leaving the tab
+    page.search.set('khong-khop-xyz');
+    fixture.detectChanges();
+    expect(page.filteredBanners().length).toBe(0);
+
+    // Switching to Collections clears cross-tab search and renders Table view cleanly
     page.setTab('collections');
     fixture.detectChanges();
+    expect(page.search()).toBe('');
     expect(el(fixture).querySelector('app-erp-pagination')).toBeNull();
-    expect(el(fixture).querySelector('app-erp-filter-bar')).toBeNull();
+    expect(el(fixture).querySelector('app-erp-filter-bar')).not.toBeNull();
+    expect(el(fixture).querySelector('app-erp-data-table')).not.toBeNull();
+    expect(el(fixture).textContent).toContain(COLLECTION.name);
   });
 
   it('renders banner cards as still images with a status badge and no embedded video', () => {
@@ -479,8 +498,9 @@ describe('AdminErpContentPage banners & collections (KAN-116)', () => {
     expect(page.bannerThumb(BANNER)).toBe(BANNER.poster_url);
   });
 
-  it('edits a collection without a label field, with cover upload, five cutout slots and combo ordering', () => {
+  it('edits a collection with cover cropper framing, toast-only write feedback, and combo ordering', () => {
     const { fixture, page, updated, uploads, productCalls } = boot();
+    const toasts = TestBed.inject(AdminErpToastService);
     page.setTab('collections');
     page.openEditCollection(COLLECTION);
     page.fetchCombos();
@@ -496,6 +516,9 @@ describe('AdminErpContentPage banners & collections (KAN-116)', () => {
     expect(uploads).toEqual(['collection-cover']);
     expect(page.collectionDraft().banner_url).toBe('https://cdn.velura.vn/cover.jpg');
 
+    // Adjust cover framing via cropper output
+    page.onCollectionFramingChange({ posX: 46.5, posY: 14, zoom: 1.3 });
+
     page.addCombo({ product_id: 'combo-2', name: 'Set lụa', slug: 'set-lua', images: [], status: 'on_sale', base_price: 800000, sale_price: null });
     page.moveCombo(1, -1);
     expect(page.collectionDraft().product_ids).toEqual(['combo-2', 'combo-1']);
@@ -503,6 +526,7 @@ describe('AdminErpContentPage banners & collections (KAN-116)', () => {
     expect(page.collectionDraft().product_ids).toEqual(['combo-2']);
 
     page.saveCollection();
+    fixture.detectChanges();
     expect(updated.length).toBe(1);
     const body = updated[0].body;
     expect(body['hero_mode']).toBe('models');
@@ -510,7 +534,27 @@ describe('AdminErpContentPage banners & collections (KAN-116)', () => {
     expect(body['show_on_home']).toBe(false);
     expect(body['home_sort_order']).toBe(0);
     expect(body['product_ids']).toEqual(['combo-2']);
+    expect(body['styling_metadata']).toEqual({ cover_x: 46.5, cover_y: 14, cover_zoom: 1.3 });
     expect('label' in body).toBe(false);
+
+    // Reports via AdminErpToastService and renders NO persistent inline notice banner on the workspace
+    expect(toasts.toasts().some((t) => t.message.includes('Đã cập nhật bộ sưu tập thành công.'))).toBe(true);
+    expect(el(fixture).querySelector('.content-banner--info')).toBeNull();
+  });
+
+  it('auto-generates collection code from Vietnamese name on create and confirms delete via AdminErpConfirmService', async () => {
+    const { page } = boot();
+    const confirmSvc = TestBed.inject(AdminErpConfirmService);
+
+    page.openCreateCollection();
+    page.onCollectionField('name', { target: { type: 'text', value: 'Đêm Huyền Ảo · After Dark' } } as unknown as Event);
+    expect(page.collectionDraft().code).toBe('dem-huyen-ao-after-dark');
+
+    // Delete asks through AdminErpConfirmService instead of window.confirm
+    const pendingDelete = page.deleteCollection(COLLECTION);
+    expect(confirmSvc.pending()?.confirmLabel).toBe('Xóa bộ sưu tập');
+    confirmSvc.answer({ confirmed: false, reason: '' });
+    await pendingDelete;
   });
 
   it('blocks show_on_home without a homepage image and disables Save', () => {

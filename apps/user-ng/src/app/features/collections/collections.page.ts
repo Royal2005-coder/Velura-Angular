@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, UrlTree } from '@angular/router';
-import { COLLECTION_LOOKBOOKS, CollectionLookbook } from '../../core/models/collection-lookbook';
+import { COLLECTION_LOOKBOOKS, CollectionLookbook, collectionCoverFraming } from '../../core/models/collection-lookbook';
 import { ProductSummary } from '../../core/models/product.interface';
 import { CartLine, CartStore } from '../../core/services/cart.store';
 import { CatalogService } from '../../core/services/catalog.service';
@@ -179,6 +179,11 @@ export class CollectionsPage {
   /** Parses an internal collection link into a `UrlTree` so query strings like `?category=dam-vay` stay intact. */
   cmsLink(url: string | null | undefined): UrlTree | string {
     return parseInternalCmsLink(this.router, url, '/products');
+  }
+
+  /** Computes cover framing (`object-position`, `transform-origin`, `transform`) matching Admin ERP cropper. */
+  coverFraming(lookbook: CollectionLookbook): { objectPosition: string; transformOrigin: string; transform: string | null } {
+    return collectionCoverFraming(lookbook);
   }
 
   /**

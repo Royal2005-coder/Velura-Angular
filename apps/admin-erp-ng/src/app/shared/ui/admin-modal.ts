@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, inject, input, output, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, output, viewChild } from '@angular/core';
 import { AdminErpConfirmService } from '../../core/admin-erp-confirm.service';
 import { lockBodyScroll } from '../../core/body-scroll-lock';
 import { isTopOverlay, pushOverlay } from '../../core/overlay-stack';
@@ -6,22 +6,23 @@ import { isTopOverlay, pushOverlay } from '../../core/overlay-stack';
 let modalSequence = 0;
 
 /**
- * Accessible modal shell: backdrop close, Escape, initial focus and a Tab trap.
+ * Accessible modal shell: backdrop close, Escape, initial focus, reactive inert stacking, and a Tab trap.
  */
 @Component({
   selector: 'app-erp-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (open()) {
-      <div class="modal-backdrop" (mousedown)="onBackdrop($event)">
+      <div class="modal-backdrop" [class.modal-backdrop--elevated]="elevated()" (mousedown)="onBackdrop($event)">
         <section
           #panel
           class="modal-panel"
-          [class]="'modal-panel--' + size()"
+          [class]="'modal-panel modal-panel--' + size()"
           role="dialog"
           aria-modal="true"
           [attr.aria-labelledby]="titleId"
           [attr.aria-busy]="busy()"
+          [attr.inert]="!isTop() ? '' : null"
           tabindex="-1"
           (keydown)="onPanelKeydown($event)"
         >
@@ -44,7 +45,11 @@ let modalSequence = 0;
         display: grid;
         place-items: center;
         padding: 20px;
-        background: rgba(42, 20, 28, 0.45);
+        background: rgba(15, 23, 42, 0.45);
+        backdrop-filter: blur(2px);
+      }
+      .modal-backdrop--elevated {
+        z-index: 120;
       }
       .modal-panel {
         display: grid;
@@ -108,7 +113,10 @@ export class AdminErpModal {
   readonly dirty = input(false);
   /** A save is in flight: closing is blocked so a half-finished write can't be abandoned. */
   readonly busy = input(false);
+  /** Raises z-index above standard workspace modals (used by stacked confirm dialogs). */
+  readonly elevated = input(false);
   readonly titleId = `erp-modal-title-${++modalSequence}`;
+  protected readonly isTop = computed(() => !this.open() || isTopOverlay(this));
   private readonly confirm = inject(AdminErpConfirmService);
   readonly closed = output<void>();
   private readonly panel = viewChild<ElementRef<HTMLElement>>('panel');

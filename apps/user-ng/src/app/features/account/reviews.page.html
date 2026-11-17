@@ -75,7 +75,7 @@
               <div class="u-inline-464b28cd89">
                 <div>
                   <label for="guestPhoneInput" class="u-inline-408fc97aae">
-                    Số điện thoại đặt hàng *
+                    Số điện thoại đặt hàng <span class="req" aria-hidden="true">*</span>
                   </label>
                   <input
                     id="guestPhoneInput"
@@ -110,7 +110,7 @@
               <div class="u-inline-464b28cd89">
                 <div>
                   <label for="guestOtpInput" class="u-inline-408fc97aae">
-                    Mã xác thực OTP (6 chữ số) *
+                    Mã xác thực OTP (6 chữ số) <span class="req" aria-hidden="true">*</span>
                   </label>
                   <input
                     id="guestOtpInput"
@@ -231,7 +231,7 @@
         <!-- List of eligible items waiting for review -->
         @if (loadingEligible()) {
           <div class="u-inline-227ec173cd">
-            <p role="status">Đang tải danh sách sản phẩm từ các đơn hàng đã nhận…</p>
+            <p class="loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải danh sách sản phẩm từ các đơn hàng đã nhận…</span></p>
           </div>
         } @else if (eligibleError()) {
           <div class="u-inline-3f02c0f732">
@@ -510,7 +510,7 @@
           </div>
         } @else if (loadingReviews()) {
           <div class="u-inline-07ea9aed1b">
-            <p>Đang tải lịch sử đánh giá của bạn...</p>
+            <p class="loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải lịch sử đánh giá của bạn…</span></p>
           </div>
         } @else if (historyError()) {
           <div class="u-inline-7cbe8295ea">

@@ -954,7 +954,7 @@ export class PurchaseFlowPage {
       return;
     }
     this.step.set(this.payment === 'COD' ? 'success' : 'result');
-    if (this.payment !== 'COD') { this.paymentResult.set('failed'); this.error.set('Đơn đã lưu nhưng chưa mở được cổng thanh toán. Hãy thử lại trên cùng đơn.'); }
+    if (this.payment !== 'COD') { this.paymentResult.set('failed'); this.error.set(response.payment_error?.message || 'Đơn đã lưu nhưng chưa mở được cổng thanh toán. Hãy thử lại trên cùng đơn.'); }
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { order: order.id },
@@ -1133,6 +1133,8 @@ export class PurchaseFlowPage {
     this.address = { ...this.address, province: selection.province, district: selection.district, ward: selection.ward };
     this.addressGeographyValid.set(selection.valid);
     this.addressGeographyMode.set(selection.mode);
+    // A fresh selection supersedes the stale "choose ward/district" message from an earlier submit.
+    this.fieldErrors.update((errors) => this.withoutGeographyErrors(errors, selection));
   }
 
   /** Keep the address editor's validity separate from the checkout delivery address. */
@@ -1140,6 +1142,17 @@ export class PurchaseFlowPage {
     this.addressDraft = { ...this.addressDraft, province: selection.province, district: selection.district, ward: selection.ward };
     this.draftGeographyValid.set(selection.valid);
     this.draftGeographyMode.set(selection.mode);
+    this.dialogErrors.update((errors) => this.withoutGeographyErrors(errors, selection));
+  }
+
+  /** Drops ward/district/province errors that the new selection already satisfies. */
+  private withoutGeographyErrors(errors: Record<string, string>, selection: AddressGeographySelection): Record<string, string> {
+    if (!errors['ward'] && !errors['district'] && !errors['province']) return errors;
+    const next = { ...errors };
+    if (selection.province) delete next['province'];
+    if (selection.ward && selection.valid) delete next['ward'];
+    if (selection.district || selection.mode === 'current') delete next['district'];
+    return next;
   }
 
   private addressErrors(address: DemoAddress): Record<string, string> {

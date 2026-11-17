@@ -582,6 +582,8 @@ export interface AdminOrderRow {
   status?: string;
   status_label?: string;
   payment_method?: string;
+  /** `exchange` for replacement orders born from an exchange return; `sale` otherwise. */
+  order_kind?: string;
   payment_status?: string | null;
   payment_status_label?: string | null;
   shipping_name?: string;
@@ -620,6 +622,17 @@ export interface AdminOrderRow {
   is_guest?: boolean;
   has_successful_call_confirm?: boolean;
   requires_call_confirmation?: boolean;
+}
+
+/** Simulated carrier waybill and the QR payload printed on the parcel label. */
+export interface AdminOrderCarrierLabel {
+  order_id: string;
+  order_code: string | null;
+  carrier: string;
+  trackingCode: string;
+  trackingUrl: string;
+  /** `velura:shipment:1?...` payload the "Xác nhận vận đơn" scanner reads. */
+  labelQr: string;
 }
 
 export interface AdminOrderSummary {
@@ -1093,6 +1106,8 @@ export interface AdminReturnLine {
   seal_intact?: boolean | null;
   receipt_proof_ref?: string | null;
   approved_at?: string | null;
+  /** Giờ hẹn ĐVVC lấy phần hàng này (ISO); null khi chưa hẹn. */
+  pickup_scheduled_at?: string | null;
   receipt_at?: string | null;
   completed_at?: string | null;
   order_item_id?: string;
@@ -1220,6 +1235,8 @@ export interface AdminReturnRow {
   /** Receipt lines are stored verbatim in camelCase, so readers must not snake_case them. */
   qa_item_receipts?: AdminReturnReceiptLine[];
   contact_due_at?: string | null;
+  /** Giờ hẹn ĐVVC lấy hàng sớm nhất của các phần hàng đã duyệt (ISO); null khi chưa hẹn. */
+  pickup_scheduled_at?: string | null;
   refund_bank_name?: string | null;
   refund_bank_account?: string | null;
   refund_bank_holder?: string | null;
@@ -2434,6 +2451,16 @@ export class AdminErpApiService {
     return this.http.post<AdminOrderRow>(
       `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/simulate-carrier`,
       body,
+    );
+  }
+
+  /**
+   * Reads the simulated carrier waybill and label QR for a processing (or confirmed exchange) order.
+   * Idempotent GET: the API derives the waybill from the order code and stores nothing.
+   */
+  getOrderCarrierLabel(orderId: string): Observable<AdminOrderCarrierLabel> {
+    return this.http.get<AdminOrderCarrierLabel>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/carrier-label`,
     );
   }
 

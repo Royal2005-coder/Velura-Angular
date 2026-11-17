@@ -32,6 +32,7 @@ import {
   orderStatusLabel,
   type OrderStatus
 } from "./order-state-machine.js";
+import { createWaybill } from "../carrier/carrier-gateway-simulator.js";
 import { notifyOrderDelivered } from "./order-notifications.js";
 
 /** Hoàn tiền qua cổng thanh toán; tách ra để kiểm thử không gọi Stripe thật. */
@@ -80,6 +81,7 @@ export interface OrderService {
   addEvidence(context: AuthContext | undefined, orderId: string, stage: string, note: string, req: HttpRequest): Promise<JsonObject>;
   performAction(context: AuthContext | undefined, orderId: string, action: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
   simulateCarrier(context: AuthContext | undefined, orderId: string, body: JsonObject): Promise<unknown>;
+  createCarrierLabel(context: AuthContext | undefined, orderId: string): Promise<unknown>;
   resolvePayment(
     context: AuthContext | undefined,
     orderId: string,
@@ -343,6 +345,29 @@ export function createOrderService({
         void notifyOrderDelivered(orderId);
       }
       return this.get(context, orderId);
+    },
+
+    /**
+     * Phát hành nhãn vận đơn mô phỏng để in và dán lên kiện hàng.
+     *
+     * Chỉ đơn đang `processing`, hoặc đơn đổi (`order_kind = exchange`) đã `confirmed`, mới có
+     * nhãn. Nhãn không ghi gì vào đơn: vận đơn chỉ được lưu khi admin quét nhãn ở bước
+     * "Xác nhận vận đơn".
+     */
+    async createCarrierLabel(context, orderId) {
+      requireOrderOperator(context);
+      requireUuid(orderId, "orderId");
+      const order = await repository.findById(orderId, context.accessToken);
+      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", orderErrorMessage("ORDER_NOT_FOUND"));
+      const exchangeReady = order.status === "confirmed" && order.order_kind === "exchange";
+      if (order.status !== "processing" && !exchangeReady) {
+        throw new HttpError(422, "CARRIER_LABEL_NOT_ALLOWED", orderErrorMessage("CARRIER_LABEL_NOT_ALLOWED"));
+      }
+      return {
+        order_id: order.order_id,
+        order_code: order.order_code ?? null,
+        ...createWaybill(order)
+      };
     },
 
     async resolvePayment(context, orderId, paymentId, body, requestMeta) {

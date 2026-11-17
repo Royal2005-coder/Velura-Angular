@@ -116,7 +116,7 @@
 
 .record__grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 10px 16px;
   margin: 0;
 }
@@ -124,6 +124,7 @@
 .record__grid div {
   display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .record__grid dt {
@@ -137,6 +138,8 @@
 .record__grid dd {
   margin: 0;
   font-size: 12.5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .record__grid dd.is-mono {

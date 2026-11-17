@@ -11,7 +11,7 @@ import {
 
 const shipmentAction: AdminOrderAction = {
   code: 'upsert_shipment',
-  label: 'Tạo/cập nhật vận đơn',
+  label: 'Xác nhận vận đơn',
   to_status: null,
   requires_note: true,
   fields: ['shipment'],
@@ -56,7 +56,7 @@ function event(overrides: Partial<AdminOrderEvent> = {}): AdminOrderEvent {
 describe('admin order trace', () => {
   it('turns a state-machine event into one labelled trail row with its payload facts', () => {
     const [entry] = eventTrace([event({ payload: { carrier: 'GHN', tracking_code: 'VN2200111' } })]);
-    expect(entry.title).toBe('Tạo/cập nhật vận đơn');
+    expect(entry.title).toBe('Xác nhận vận đơn');
     expect(entry.actor).toBe('admin_operator_donhang');
     expect(entry.detail).toContain('VN2200111');
     expect(entry.origin).toBe('order');

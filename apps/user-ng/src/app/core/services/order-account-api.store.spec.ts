@@ -273,12 +273,20 @@ describe('OrderAccountApiStore authorization and response ordering', () => {
     } : { orders: [{ ...order, items: [original] }] }));
     const model = await create(); await model.loadReplacementChoices('VLR-1');
     const line = model.orders()[0].items[0];
-    expect(model.replacementChoices(line)).toEqual([{ id: 'replacement', label: 'L / Đen', stock: 2 }]);
+    expect(model.replacementChoices(line)).toEqual([
+      { id: 'original', label: 'Cùng mẫu (đổi sản phẩm lỗi)', stock: 4 },
+      { id: 'replacement', label: 'L / Đen', stock: 2 },
+    ]);
     post.mockReturnValueOnce(of({ storage_ref: photoRef })).mockReturnValueOnce(of({ storage_ref: videoRef }))
       .mockReturnValueOnce(of({ success: true, return: { ...request, return_type: 'exchange', items: [{ return_item_id: 'part-1', variant_id: 'original', order_item_id: 'item-1', quantity: 1, replacement_variant_id: 'replacement', resolution_type: 'exchange', item_status: 'REQUESTED', decision_status: 'pending' }] } }));
     const created = await model.createReturn('VLR-1', 'exchange', [{ variantId: 'original', quantity: 1, replacementVariantId: 'replacement', replacement: 'L / Đen' }], '', initialEvidence(), 'size');
     expect(post).toHaveBeenCalledWith('/api/user/returns', expect.objectContaining({ reason_code: 'size', evidence_images: [photoRef], evidence_videos: [videoRef], items: [{ order_item_id: 'item-1', quantity: 1, replacement_variant_id: 'replacement' }] }));
     expect(created.items[0]).toMatchObject({ returnItemId: 'part-1', replacementVariantId: 'replacement', itemStatus: 'REQUESTED', resolutionType: 'exchange' });
+    post.mockClear();
+    post.mockReturnValueOnce(of({ storage_ref: photoRef })).mockReturnValueOnce(of({ storage_ref: videoRef }))
+      .mockReturnValueOnce(of({ success: true, return: { ...request, return_type: 'exchange', items: [{ return_item_id: 'part-2', variant_id: 'original', order_item_id: 'item-1', quantity: 1, replacement_variant_id: 'original', resolution_type: 'exchange', item_status: 'REQUESTED', decision_status: 'pending' }] } }));
+    await model.createReturn('VLR-1', 'exchange', [{ variantId: 'original', quantity: 1, replacementVariantId: 'original', replacement: 'Cùng mẫu (đổi sản phẩm lỗi)' }], '', initialEvidence(), 'damaged');
+    expect(post).toHaveBeenCalledWith('/api/user/returns', expect.objectContaining({ items: [{ order_item_id: 'item-1', quantity: 1, replacement_variant_id: 'original' }] }));
     await expect(model.createReturn('VLR-1', 'exchange', [{ variantId: 'original', quantity: 3, replacementVariantId: 'replacement' }], '', [])).rejects.toThrow('còn đủ số lượng');
     await expect(model.createReturn('VLR-1', 'exchange', [{ variantId: 'original', quantity: 1, replacementVariantId: 'foreign-product' }], '', [])).rejects.toThrow('cùng sản phẩm');
   });

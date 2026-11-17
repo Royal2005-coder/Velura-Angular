@@ -188,7 +188,7 @@ export class ReturnFlowComponent {
       this.carrier.set('GHN'); this.contactResult.set('reached');
       const date = new Date(); date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
       this.transferredAt.set(date.toISOString().slice(0, 16));
-      this.pickedUpBy.set(''); this.pickedUpAt.set(date.toISOString().slice(0, 16));
+      this.pickedUpBy.set(''); this.pickedUpAt.set(date.toISOString().slice(0, 19));
     });
   }
 
@@ -614,7 +614,8 @@ export class ReturnFlowComponent {
     const scannedAt = new Date(facts.scannedAt);
     if (!Number.isNaN(scannedAt.getTime())) {
       const local = new Date(scannedAt.getTime() - scannedAt.getTimezoneOffset() * 60_000);
-      this.pickedUpAt.set(local.toISOString().slice(0, 16));
+      // Giữ đến giây: cắt về phút làm thời điểm lấy hàng sớm hơn created_at của phiếu và bị DB từ chối.
+      this.pickedUpAt.set(local.toISOString().slice(0, 19));
     }
   }
 

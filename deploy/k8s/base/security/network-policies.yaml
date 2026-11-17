@@ -431,6 +431,12 @@ spec:
       podSelector:
         matchLabels:
           app: postgres-backup
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: database
+      podSelector:
+        matchLabels:
+          app: supabase-cloud-sync
     ports:
     - protocol: TCP
       port: 5432
@@ -1009,6 +1015,45 @@ spec:
     ports:
     - protocol: TCP
       port: 443
+---
+# KAN-110: supabase-cloud-sync reads the local postgres and syncs with the
+# Supabase Cloud pooler (5432 session / 6543 transaction). default-deny blocked it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: supabase-cloud-sync-egress
+  namespace: database
+spec:
+  podSelector:
+    matchLabels:
+      app: supabase-cloud-sync
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: database
+      podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+        - 169.254.0.0/16
+        - 127.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6543
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

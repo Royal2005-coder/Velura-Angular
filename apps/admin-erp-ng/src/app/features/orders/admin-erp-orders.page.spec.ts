@@ -121,6 +121,15 @@ describe('AdminErpOrdersPage', () => {
       uploadOrderEvidence: () =>
         of({ evidence_id: 'e-default', stage: 'processing', kind: 'image', url: 'https://signed', created_at: '2026-10-23T02:00:00Z' }),
       simulateCarrier: () => of(paidOrder),
+      createOrderCarrierLabel: (orderId: string) =>
+        of({
+          order_id: orderId,
+          order_code: 'VL-1001',
+          carrier: 'GHN',
+          trackingCode: 'GHNVL1001',
+          trackingUrl: 'https://donhang.ghn.vn/?order_code=GHNVL1001',
+          labelQr: 'velura:shipment:1?order=VL-1001&carrier=GHN&tracking=GHNVL1001',
+        }),
       ...overrides,
     };
     await TestBed.configureTestingModule({
@@ -208,15 +217,16 @@ describe('AdminErpOrdersPage', () => {
     const page = fixture.componentInstance;
 
     page.selected.set(shippedOrder);
-    page.shipment.set({ carrier: 'GHN', trackingCode: 'VN9-1', trackingUrl: '' });
+    page.applyShipmentScan('GHN123456789');
+    page.shipmentPhoto.set(new File(['x'], 'kien-hang.png', { type: 'image/png' }));
     page.modal.set({ kind: 'action', action: shipmentAction });
-    page.submitAction(formEvent({ note: 'Tạo vận đơn GHN VN9-1' }));
+    page.submitAction(formEvent({ note: 'Xác nhận vận đơn GHN123456789' }));
 
     expect(actions.map((entry) => entry.action)).toEqual(['upsert_shipment', 'confirm_handover']);
     expect(actions[0].body['expectedVersion']).toBe(3);
     expect(actions[1].body['expectedVersion']).toBe(3);
-    expect(actions[0].body['trackingCode']).toBe('VN9-1');
-    expect(String(actions[1].body['note'])).toContain('VN9-1');
+    expect(actions[0].body['trackingCode']).toBe('GHN123456789');
+    expect(String(actions[1].body['note'])).toContain('GHN123456789');
     expect(page.selected()?.status).toBe('shipping');
     expect(page.notice()).toContain('bàn giao');
   });
@@ -231,19 +241,6 @@ describe('AdminErpOrdersPage', () => {
     expect(page.scanError()).toBeNull();
     expect(page.scanLocked()?.trackingCode).toBe('GHN123456789');
 
-    page.onShipmentField('carrier', { target: { value: 'GHN' } } as unknown as Event);
-    page.onShipmentField('trackingCode', { target: { value: 'GHN42' } } as unknown as Event);
-    expect(page.shipment().trackingCode).toBe('GHN123456789');
-  });
-
-  it('derives the tracking URL while the operator types without a scan', async () => {
-    const fixture = await boot(() => of({ rows: [shippedOrder], count: 1 }));
-    const page = fixture.componentInstance;
-    page.selected.set(shippedOrder);
-
-    page.onShipmentField('carrier', { target: { value: 'GHN' } } as unknown as Event);
-    page.onShipmentField('trackingCode', { target: { value: 'GHN42' } } as unknown as Event);
-    expect(page.shipment().trackingUrl).toBe('https://donhang.ghn.vn/?order_code=GHN42');
   });
 
   it('refuses a label that belongs to another order', async () => {
@@ -296,7 +293,7 @@ describe('AdminErpOrdersPage', () => {
     expect(page.selected()?.order_id).toBe('o2');
   });
 
-  it('saves the call and hands the order itself to the QR confirmation', async () => {
+  it('saves the call and confirms the COD order in the same step, without a QR scan', async () => {
     const actions: Array<{ action: string; body: Record<string, unknown> }> = [];
     const fixture = await boot(
       () => of({ rows: [codOrder], count: 1 }),
@@ -320,61 +317,108 @@ describe('AdminErpOrdersPage', () => {
 
     page.submitCodCall(formEvent({}), true);
 
-    // Confirmation is never fired off a phone call alone: the parcel must be scanned first.
-    expect(actions.map((entry) => entry.action)).toEqual(['call_confirm']);
-    expect(page.modal()?.kind).toBe('confirm_qr');
-    expect(page.notice()).toContain('Quét QR');
+    expect(actions.map((entry) => entry.action)).toEqual(['call_confirm', 'confirm_cod']);
+    expect(actions[1].body['expectedVersion']).toBe(4);
+    expect(String(actions[1].body['note'])).toContain('Khách xác nhận');
+    expect(page.modal()).toBeNull();
+    expect(page.selected()?.status).toBe('confirmed');
   });
 
-  it('confirms only after a QR scan plus the mandatory proof photo', async () => {
-    const uploaded: Array<{ stage: string; note: string }> = [];
-    const actions: Array<{ action: string; body: Record<string, unknown> }> = [];
+  it('opens confirm_cod as a plain action form and confirms without any scan or photo', async () => {
+    const actions: string[] = [];
     const fixture = await boot(
       () => of({ rows: [codOrder], count: 1 }),
       [],
       {
-        uploadOrderEvidence: (_id: string, _file: File, stage: string, note: string) => {
-          uploaded.push({ stage, note });
-          return of({ evidence_id: 'e-qr', stage, kind: 'image', created_at: '2026-11-08T02:00:00Z' });
-        },
-        performOrderAction: (orderId: string, action: string, body: Record<string, unknown>) => {
-          actions.push({ action, body });
+        performOrderAction: (orderId: string, action: string) => {
+          actions.push(action);
           return of({ order: { ...codOrder, status: 'confirmed', version: 5, allowed_actions: [] }, refund: null });
         },
       },
     );
     const page = fixture.componentInstance;
-    const calledOrder = { ...codOrder, has_successful_call_confirm: true };
-    page.selected.set(calledOrder);
-    page.openConfirmQr();
-    expect(page.modal()?.kind).toBe('confirm_qr');
+    page.selected.set({ ...codOrder, has_successful_call_confirm: true });
+    const confirmAction = codOrder.allowed_actions!.find((action) => action.code === 'confirm_cod')!;
 
-    // No scan yet → the confirm button stays disabled.
-    expect(page.canSubmitConfirm()).toBe(false);
-    page.onConfirmFacts({
-      raw: 'velura:shipment:1?order=VL-1002',
-      orderCode: 'VL-1002',
-      returnCode: '',
-      carrier: 'GHN',
-      trackingCode: 'GHNVL1002',
-      shipperName: 'Nguyễn Văn Giao',
-      shipperPhone: '0909000111',
-      scannedAt: '2026-11-08T02:00:00.000Z',
-    });
-    // Scanned but without the proof photo it still cannot be confirmed.
-    expect(page.canSubmitConfirm()).toBe(false);
+    page.openAction(confirmAction);
+    expect(page.modal()?.kind).toBe('action');
+    expect(page.scanOpen()).toBe(false);
 
-    page.confirmPhoto.set(new File(['x'], 'phieu.png', { type: 'image/png' }));
-    page.setConfirmQuickNote('Đã đối chiếu đúng mã đơn và người nhận');
-    expect(page.canSubmitConfirm()).toBe(true);
-    page.submitQrConfirm();
-
-    expect(uploaded).toHaveLength(1);
-    expect(uploaded[0].stage).toBe('confirmed');
-    expect(uploaded[0].note).toContain('[QR: VL-1002 · GHN · GHNVL1002]');
-    expect(actions.map((entry) => entry.action)).toEqual(['confirm_cod']);
-    expect(String(actions[0].body['note'])).toContain('Đã đối chiếu đúng mã đơn');
+    page.submitAction(formEvent({ note: '' }));
+    expect(actions).toEqual(['confirm_cod']);
     expect(page.selected()?.status).toBe('confirmed');
+  });
+
+  it('opens the scanner at once for the shipment form and refuses it without a scan or proof photo', async () => {
+    const actions: string[] = [];
+    const uploads: string[] = [];
+    const fixture = await boot(
+      () => of({ rows: [shippedOrder], count: 1 }),
+      [],
+      {
+        uploadOrderEvidence: (_id: string, _file: File, stage: string) => {
+          uploads.push(stage);
+          return of({ evidence_id: 'e-ship', stage, kind: 'image', created_at: '2026-11-08T02:00:00Z' });
+        },
+        performOrderAction: (orderId: string, action: string) => {
+          actions.push(action);
+          return of({ order: action === 'upsert_shipment' ? shippedOrder : handedOrder, refund: null });
+        },
+      },
+    );
+    const page = fixture.componentInstance;
+    page.selected.set(shippedOrder);
+
+    page.openAction(shipmentAction);
+    expect(page.scanOpen()).toBe(true);
+
+    page.submitAction(formEvent({ note: 'Xác nhận vận đơn' }));
+    expect(page.actionError()).toContain('Quét QR');
+
+    page.applyShipmentScan('GHN123456789');
+    page.submitAction(formEvent({ note: 'Xác nhận vận đơn' }));
+    expect(page.actionError()).toContain('ảnh minh chứng');
+    expect(actions).toEqual([]);
+    expect(uploads).toEqual([]);
+
+    page.shipmentPhoto.set(new File(['x'], 'kien-hang.png', { type: 'image/png' }));
+    page.submitAction(formEvent({ note: 'Xác nhận vận đơn' }));
+    expect(uploads).toEqual(['processing']);
+    expect(actions).toEqual(['upsert_shipment', 'confirm_handover']);
+  });
+
+  it('shows the carrier label modal after start_processing succeeds', async () => {
+    const fixture = await boot(
+      () => of({ rows: [codOrder], count: 1 }),
+      [],
+      {
+        performOrderAction: () => of({ order: { ...paidOrder, status: 'processing', version: 3 }, refund: null }),
+      },
+    );
+    const page = fixture.componentInstance;
+    const startAction = { code: 'start_processing', label: 'Bắt đầu chuẩn bị', to_status: 'processing', requires_note: false, fields: [], destructive: false };
+    page.selected.set({ ...paidOrder, status: 'confirmed', allowed_actions: [startAction] });
+    page.openAction(startAction);
+    page.submitAction(formEvent({ note: '' }));
+
+    expect(page.modal()?.kind).toBe('carrier_label');
+    expect(page.carrierLabel()?.trackingCode).toBe('GHNVL1001');
+    expect(page.carrierLabel()?.labelQr).toContain('velura:shipment:1');
+    expect(page.scanSample()).toBe(page.carrierLabel()?.labelQr);
+  });
+
+  it('offers the label of a confirmed exchange order when its drawer opens', async () => {
+    const exchange: AdminOrderRow = { ...paidOrder, order_id: 'o9', order_kind: 'exchange', status: 'confirmed', allowed_actions: [] };
+    const fixture = await boot(
+      () => of({ rows: [exchange], count: 1 }),
+      [],
+      { getOrder: () => of(exchange) },
+    );
+    const page = fixture.componentInstance;
+
+    page.openDetail('o9');
+    expect(page.modal()?.kind).toBe('carrier_label');
+    expect(page.carrierLabel()?.order_id).toBe('o9');
   });
 
   it('says so when the shipment stored but the handover did not', async () => {
@@ -391,9 +435,10 @@ describe('AdminErpOrdersPage', () => {
     const page = fixture.componentInstance;
 
     page.selected.set(shippedOrder);
-    page.shipment.set({ carrier: 'GHN', trackingCode: 'VN9-1', trackingUrl: '' });
+    page.applyShipmentScan('GHN123456789');
+    page.shipmentPhoto.set(new File(['x'], 'kien-hang.png', { type: 'image/png' }));
     page.modal.set({ kind: 'action', action: shipmentAction });
-    page.submitAction(formEvent({ note: 'Tạo vận đơn GHN VN9-1' }));
+    page.submitAction(formEvent({ note: 'Xác nhận vận đơn GHN123456789' }));
 
     expect(page.notice()).toContain('Vận đơn đã lưu');
     expect(page.notice()).toContain('bàn giao chưa thành công');

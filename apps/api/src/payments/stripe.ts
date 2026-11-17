@@ -364,10 +364,41 @@ export interface RefundStripeOptions {
   paymentId?:string;
 }
 
-/** Kết quả một lần yêu cầu hoàn tiền. */
+/** Kết quả một lần yêu cầu hoàn tiền. `code` chỉ có khi lỗi có mã máy đọc được (vd. GATEWAY_REFUND_TIMEOUT). */
 export interface RefundResult {
   status: "refunded" | "requested" | "failed" | "skipped";
   message?: string;
+  code?: string;
+}
+
+/** Mã lỗi khi Stripe không phản hồi trong thời hạn; kết quả hoàn tiền chưa xác định. */
+export const GATEWAY_REFUND_TIMEOUT = "GATEWAY_REFUND_TIMEOUT";
+/** Mỗi lệnh gọi Stripe trong luồng hoàn tiền không được treo quá thời hạn này. */
+const STRIPE_REFUND_TIMEOUT_MS = 15000;
+
+/**
+ * Payment cũ có thể còn lưu mã phiên Checkout (`cs_…`) thay vì PaymentIntent (`pi_…`), mà Stripe
+ * chỉ hoàn tiền theo PaymentIntent. Hỏi Stripe lấy PaymentIntent của phiên rồi lưu lại để các lần
+ * sau (webhook hoàn tiền tra theo `pi_`) khớp được. Trả chuỗi rỗng khi không xác định được.
+ */
+async function resolveStripePaymentIntent(payment: JsonObject, fetchImpl: typeof fetch): Promise<string> {
+  const sessionId = asString(payment.gateway_transaction_ref);
+  if (!sessionId.startsWith("cs_")) return "";
+  const response = await fetchImpl(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "GET",
+    headers: { authorization: `Bearer ${config.stripeSecretKey}` },
+    signal: AbortSignal.timeout(STRIPE_REFUND_TIMEOUT_MS)
+  });
+  if (!response.ok) return "";
+  const body = asJsonObject(await response.json());
+  const raw = body.payment_intent;
+  const intent = typeof raw === "string" ? raw : asString(asJsonObject(raw).id);
+  if (!intent.startsWith("pi_")) return "";
+  await updateRows("payment", {
+    payment_id: `eq.${asString(payment.payment_id)}`,
+    gateway_transaction_ref: `eq.${sessionId}`
+  }, { gateway_transaction_ref: intent, gateway_session_id: asString(payment.gateway_session_id) || sessionId });
+  return intent;
 }
 
 /**
@@ -425,12 +456,17 @@ export async function refundStripeOrder(
     });
   }
 
-  const intent = asString(payment.gateway_transaction_ref);
-  if (!config.stripeSecretKey || !intent.startsWith("pi_")) {
-    await markRefundFailed(orderId, payment, !config.stripeSecretKey ? "Chưa cấu hình STRIPE_SECRET_KEY" : "Thiếu mã PaymentIntent của giao dịch");
+  let intent = asString(payment.gateway_transaction_ref);
+  if (!config.stripeSecretKey) {
+    await markRefundFailed(orderId, payment, "Chưa cấu hình STRIPE_SECRET_KEY");
     return { status: "failed", message: "Không gửi được yêu cầu hoàn tiền tới Stripe" };
   }
   try {
+    if (intent.startsWith("cs_")) intent = await resolveStripePaymentIntent(payment, fetchImpl);
+    if (!intent.startsWith("pi_")) {
+      await markRefundFailed(orderId, payment, "Thiếu mã PaymentIntent của giao dịch");
+      return { status: "failed", message: "Không gửi được yêu cầu hoàn tiền tới Stripe" };
+    }
     const params = new URLSearchParams({ payment_intent: intent, "metadata[order_id]": orderId });
     if (refundAmount !== undefined) params.append("amount", String(refundAmount));
     if (operation) {
@@ -448,7 +484,8 @@ export async function refundStripeOrder(
         "content-type": "application/x-www-form-urlencoded",
         "idempotency-key": operation ? `return-refund-${asString(operation.refund_id)}` : `refund-${asString(payment.payment_id)}-${String(payment.version ?? 1)}`
       },
-      ...(providerRef ? {} : { body: params })
+      ...(providerRef ? {} : { body: params }),
+      signal: AbortSignal.timeout(STRIPE_REFUND_TIMEOUT_MS)
     });
     const body = asJsonObject(await response.json());
     const refundId = asString(body.id);
@@ -495,6 +532,13 @@ export async function refundStripeOrder(
     });
     return { status: "requested" };
   } catch (error: unknown) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      // Stripe may still have executed the refund; the idempotency key makes a retry safe.
+      const message = "Cổng thanh toán phản hồi quá chậm. Lệnh hoàn tiền chưa được xác nhận, hãy thử lại sau ít phút.";
+      if (operation) return { status: "requested", message, code: GATEWAY_REFUND_TIMEOUT };
+      await markRefundFailed(orderId, payment, message);
+      return { status: "failed", message, code: GATEWAY_REFUND_TIMEOUT };
+    }
     // Stripe may have accepted the request before the connection or local completion failed.
     if (operation) return { status: "requested", message: "Đang chờ đối soát kết quả hoàn tiền Stripe" };
     await markRefundFailed(orderId, payment, errorMessage(error));

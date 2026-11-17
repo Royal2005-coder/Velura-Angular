@@ -21,7 +21,7 @@
 
     <div class="wishlist-grid">
       @if (loading()) {
-        <div class="u-inline-fbd682dd27">Đang tải danh sách yêu thích...</div>
+        <div class="u-inline-fbd682dd27 loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải danh sách yêu thích…</span></div>
       } @else if (products().length === 0) {
         <div class="u-inline-d7103544a2">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="u-inline-b13235b52d">

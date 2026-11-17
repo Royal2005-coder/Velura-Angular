@@ -49,6 +49,9 @@ function returnStates(kind: DemoReturn['kind']): ReturnWorkflowStatus[] {
   return [...RETURN_COMMON, ...(kind === 'refund' ? ['REFUND_PROCESSING', 'REFUNDED'] : ['EXCHANGE_PREPARING', 'EXCHANGE_SHIPPING', 'COMPLETED']) as ReturnWorkflowStatus[]];
 }
 
+/** Label for exchanging a unit for the same variant it was bought as (defective item swap). */
+const SAME_VARIANT_LABEL = 'Cùng mẫu (đổi sản phẩm lỗi)';
+
 /** Capture authorization identity before an asynchronous operation starts. */
 interface OrderContext { generation: number; userId: string | null; session: object | null; guestToken: string; }
 
@@ -115,6 +118,8 @@ interface ApiReturnItem {
   attention_status?: string;
   reason?: string;
   updated_at?: string;
+  /** ISO time of the carrier pickup slot booked for this part; absent or null until scheduled. */
+  pickup_scheduled_at?: string | null;
   completed_at?: string;
   order_item_id?: string;
   variant_id?: string | null;
@@ -335,7 +340,7 @@ function mapReturnItem(item: ApiReturnItem): DemoReturnLine {
     exchangeOrderCode: item.exchange_order?.order_code, exchangeOrderStatus: item.exchange_order?.status,
     exchangeTrackingCode: item.exchange_order?.tracking_code || undefined, exchangeTrackingUrl: item.exchange_order?.tracking_url || undefined,
     refundAmount: item.refund_amount, attentionStatus: item.attention_status, reason: item.reason,
-    updatedAt: item.updated_at, completedAt: item.completed_at,
+    updatedAt: item.updated_at, completedAt: item.completed_at, pickupScheduledAt: item.pickup_scheduled_at || undefined,
   };
 }
 
@@ -902,9 +907,15 @@ export class OrderAccountApiStore implements OrderAccountModel {
     } finally { if (this.current(context) && version === this.replacementVersion) this.replacementsLoading.set(false); }
   }
 
-  /** Exclude the original variant and unavailable inventory without inferring substitutes. */
+  /**
+   * Same-product variants with stock. The original variant stays selectable (swapping a
+   * defective unit for the same size, incl. free-size) and is labelled "Cùng mẫu".
+   */
   replacementChoices(line: DemoOrderLine): ReplacementChoice[] {
-    return (this.replacementByProduct()[line.product_id] || []).filter((choice) => choice.id !== line.variant_id);
+    const choices = (this.replacementByProduct()[line.product_id] || []).map((choice) =>
+      choice.id === line.variant_id ? { ...choice, label: SAME_VARIANT_LABEL } : choice,
+    );
+    return [...choices.filter((choice) => choice.id === line.variant_id), ...choices.filter((choice) => choice.id !== line.variant_id)];
   }
 
   /** Present components with choices for combo lines. */

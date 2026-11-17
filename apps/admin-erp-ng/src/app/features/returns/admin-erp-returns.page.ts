@@ -1027,6 +1027,15 @@ export class AdminErpReturnsPage {
   }
 
   /**
+   * Carrier pickup slot written when CSKH approves a part (next day 09:00, Việt Nam time).
+   * Reads the API's `pickup_scheduled_at`; empty for requests approved before it existed.
+   */
+  pickupSlot(record: AdminReturnRow): string {
+    const slot = (record as AdminReturnRow & { pickup_scheduled_at?: string | null }).pickup_scheduled_at;
+    return slot ? adminDateTime(slot) : '—';
+  }
+
+  /**
    * Vietnamese return status label.
    */
   /** Next operational action across parts; red = needs a human decision/exception, green = done. */

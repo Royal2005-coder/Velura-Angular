@@ -41,6 +41,7 @@ import { handlePricingRoute } from "./pricing/pricing-router.js";
 import { createAuditLogRepository } from "./audit-logs/audit-log-repository.js";
 import { createAuditLogService } from "./audit-logs/audit-log-service.js";
 import { handleAuditLogRoute } from "./audit-logs/audit-log-router.js";
+import { handleGatewayReadinessRoute } from "./payments/gateway-readiness.js";
 import { createChatbotRepository } from "./chatbot/chatbot-repository.js";
 import { createChatbotService } from "./chatbot/chatbot-service.js";
 import { handleChatbotRoute } from "./chatbot/chatbot-router.js";
@@ -533,6 +534,8 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         req, res, url, parts, context, headers: corsHeaders, service: auditLogService
       });
       if (auditLogHandled) return;
+
+      if (await handleGatewayReadinessRoute({ req, res, url, parts, context, headers: corsHeaders, service: undefined })) return;
 
       const chatHandled = await handleChatbotRoute({
         req,

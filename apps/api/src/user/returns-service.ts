@@ -62,6 +62,8 @@ async function customerReturnView(
     customer_phone: order ? order.shipping_phone || null : null,
     customer_address: order ? order.shipping_address || null : null,
     refund_flow: flow,
+    /** Giờ hẹn ĐVVC lấy hàng sớm nhất trong các phần hàng đã duyệt (migration 128). */
+    pickup_scheduled_at: items.map((item) => asString(item.pickup_scheduled_at)).filter(Boolean).sort()[0] || null,
     refund_receiver: customerRefundReceiver(receiverRequired, receiver),
     can_cancel: CUSTOMER_CANCELLABLE_STATUSES.includes(status),
     can_upload_packing: items.length ? items.some((part) => CUSTOMER_PACKING_STATUSES.includes(asString(part.item_status))) : CUSTOMER_PACKING_STATUSES.includes(status),
@@ -249,6 +251,7 @@ async function hydratedReturnItems(repository: UserReturnsRepository, returnId: 
       rejected_at: ri.rejected_at,
       received_at: ri.received_at,
       completed_at: ri.completed_at,
+      pickup_scheduled_at: ri.pickup_scheduled_at || null,
       version: ri.version,
       return_item_id: ri.return_item_id,
       order_item_id: ri.order_item_id,

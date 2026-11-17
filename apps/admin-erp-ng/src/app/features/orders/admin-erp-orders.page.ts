@@ -2,11 +2,13 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, DestroyRef, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink, type ParamMap } from '@angular/router';
 import { catchError, finalize, firstValueFrom, forkJoin, of, switchMap } from 'rxjs';
+import { toDataURL } from 'qrcode';
 import {
   AdminAuditRow,
   AdminErpApiService,
   AdminOrderAction,
   AdminOrderActionResult,
+  AdminOrderCarrierLabel,
   AdminOrderPayment,
   AdminOrderRow,
   AdminOrderSummary,
@@ -55,7 +57,6 @@ import { AdminErpModal } from '../../shared/ui/admin-modal';
 import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
 import { AdminErpPagination } from '../../shared/ui/admin-pagination';
 import { AdminErpQrCode } from '../../shared/ui/admin-qr-code';
-import { AdminErpQrConfirm, QrConfirmFacts } from '../../shared/ui/admin-qr-confirm';
 import { AdminErpQrScan } from '../../shared/ui/admin-qr-scan';
 import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
@@ -66,7 +67,7 @@ type OrderModal =
   | { kind: 'action'; action: AdminOrderAction }
   | { kind: 'payment' }
   | { kind: 'cod_call'; order: AdminOrderRow }
-  | { kind: 'confirm_qr' }
+  | { kind: 'carrier_label' }
   | null;
 
 const STALE_ORDER_CODES = new Set(['VERSION_CONFLICT', 'INVALID_ORDER_ACTION', 'ORDER_ALREADY_HANDED_OVER', 'PAYMENT_VERSION_CONFLICT']);
@@ -128,7 +129,6 @@ const STAGE_LABELS: Readonly<Record<string, string>> = {
     AdminErpStatusBadge,
     AdminErpIcon,
     AdminErpQrCode,
-    AdminErpQrConfirm,
     AdminErpQrScan,
     RouterLink,
   ],
@@ -188,6 +188,14 @@ export class AdminErpOrdersPage {
   /** Ba trường của vận đơn; quét QR hoặc chọn ĐVVC ghi thẳng vào đây. */
   readonly shipment = signal({ carrier: '', trackingCode: '', trackingUrl: '' });
   readonly shipmentUrlEdited = signal(false);
+  /** Mandatory proof photo of the labelled parcel before "Xác nhận vận đơn" is saved. */
+  readonly shipmentPhoto = signal<File | null>(null);
+  /** Simulated waybill + label QR of the order whose label modal is open. */
+  readonly carrierLabel = signal<AdminOrderCarrierLabel | null>(null);
+  readonly labelLoading = signal(false);
+  readonly labelError = signal<string | null>(null);
+  /** Exchange orders whose label modal already opened once this session. */
+  private readonly exchangeLabelShown = new Set<string>();
   readonly scanOpen = signal(false);
   readonly scanError = signal<string | null>(null);
   readonly scanNotice = signal<string | null>(null);
@@ -204,27 +212,14 @@ export class AdminErpOrdersPage {
     shipperName: string;
     shipperPhone: string;
   } | null>(null);
-  readonly carriers = CARRIER_PROFILES;
   readonly copiedPhone = signal(false);
   private copiedPhoneTimer: ReturnType<typeof setTimeout> | null = null;
   private detailRequestId = 0;
-  /**
-   * Fixed facts read from the order QR. Confirmation only opens once the operator scanned the
-   * parcel in their hands; the fields are never typed by hand (UAT: xác nhận đơn qua QR).
-   */
-  readonly confirmFacts = signal<QrConfirmFacts | null>(null);
-  readonly confirmPhoto = signal<File | null>(null);
-  readonly confirmVideo = signal<File | null>(null);
-  readonly confirmNote = signal('');
-  readonly confirmQuickNotes: readonly string[] = [
-    'Khách đã xác nhận đơn qua điện thoại',
-    'Đã đối chiếu đúng mã đơn và người nhận',
-    'Đơn đủ điều kiện xác nhận, giao đúng hẹn',
-  ];
-  /** Proof photo is mandatory; the optional video rides along only when the operator recorded it. */
-  readonly canSubmitConfirm = computed(
-    () => !!this.selected() && !!this.confirmFacts() && !!this.confirmPhoto() && !this.submitting(),
-  );
+  /** Whether the open order may show its carrier label: preparing, or a confirmed exchange order. */
+  readonly canShowLabel = computed(() => {
+    const order = this.selected();
+    return !!order && this.canMutate() && (order.status === 'processing' || (order.status === 'confirmed' && order.order_kind === 'exchange'));
+  });
   readonly codDecision = signal<'' | 'confirm' | 'cancel' | 'no_answer' | 'invalid'>('');
   readonly codCancelReason = signal('customer_request');
   readonly codNote = signal('');
@@ -296,10 +291,6 @@ export class AdminErpOrdersPage {
   });
   /** Typed call note or chosen outcome would be lost by closing the COD modal. */
   readonly codDirty = computed(() => Boolean(this.codDecision() || this.codNote().trim()));
-  /** A scan, proof file or note would be lost by closing the QR confirmation. */
-  readonly confirmDirty = computed(() =>
-    Boolean(this.confirmFacts() || this.confirmPhoto() || this.confirmVideo() || this.confirmNote().trim()),
-  );
   /** The COD outcome cancels the order, so its save button is styled and worded as a cancel. */
   readonly codCancels = computed(() => this.codDecision() === 'cancel' || this.codDecision() === 'invalid');
   readonly activeAction = computed(() => {
@@ -369,6 +360,8 @@ export class AdminErpOrdersPage {
   readonly scanSample = computed(() => {
     const order = this.selected();
     if (!order) return '';
+    const label = this.carrierLabel();
+    if (label && label.order_id === order.order_id) return label.labelQr;
     const demo = demoShipmentFacts(order);
     return buildShipmentQr({
       orderCode: order.order_code || undefined,
@@ -744,6 +737,7 @@ export class AdminErpOrdersPage {
     if (this.focusId() !== orderId) {
       this.selectedStage.set('all');
       this.resetEvidenceForm();
+      this.carrierLabel.set(null);
     }
     this.focusId.set(orderId);
     this.notice.set(null);
@@ -757,6 +751,7 @@ export class AdminErpOrdersPage {
         this.loadOrderAudit(orderId);
         this.loadLinkedReturns(orderId);
         then?.(order);
+        this.maybeShowExchangeLabel(order);
       },
       error: (error: unknown) => {
         if (requestId !== this.detailRequestId) return;
@@ -785,6 +780,7 @@ export class AdminErpOrdersPage {
     this.selected.set(null);
     this.selectedStage.set('all');
     this.resetEvidenceForm();
+    this.carrierLabel.set(null);
     this.linkedReturns.set([]);
     this.detailLoading.set(false);
     this.closeModal();
@@ -884,10 +880,7 @@ export class AdminErpOrdersPage {
       if (order) this.openCodCall(order);
       return;
     }
-    if (action.code === 'confirm_cod') {
-      this.openConfirmQr();
-      return;
-    }
+    if (action.code === 'upsert_shipment') this.shipmentPhoto.set(null);
     this.modal.set({ kind: 'action', action });
     this.actionError.set(null);
     this.formDirty.set(false);
@@ -902,104 +895,10 @@ export class AdminErpOrdersPage {
       trackingUrl: this.prefill().trackingUrl,
     });
     this.shipmentUrlEdited.set(false);
+    // "Xác nhận vận đơn" always starts at the scanner: the label supplies every shipment field.
+    if (action.code === 'upsert_shipment') this.scanOpen.set(true);
   }
 
-  /**
-   * Opens the QR-first order confirmation: scan the parcel, attach proof, confirm.
-   *
-   * Nothing about the order is typed here — code, URL, carrier, shipper and time all come from
-   * the label, so the confirmation always matches the parcel the operator is holding.
-   */
-  openConfirmQr(callAlreadyStored = false): void {
-    if (!this.canMutate() || !this.selected()) return;
-    if (!callAlreadyStored && this.requiresCallConfirmation()) {
-      this.notice.set('Đơn COD từ 1.000.000đ cần ghi nhận cuộc gọi xác nhận thành công trước khi duyệt.');
-      return;
-    }
-    this.confirmFacts.set(null);
-    this.confirmPhoto.set(null);
-    this.confirmVideo.set(null);
-    this.confirmNote.set('');
-    this.actionError.set(null);
-    this.modal.set({ kind: 'confirm_qr' });
-  }
-
-  onConfirmFacts(facts: QrConfirmFacts | null): void {
-    this.confirmFacts.set(facts);
-  }
-
-  /** Proof photo of the confirmed parcel; images only, because it is the audit evidence. */
-  onConfirmPhoto(event: Event): void {
-    const picker = event.target as HTMLInputElement;
-    const file = Array.from(picker.files || []).find((item) => item.type.startsWith('image/')) || null;
-    picker.value = '';
-    this.confirmPhoto.set(file);
-    this.actionError.set(null);
-  }
-
-  /** Optional clip; the API stores it as evidence of the same stage. */
-  onConfirmVideo(event: Event): void {
-    const picker = event.target as HTMLInputElement;
-    const file = Array.from(picker.files || []).find(
-      (item) => ['video/mp4', 'video/webm'].includes(item.type) && item.size <= 50 * 1024 * 1024,
-    ) || null;
-    picker.value = '';
-    this.confirmVideo.set(file);
-  }
-
-  onConfirmNote(event: Event): void {
-    this.confirmNote.set((event.target as HTMLTextAreaElement).value);
-  }
-
-  setConfirmQuickNote(text: string): void {
-    this.confirmNote.set(text);
-  }
-
-  /**
-   * Uploads the mandatory proof (and the optional clip), then confirms the order in one step.
-   * The stored note carries the scanned facts so the audit row proves which parcel was checked.
-   */
-  submitQrConfirm(): void {
-    const order = this.selected();
-    const facts = this.confirmFacts();
-    const photo = this.confirmPhoto();
-    if (!order || !facts || !photo || this.submitting()) return;
-    if (this.requiresCallConfirmation()) {
-      this.actionError.set('Đơn COD từ 1.000.000đ bắt buộc ghi nhận cuộc gọi xác nhận thành công trước khi duyệt.');
-      return;
-    }
-    const typed = this.confirmNote().trim();
-    const trace = [facts.orderCode || order.order_code || order.order_id, facts.carrier, facts.trackingCode]
-      .filter(Boolean)
-      .join(' · ');
-    const note = `${typed || 'Xác nhận đơn sau khi quét QR trên phiếu.'}${trace ? ` [QR: ${trace}]` : ''}`;
-    const video = this.confirmVideo();
-    this.submitting.set(true);
-    this.actionError.set(null);
-    const uploads = [this.api.uploadOrderEvidence(order.order_id, photo, 'confirmed', note)];
-    if (video) {
-      uploads.push(this.api.uploadOrderEvidence(order.order_id, video, 'confirmed', note));
-    }
-    forkJoin(uploads)
-      .pipe(
-        switchMap((rows) => {
-          this.selected.update((current) =>
-            current ? { ...current, evidence: [...rows, ...(current.evidence || [])] } : current,
-          );
-          return this.api.performOrderAction(order.order_id, 'confirm_cod', {
-            note,
-            expectedVersion: order.version,
-          });
-        }),
-      )
-      .subscribe({
-        next: (result) => {
-          this.applyResult(result);
-          this.toast.success(`Đã quét QR và xác nhận đơn ${order.order_code || order.order_id} kèm ảnh minh chứng.`);
-        },
-        error: (error: unknown) => this.handleActionError(order.order_id, error),
-      });
-  }
 
   /**
    * Opens payment reconciliation.
@@ -1060,6 +959,8 @@ export class AdminErpOrdersPage {
     this.scanOpen.set(false);
     this.scanError.set(null);
     this.scanNotice.set(null);
+    this.labelLoading.set(false);
+    this.labelError.set(null);
   }
 
   /**
@@ -1167,11 +1068,21 @@ export class AdminErpOrdersPage {
           }
           return;
         }
-        // Confirmation itself always goes through the parcel QR; the call only unlocks it.
-        this.applyResult(result);
-        this.openConfirmQr(true);
-        this.toast.success(`Đã lưu kết quả cuộc gọi đơn ${code}.`);
-        this.notice.set('Đã lưu kết quả cuộc gọi. Quét QR trên phiếu đơn để xác nhận đơn kèm ảnh minh chứng.');
+        // The call only unlocks confirmation; the customer agreed, so confirm in the same step
+        // with the note and version the call response returned (no QR scan, no second form).
+        this.api
+          .performOrderAction(order.order_id, 'confirm_cod', { note, expectedVersion: result.order.version })
+          .subscribe({
+            next: (confirmed) => {
+              this.applyResult(confirmed);
+              this.toast.success(`Đã lưu cuộc gọi và xác nhận đơn ${code}.`);
+            },
+            error: (error: unknown) => {
+              this.applyResult(result);
+              this.toast.error(`Đã lưu cuộc gọi, nhưng xác nhận đơn chưa thành công: ${adminErrorMessage(error)}`);
+              this.notice.set(`Đã lưu cuộc gọi. Xác nhận đơn chưa thành công: ${adminErrorMessage(error)} Dùng nút "Xác nhận COD" để thử lại.`);
+            },
+          });
       },
       error: (error: unknown) => this.handleActionError(order.order_id, error),
     });
@@ -1192,6 +1103,30 @@ export class AdminErpOrdersPage {
     const body = this.actionBody(action, event.target as HTMLFormElement);
     if (action.requires_note && String(body['note'] || '').length < 5) {
       this.actionError.set('Cần nhập ghi chú (tối thiểu 5 ký tự).');
+      return;
+    }
+    if (action.code === 'upsert_shipment') {
+      const photo = this.shipmentPhoto();
+      if (!this.scanLocked() || !body['trackingCode']) {
+        this.actionError.set('Quét QR trên nhãn vận đơn trước khi xác nhận.');
+        return;
+      }
+      if (!photo) {
+        this.actionError.set('Chụp ảnh minh chứng kiện hàng đã dán nhãn trước khi xác nhận vận đơn.');
+        return;
+      }
+      this.submitting.set(true);
+      this.actionError.set(null);
+      this.api.uploadOrderEvidence(order.order_id, photo, 'processing', body['note'] || 'Ảnh kiện hàng đã dán nhãn vận đơn').subscribe({
+        next: (evidence) => {
+          this.selected.update((current) => (current ? { ...current, evidence: [evidence, ...(current.evidence || [])] } : current));
+          this.runAction(action, order, body);
+        },
+        error: (error: unknown) => {
+          this.submitting.set(false);
+          this.actionError.set(adminErrorMessage(error, 'Không tải được ảnh minh chứng.'));
+        },
+      });
       return;
     }
     this.submitting.set(true);
@@ -1231,6 +1166,11 @@ export class AdminErpOrdersPage {
           this.toast.success(message);
           return;
         }
+        if (action.code === 'start_processing') {
+          this.toast.success(`Đã bắt đầu chuẩn bị đơn ${code}.`);
+          this.openCarrierLabel(result.order);
+          return;
+        }
         const followUp = action.code === 'upsert_shipment' ? handoverFollowUp(result.order, facts) : null;
         if (!followUp) {
           this.toast.success(`Đã thực hiện “${action.label}” cho đơn ${code}.`);
@@ -1251,25 +1191,6 @@ export class AdminErpOrdersPage {
         this.toast.error(`Vận đơn đã lưu, nhưng bàn giao chưa thành công: ${adminErrorMessage(error)}`);
       },
     });
-  }
-
-  /**
-   * Edits one shipment field. Changing the carrier or tracking code re-derives the tracking URL
-   * unless the operator already typed one by hand.
-   */
-  onShipmentField(field: 'carrier' | 'trackingCode' | 'trackingUrl', event: Event): void {
-    // Scanned facts are the carrier's own data; editing them would break the handover match.
-    if (this.scanLocked()) return;
-    const value = (event.target as HTMLInputElement).value;
-    this.shipment.update((current) => ({ ...current, [field]: value }));
-    if (field === 'trackingUrl') {
-      this.shipmentUrlEdited.set(true);
-      return;
-    }
-    if (this.shipmentUrlEdited()) return;
-    const next = this.shipment();
-    const derived = deriveTrackingUrl(next.carrier, next.trackingCode);
-    if (derived) this.shipment.update((current) => ({ ...current, trackingUrl: derived }));
   }
 
   /**
@@ -1342,6 +1263,124 @@ export class AdminErpOrdersPage {
   /** Link in trên label của đơn; quét bằng điện thoại sẽ mở thẳng đơn này. */
   orderQr(order: AdminOrderRow): string {
     return buildOrderQrLink(typeof window !== 'undefined' ? window.location.origin : '', order.order_id, order.order_code);
+  }
+
+  /** Proof photo of the labelled parcel; images only, because it is the audit evidence. */
+  onShipmentPhoto(event: Event): void {
+    const picker = event.target as HTMLInputElement;
+    const file = Array.from(picker.files || []).find((item) => item.type.startsWith('image/')) || null;
+    picker.value = '';
+    this.shipmentPhoto.set(file);
+    this.actionError.set(null);
+  }
+
+  /**
+   * Opens the label modal: asks the API for the order's waybill + label QR so the operator can
+   * print it, stick it on the parcel and scan it back in "Xác nhận vận đơn".
+   */
+  openCarrierLabel(order: AdminOrderRow): void {
+    if (!this.canMutate()) return;
+    this.labelError.set(null);
+    this.labelLoading.set(true);
+    this.modal.set({ kind: 'carrier_label' });
+    this.api.createOrderCarrierLabel(order.order_id).subscribe({
+      next: (label) => {
+        this.labelLoading.set(false);
+        this.carrierLabel.set(label);
+      },
+      error: (error: unknown) => {
+        this.labelLoading.set(false);
+        this.labelError.set(adminErrorMessage(error, 'Không tạo được nhãn vận đơn.'));
+      },
+    });
+  }
+
+  /**
+   * Exchange orders skip the sale-style confirmation: when the drawer opens one that is confirmed
+   * or preparing, its label is offered once per session.
+   */
+  private maybeShowExchangeLabel(order: AdminOrderRow): void {
+    if (order.order_kind !== 'exchange' || !this.canMutate()) return;
+    if (order.status !== 'confirmed' && order.status !== 'processing') return;
+    if (this.exchangeLabelShown.has(order.order_id) || this.modal()) return;
+    this.exchangeLabelShown.add(order.order_id);
+    this.openCarrierLabel(order);
+  }
+
+  /** Moves from the label modal to the "Xác nhận vận đơn" form (scanner opens at once). */
+  continueToShipment(): void {
+    const order = this.selected();
+    const action = order?.allowed_actions?.find((item) => item.code === 'upsert_shipment');
+    this.closeModal();
+    if (action) this.openAction(action);
+  }
+
+  /**
+   * Prints the label the packer sticks on the parcel. The QR is the same `velura:shipment:1`
+   * payload the "Xác nhận vận đơn" scanner reads, so printing and verifying share one source.
+   */
+  async printOrderLabel(order: AdminOrderRow, label: AdminOrderCarrierLabel): Promise<void> {
+    const qr = await toDataURL(label.labelQr, { width: 640, margin: 2, errorCorrectionLevel: 'M' }).catch(() => '');
+    if (!qr) {
+      this.labelError.set('Không tạo được mã QR để in nhãn.');
+      return;
+    }
+    const windowRef = window.open('', '_blank', 'width=560,height=780');
+    if (!windowRef) {
+      this.labelError.set('Trình duyệt đang chặn cửa sổ in. Cho phép popup rồi thử lại.');
+      return;
+    }
+    const doc = windowRef.document;
+    doc.title = `Nhãn vận đơn ${label.order_code || order.order_code || order.order_id}`;
+    const style = doc.createElement('style');
+    style.textContent = `
+      body{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;margin:24px;color:#2A1A1D}
+      .slip{border:2px solid #2A1A1D;border-radius:12px;padding:20px;max-width:440px}
+      h1{font-size:18px;margin:0 0 4px} .muted{color:#7A5A62;font-size:12px}
+      .code{font-family:ui-monospace,"SFMono-Regular",Consolas,monospace;font-size:15px;font-weight:700;margin:12px 0 4px}
+      .qr{display:block;margin:14px auto;width:240px;height:240px}
+      table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+      td{padding:5px 0;vertical-align:top} td:first-child{color:#7A5A62;width:38%}
+      .note{margin-top:14px;font-size:12px;line-height:1.5}`;
+    doc.head.appendChild(style);
+
+    const slip = doc.createElement('section');
+    slip.className = 'slip';
+    const title = doc.createElement('h1');
+    title.textContent = 'NHÃN VẬN ĐƠN — VELURA';
+    const intro = doc.createElement('div');
+    intro.className = 'muted';
+    intro.textContent = 'Dán nhãn này lên ngoài kiện hàng, rồi quét lại để xác nhận vận đơn.';
+    const code = doc.createElement('div');
+    code.className = 'code';
+    code.textContent = String(label.order_code || order.order_code || order.order_id);
+    const image = doc.createElement('img');
+    image.className = 'qr';
+    image.src = qr;
+    image.alt = 'QR nhãn vận đơn';
+
+    const table = doc.createElement('table');
+    const addRow = (name: string, value: unknown): void => {
+      const row = doc.createElement('tr');
+      const key = doc.createElement('td');
+      key.textContent = name;
+      const cell = doc.createElement('td');
+      cell.textContent = String(value ?? '');
+      row.append(key, cell);
+      table.appendChild(row);
+    };
+    addRow('ĐVVC', label.carrier || '—');
+    addRow('Mã vận đơn', label.trackingCode || '—');
+    addRow('Người nhận', [order.shipping_name, order.shipping_phone].filter(Boolean).join(' · ') || '—');
+    addRow('Địa chỉ giao', order.shipping_address || '—');
+
+    const note = doc.createElement('div');
+    note.className = 'note';
+    note.textContent = 'Nhãn mô phỏng của ERP Velura; mã vận đơn và QR khớp với dữ liệu đơn hàng.';
+    slip.append(title, intro, code, image, table, note);
+    doc.body.appendChild(slip);
+    windowRef.focus();
+    windowRef.setTimeout(() => windowRef.print(), 100);
   }
 
   /**
@@ -1671,18 +1710,11 @@ export class AdminErpOrdersPage {
     if (action.fields.includes('call_result')) body['callResult'] = value('callResult');
     if (action.fields.includes('shortage')) body['shortage'] = value('shortage');
     if (action.fields.includes('shipment') || action.fields.includes('tracking')) {
+      // The label QR is the only source of carrier, tracking code and URL.
       const locked = this.scanLocked();
-      if (locked) {
-        // After a scan the body is the label's own facts, not whatever is still in the form.
-        body['trackingCode'] = locked.trackingCode.trim();
-        body['trackingUrl'] = locked.trackingUrl.trim();
-        body['carrier'] = locked.carrier.trim();
-      } else {
-        const shipment = this.shipment();
-        body['trackingCode'] = shipment.trackingCode.trim();
-        body['trackingUrl'] = shipment.trackingUrl.trim();
-        body['carrier'] = shipment.carrier.trim();
-      }
+      body['trackingCode'] = locked?.trackingCode.trim() ?? '';
+      body['trackingUrl'] = locked?.trackingUrl.trim() ?? '';
+      body['carrier'] = locked?.carrier.trim() ?? '';
     }
     if (action.fields.includes('cancel_reason')) body['cancelReason'] = value('cancelReason');
     return body;

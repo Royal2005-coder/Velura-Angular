@@ -318,7 +318,7 @@
       }
 
       @if (detailLoading()) {
-        <p class="desk-note">Đang tải chi tiết phiếu…</p>
+        <p class="desk-note desk-note--loading"><span class="erp-spinner" aria-hidden="true"></span> Đang tải chi tiết phiếu…</p>
       }
       @if (detailError()) {
         <div class="desk-banner" role="alert">
@@ -343,6 +343,7 @@
         <div><dt>Kết thúc</dt><dd>{{ date(record.resolved_at) }}</dd></div>
         <div><dt>Đơn đổi</dt><dd>{{ record.exchange_order_code || '—' }}</dd></div>
         <div><dt>Vận đơn trả</dt><dd class="is-mono">{{ record.tracking_return_code || '—' }}</dd></div>
+        <div><dt>Hẹn ĐVVC lấy hàng</dt><dd>{{ pickupSlot(record) }}</dd></div>
         <div><dt>Vận đơn đổi</dt><dd class="is-mono">{{ record.exchange_tracking_code || '—' }}</dd></div>
       </dl>
 

@@ -240,10 +240,13 @@ export function createReturnService({
         package_video_url: row.package_video_url ? await resolveEvidenceRef(row.package_video_url) : null
       })));
       const inbound = resolvedShipments.find((row) => row.direction === "inbound") || null;
+      const pickupSlots = lines.rows.map((line) => asString(line.pickup_scheduled_at)).filter(Boolean).sort();
       const outbound = resolvedShipments.find((row) => row.direction === "outbound") || null;
       const detail: JsonObject = {
         ...ret,
         refundable_amount: refundableAmount,
+        /** Giờ hẹn ĐVVC lấy hàng sớm nhất trong các phần hàng đã duyệt (migration 128). */
+        pickup_scheduled_at: pickupSlots[0] || null,
         payment,
         lines: enrichedLines,
         payment_kind: kind,

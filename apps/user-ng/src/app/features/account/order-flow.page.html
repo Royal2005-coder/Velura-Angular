@@ -51,7 +51,7 @@
   @if (error()) {
     <p role="alert" class="error">{{ error() }}</p>
   }
-  @if (model.loading?.()) { <p role="status">Đang tải đơn hàng và yêu cầu đổi trả…</p> }
+  @if (model.loading?.()) { <p class="loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải đơn hàng và yêu cầu đổi trả…</span></p> }
   @if (model.error?.()) {
     <p role="alert" class="error">{{ model.error?.() }} <button type="button" (click)="model.refresh?.()">Thử lại</button></p>
   }
@@ -862,7 +862,7 @@
                 }
               }
               @if (returnKind === 'exchange') {
-                @if (model.replacementsLoading?.()) { <p role="status">Đang tải size / màu còn hàng…</p> }
+                @if (model.replacementsLoading?.()) { <p class="loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải size / màu còn hàng…</span></p> }
                 @if (model.replacementsError?.()) {
                   <p class="error" role="alert">{{ model.replacementsError?.() }} <button type="button" (click)="model.loadReplacementChoices?.(item.id)">Thử lại</button></p>
                 }
@@ -881,7 +881,7 @@
                           * Chọn size hoặc màu mới cho từng món trong combo bạn muốn đổi:
                         </p>
                         @if (comboComponents(line).length === 0 && !model.replacementsLoading?.()) {
-                          <p class="muted u-inline-b9174c0407">Đang tải danh sách các món trong combo…</p>
+                          <p class="muted u-inline-b9174c0407 loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải danh sách các món trong combo…</span></p>
                         }
                         <div class="u-inline-464b28cd89">
                           @for (comp of comboComponents(line); track comp.productId) {

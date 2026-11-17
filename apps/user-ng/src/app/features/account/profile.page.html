@@ -740,7 +740,7 @@
                 </div>
                 <section class="offers-center__list" aria-live="polite">
                   @if (offersLoading()) {
-                    <div class="offers-center__loading">Đang tải quyền lợi của bạn…</div>
+                    <div class="offers-center__loading loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải quyền lợi của bạn…</span></div>
                   } @else if (filteredVouchers().length === 0) {
                     <p class="offers-state">
                       {{ myVouchers().length ? 'Không có mã nào trong nhóm này.' : 'Hiện chưa có mã giảm giá nào dành cho bạn.' }}

@@ -1399,9 +1399,8 @@ input.cm-search-topbar__input:focus,
   transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.25s;
 }
 
-/* Hover to show dropdown */
-.header-account-dropdown:hover .account-dropdown-menu,
-.header-account-dropdown:focus-within .account-dropdown-menu {
+/* Click-toggled (class driven) so the menu is always dismissible on desktop and touch. */
+.account-dropdown-menu.is-open {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -1598,7 +1597,7 @@ input.cm-search-topbar__input:focus,
     transform: translateY(10px);
   }
 
-  .header-account-dropdown:hover .account-dropdown-menu {
+  .account-dropdown-menu.is-open {
     transform: translateY(4px);
   }
 

@@ -653,3 +653,52 @@ test("refund.failed đưa payment thường về paid và ghi lịch sử để 
     pg.restore();
   }
 });
+
+test("Stripe không phản hồi trong hạn thì trả GATEWAY_REFUND_TIMEOUT thay vì treo", async () => {
+  const pg = refundPostgrest();
+  let signal: AbortSignal | undefined;
+  const hanging = (async (_input: URL | string, init?: RequestInit) => {
+    signal = init?.signal ?? undefined;
+    throw new DOMException("The operation timed out", "TimeoutError");
+  }) as typeof fetch;
+  try {
+    await withStripeKey(async () => {
+      const result = await refundStripeOrder(ORDER, hanging);
+      assert.equal(result.status, "failed");
+      assert.equal(result.code, "GATEWAY_REFUND_TIMEOUT");
+      assert.match(result.message || "", /phản hồi quá chậm/);
+    });
+    assert.ok(signal, "cuộc gọi Stripe phải mang AbortSignal");
+  } finally {
+    pg.restore();
+  }
+});
+
+test("payment còn lưu mã phiên cs_ thì lấy pi_ từ Checkout Session, lưu lại rồi mới hoàn tiền", async () => {
+  const pg = fakePostgrest((call) => {
+    if (call.method === "GET" && call.path === "/rest/v1/payment") {
+      return [{ payment_id: "pay_1", gateway_transaction_ref: "cs_old", version: 1, amount: 500000, refunded_amount: 0, payment_status: "paid" }];
+    }
+    if (call.method === "PATCH") return [{ payment_id: "pay_1" }];
+    return [];
+  });
+  const calls: string[] = [];
+  const impl = (async (input: URL | string, init?: RequestInit) => {
+    calls.push(`${init?.method} ${String(input)}`);
+    return String(input).includes("/checkout/sessions/")
+      ? new Response(JSON.stringify({ id: "cs_old", payment_intent: "pi_resolved" }), { status: 200 })
+      : new Response(JSON.stringify({ id: "re_1", status: "succeeded", amount: 500000 }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    await withStripeKey(async () => {
+      assert.deepEqual(await refundStripeOrder(ORDER, impl), { status: "refunded" });
+    });
+    assert.equal(calls[0], "GET https://api.stripe.com/v1/checkout/sessions/cs_old");
+    assert.equal(calls[1], "POST https://api.stripe.com/v1/refunds");
+    const persisted = pg.calls.find((c) => c.method === "PATCH" && bodyOf(c).gateway_transaction_ref === "pi_resolved");
+    assert.ok(persisted, "pi_ phải được lưu lại vào payment");
+    assert.equal(bodyOf(persisted).gateway_session_id, "cs_old");
+  } finally {
+    pg.restore();
+  }
+});

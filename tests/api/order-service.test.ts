@@ -170,6 +170,31 @@ test("carrier simulation is super_admin only and runs through the carrier event 
   assert.deepEqual(calls.service, [], "mô phỏng không còn tự gọi state machine ở tầng đơn hàng");
 });
 
+test("carrier label is issued only for processing orders or confirmed exchange orders, by order operators", async () => {
+  const processing = { ...pendingCod, order_code: "VLR-7001", status: "processing" };
+  const service = createOrderService({ repository: repository(processing).repo });
+  const label = await service.createCarrierLabel(context("admin_operator_donhang"), ORDER_ID);
+  assert.equal(label.carrier, "GHN");
+  assert.match(label.trackingCode, /^[A-Za-z0-9-]{6,60}$/);
+  assert.match(label.labelQr, /^velura:shipment:1\?/);
+  const params = new URLSearchParams(label.labelQr.split("?")[1]);
+  assert.equal(params.get("tracking"), label.trackingCode);
+  assert.equal(params.get("order"), "VLR-7001");
+  assert.deepEqual(await service.createCarrierLabel(context("super_admin"), ORDER_ID), label, "cùng đơn luôn ra cùng nhãn");
+
+  await assert.rejects(() => service.createCarrierLabel(context("admin_operator_cskh_dt"), ORDER_ID), (error) => error.status === 403);
+
+  const exchange = { ...pendingCod, order_code: "VLR-EXC1", status: "confirmed", order_kind: "exchange" };
+  const exchangeLabel = await createOrderService({ repository: repository(exchange).repo }).createCarrierLabel(context("super_admin"), ORDER_ID);
+  assert.equal(exchangeLabel.order_code, "VLR-EXC1");
+
+  for (const blocked of [{ status: "confirmed", order_kind: "sale" }, { status: "pending" }, { status: "shipping" }]) {
+    const svc = createOrderService({ repository: repository({ ...pendingCod, ...blocked }).repo });
+    await assert.rejects(() => svc.createCarrierLabel(context("super_admin"), ORDER_ID),
+      (error) => error.status === 422 && error.code === "CARRIER_LABEL_NOT_ALLOWED");
+  }
+});
+
 test("simulation without a carrier gate fails closed instead of moving the order", async () => {
   const shipping = { ...pendingCod, order_code: "VLR-7001", status: "shipping", tracking_code: "GHN123456" };
   const { repo, calls } = repository(shipping);

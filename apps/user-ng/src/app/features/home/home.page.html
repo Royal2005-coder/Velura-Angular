@@ -74,10 +74,17 @@
           <span class="hero__meta-sub">{{ activeLook().looksCount }}</span>
         </div>
         <div class="hero__buttons">
-          <a [routerLink]="activeLook().link" class="btn btn--accent hero__cta-btn">
-            <span>KHÁM PHÁ BỘ SƯU TẬP</span>
-            <span class="hero__btn-arrow">→</span>
-          </a>
+          @if (isExternalLink(activeLook().link)) {
+            <a [href]="activeLook().link" target="_blank" rel="noopener noreferrer" class="btn btn--accent hero__cta-btn">
+              <span>KHÁM PHÁ BỘ SƯU TẬP</span>
+              <span class="hero__btn-arrow">→</span>
+            </a>
+          } @else {
+            <a [routerLink]="cmsLink(activeLook().link)" class="btn btn--accent hero__cta-btn">
+              <span>KHÁM PHÁ BỘ SƯU TẬP</span>
+              <span class="hero__btn-arrow">→</span>
+            </a>
+          }
           <a routerLink="/ai/style-quiz" class="btn btn--outline hero__btn--quiz">Style Quiz</a>
         </div>
         <!-- Indicators (Dots/Dash) -->

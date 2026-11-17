@@ -10,7 +10,7 @@ import { matchesAllSearchWords, normalizeSearchText, OCCASION_VIETNAMESE_MAP } f
 import { productMaterial, productMaterialText } from '../../core/utils/material';
 import { catchError, finalize, of, switchMap, tap, type Subscription } from 'rxjs';
 import { ProductSummary } from '../../core/models/product.interface';
-import { BannerSummary } from '../../core/models/banner.interface';
+import { BannerSummary, bannerMediaFraming } from '../../core/models/banner.interface';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
@@ -232,6 +232,11 @@ export class ProductListPage implements AfterViewInit {
   /** Parses an internal banner CTA link into a `UrlTree` so query strings like `?category=dam-vay` stay intact. */
   cmsLink(url: string | null | undefined): UrlTree | string {
     return parseInternalCmsLink(this.router, url, '/products');
+  }
+
+  /** Computes responsive focal-point & zoom CSS framing for the active hero banner. */
+  bannerFraming(banner: BannerSummary): { objectPosition: string; transformOrigin: string; transform: string | null } {
+    return bannerMediaFraming(banner);
   }
 
   toggleVideoSound(): void {

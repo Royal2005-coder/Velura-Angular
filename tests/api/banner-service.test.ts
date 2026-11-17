@@ -171,3 +171,46 @@ test("BannerService: update of an unknown id is 404", async () => {
   const service = createBannerService({ repository: mockBannerRepo() });
   await rejectsWith(service.updateBanner("nope", { title: "X" }), "BANNER_NOT_FOUND");
 });
+
+test("BannerService: validates, clamps, and shallow-merges focal metadata without losing autoplay settings", async () => {
+  const service = createBannerService({ repository: mockBannerRepo() });
+  const created = await service.createBanner({
+    ...valid,
+    metadata: { autoplay: true, sound_default: false, focal_x: 50, focal_y: 22.66, focal_zoom: 1.35 },
+  });
+  assert.deepEqual(created.metadata, {
+    autoplay: true,
+    sound_default: false,
+    focal_x: 50,
+    focal_y: 22.7,
+    focal_zoom: 1.35,
+  });
+
+  // Reject malformed metadata
+  await rejectsWith(service.updateBanner(created.banner_id, { metadata: [] as never }), "FIELD_INVALID");
+  await rejectsWith(service.updateBanner(created.banner_id, { metadata: { focal_y: "top" } as never }), "FIELD_INVALID");
+  await rejectsWith(service.updateBanner(created.banner_id, { metadata: { autoplay: "yes" } as never }), "FIELD_INVALID");
+
+  // Partial metadata update preserves autoplay/sound_default and clamps range
+  const updated = await service.updateBanner(created.banner_id, {
+    metadata: { focal_x: 120, focal_y: -5, focal_zoom: 9 },
+  });
+  assert.deepEqual(updated.metadata, {
+    autoplay: true,
+    sound_default: false,
+    focal_x: 100,
+    focal_y: 0,
+    focal_zoom: 2.4,
+  });
+
+  // Toggling is_active without metadata preserves saved framing
+  const toggled = await service.updateBanner(created.banner_id, { is_active: false });
+  assert.equal(toggled.is_active, false);
+  assert.deepEqual(toggled.metadata, {
+    autoplay: true,
+    sound_default: false,
+    focal_x: 100,
+    focal_y: 0,
+    focal_zoom: 2.4,
+  });
+});

@@ -180,23 +180,36 @@ export function createContentAdminService({ repository, generateJson = generateG
       const limit = integer(searchParams.get("limit"), 50, 200);
       const offset = integer(searchParams.get("offset"), 0, 100000);
       const status = (searchParams.get("status") || "").trim();
+      const q = (searchParams.get("q") || "").trim().replace(/[%,*()]/g, "");
       const query: Record<string, string> = {
         select: "subscriber_id,email,status,source,subscribed_at,unsubscribed_at",
         order: "subscribed_at.desc",
         limit: String(limit),
         offset: String(offset)
       };
+      const filteredCountQuery: Record<string, string> = {
+        select: "subscriber_id",
+      };
       if (status && (status === "active" || status === "unsubscribed")) {
         query.status = `eq.${status}`;
+        filteredCountQuery.status = `eq.${status}`;
+      }
+      if (q) {
+        const orFilter = `(email.ilike.*${q}*,source.ilike.*${q}*)`;
+        query.or = orFilter;
+        filteredCountQuery.or = orFilter;
       }
       try {
         const result = await selectRows("newsletter_subscribers", query);
         const allRows = await selectRows("newsletter_subscribers", { select: "status" });
+        const filteredRows = (q || query.status)
+          ? await selectRows("newsletter_subscribers", filteredCountQuery)
+          : allRows;
         const activeCount = (allRows.rows || []).filter(r => r.status === "active").length;
         const unsubscribedCount = (allRows.rows || []).filter(r => r.status === "unsubscribed").length;
         return {
           rows: result.rows || [],
-          count: allRows.rows?.length || (result.rows || []).length,
+          count: filteredRows.rows?.length ?? (result.rows || []).length,
           activeCount,
           unsubscribedCount
         };

@@ -18,6 +18,9 @@
             (ended)="nextBanner()"
             [poster]="currentBanner().poster_url || '/assets/images/auth/model_main.png'"
             class="product-list-editorial-hero__video"
+            [style.object-position]="bannerFraming(currentBanner()).objectPosition"
+            [style.transform-origin]="bannerFraming(currentBanner()).transformOrigin"
+            [style.transform]="bannerFraming(currentBanner()).transform"
           ></video>
         } @else {
           <img
@@ -25,7 +28,9 @@
             [alt]="currentBanner().title"
             class="product-list-editorial-hero__video"
             loading="eager"
-            style="object-fit: cover; object-position: center;"
+            [style.object-position]="bannerFraming(currentBanner()).objectPosition"
+            [style.transform-origin]="bannerFraming(currentBanner()).transformOrigin"
+            [style.transform]="bannerFraming(currentBanner()).transform"
           />
         }
         <div class="product-list-editorial-hero__video-overlay"></div>

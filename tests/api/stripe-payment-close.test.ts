@@ -4,6 +4,8 @@ import { config } from "../../apps/api/src/config.js";
 import {
   classifyStripeEvent,
   closeStripePayment,
+  GATEWAY_REFUND_LOOKUP_UNAVAILABLE,
+  GATEWAY_REFUND_TIMEOUT,
   markStripePaymentPaid,
   markStripeRefunded,
   refundStripeOrder
@@ -287,13 +289,29 @@ interface StripeCall {
   body: URLSearchParams;
 }
 
+const REFUND_LIST_URL = "https://api.stripe.com/v1/refunds?payment_intent=";
+
+/**
+ * Answers the read-only "existing refunds for this PaymentIntent" lookup that precedes every
+ * refund POST (empty by default) and delegates everything else to `next`.
+ */
+function withRefundList(next: typeof fetch, existing: unknown[] = [], listCalls: string[] = []): typeof fetch {
+  return (async (input: URL | string, init?: RequestInit) => {
+    if (String(input).startsWith(REFUND_LIST_URL)) {
+      listCalls.push(String(input));
+      return new Response(JSON.stringify({ data: existing }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return next(input, init);
+  }) as typeof fetch;
+}
+
 function stripeReply(status: number, body: unknown): { impl: typeof fetch; calls: StripeCall[] } {
   const calls: StripeCall[] = [];
-  const impl = (async (input: URL | string, init?: RequestInit) => {
+  const inner = (async (input: URL | string, init?: RequestInit) => {
     calls.push({ url: String(input), method: init?.method || "GET", headers: (init?.headers ?? {}) as Record<string, string>, body: new URLSearchParams(String(init?.body || "")) });
     return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
-  return { impl, calls };
+  return { impl: withRefundList(inner), calls };
 }
 
 function refundPostgrest() {
@@ -326,7 +344,7 @@ test("Stripe hoàn xong ngay thì payment sang Đã hoàn tiền; idempotency ke
     });
     assert.equal(stripe.calls.length, 1);
     assert.equal(stripe.calls[0].url, "https://api.stripe.com/v1/refunds");
-    assert.equal(stripe.calls[0].headers["idempotency-key"], "refund-pay_1-3");
+    assert.equal(stripe.calls[0].headers["idempotency-key"], "refund-pay_1-500000-0");
     const done = pg.calls.find((c) => c.method === "PATCH" && c.path === "/rest/v1/payment");
     assert.equal(bodyOf(done).payment_status, "refunded");
     assert.equal(done?.query.get("payment_status"), "in.(paid,refund_pending)");
@@ -510,11 +528,11 @@ test("each item has a stable financial key across version changes and unknown ne
   const pg = returnRefundPostgrest([itemOperation(ITEM_A, "op_a"), itemOperation(ITEM_B, "op_b", 150000)]);
   const stripe = stripeReply(200, { id: "re_a", status: "pending", amount: 100000 });
   const failedCalls: StripeCall[] = [];
-  const unknown = (async (input: URL | RequestInfo, init?: RequestInit) => {
+  const unknown = withRefundList((async (input: URL | RequestInfo, init?: RequestInit) => {
     failedCalls.push({ url: String(input), method: init?.method || "GET",
       headers: init?.headers as Record<string, string>, body: new URLSearchParams(String(init?.body)) });
     throw new Error("connection lost after Stripe accepted");
-  }) as typeof fetch;
+  }) as typeof fetch);
   try {
     await withStripeKey(async () => {
       assert.equal((await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, expectedVersion: 4, fetchImpl: unknown })).status, "requested");
@@ -587,10 +605,10 @@ test("webhooks independently complete matching succeeded items, never pending or
 test("signed webhook metadata resolves the provider-response persistence race without downgrading success", async () => {
   const pg = returnRefundPostgrest([itemOperation(ITEM_A, "op_a"), itemOperation(ITEM_B, "op_b")]);
   const metadata = { refund_id: "op_a", return_item_id: ITEM_A, return_id: RETURN };
-  const stripe = (async () => {
+  const stripe = withRefundList((async () => {
     assert.equal(await markStripeRefunded("pi_paid", undefined, [{ id: "re_a", status: "succeeded", amount: 100000, metadata }]), "refunded");
     return new Response(JSON.stringify({ id: "re_a", status: "pending", amount: 100000 }), { status: 200 });
-  }) as typeof fetch;
+  }) as typeof fetch);
   try {
     await withStripeKey(async () => {
       assert.equal((await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, fetchImpl: stripe })).status, "refunded");
@@ -657,10 +675,10 @@ test("refund.failed đưa payment thường về paid và ghi lịch sử để 
 test("Stripe không phản hồi trong hạn thì trả GATEWAY_REFUND_TIMEOUT thay vì treo", async () => {
   const pg = refundPostgrest();
   let signal: AbortSignal | undefined;
-  const hanging = (async (_input: URL | string, init?: RequestInit) => {
+  const hanging = withRefundList((async (_input: URL | string, init?: RequestInit) => {
     signal = init?.signal ?? undefined;
     throw new DOMException("The operation timed out", "TimeoutError");
-  }) as typeof fetch;
+  }) as typeof fetch);
   try {
     await withStripeKey(async () => {
       const result = await refundStripeOrder(ORDER, hanging);
@@ -683,12 +701,12 @@ test("payment còn lưu mã phiên cs_ thì lấy pi_ từ Checkout Session, lư
     return [];
   });
   const calls: string[] = [];
-  const impl = (async (input: URL | string, init?: RequestInit) => {
+  const impl = withRefundList((async (input: URL | string, init?: RequestInit) => {
     calls.push(`${init?.method} ${String(input)}`);
     return String(input).includes("/checkout/sessions/")
-      ? new Response(JSON.stringify({ id: "cs_old", payment_intent: "pi_resolved" }), { status: 200 })
+      ? new Response(JSON.stringify({ id: "cs_old", payment_status: "paid", metadata: { order_id: ORDER }, payment_intent: "pi_resolved" }), { status: 200 })
       : new Response(JSON.stringify({ id: "re_1", status: "succeeded", amount: 500000 }), { status: 200 });
-  }) as typeof fetch;
+  }) as typeof fetch);
   try {
     await withStripeKey(async () => {
       assert.deepEqual(await refundStripeOrder(ORDER, impl), { status: "refunded" });
@@ -701,4 +719,122 @@ test("payment còn lưu mã phiên cs_ thì lấy pi_ từ Checkout Session, lư
   } finally {
     pg.restore();
   }
+});
+
+function csPostgrest() {
+  return fakePostgrest((call) => {
+    if (call.method === "GET" && call.path === "/rest/v1/payment") {
+      return [{ payment_id: "pay_1", gateway_transaction_ref: "cs_old", version: 1, amount: 500000, refunded_amount: 0, payment_status: "paid" }];
+    }
+    if (call.method === "PATCH") return [{ payment_id: "pay_1" }];
+    return [];
+  });
+}
+
+test("cs_ lookup that times out or returns 429/5xx is a retryable failure and never reaches the refund POST", async () => {
+  for (const outcome of ["timeout", 429, 503] as const) {
+    const pg = csPostgrest();
+    const urls: string[] = [];
+    const impl = (async (input: URL | string, init?: RequestInit) => {
+      urls.push(`${init?.method} ${String(input)}`);
+      if (outcome === "timeout") throw new DOMException("The operation timed out", "TimeoutError");
+      return new Response(JSON.stringify({ error: { message: "busy" } }), { status: outcome });
+    }) as typeof fetch;
+    try {
+      await withStripeKey(async () => {
+        const result = await refundStripeOrder(ORDER, impl);
+        assert.equal(result.status, "failed");
+        assert.equal(result.code, GATEWAY_REFUND_LOOKUP_UNAVAILABLE);
+        assert.notEqual(result.code, GATEWAY_REFUND_TIMEOUT);
+      });
+      assert.deepEqual(urls, ["GET https://api.stripe.com/v1/checkout/sessions/cs_old"]);
+    } finally { pg.restore(); }
+  }
+});
+
+test("cs_ session must be paid and belong to the order before its PaymentIntent is trusted", async () => {
+  for (const session of [
+    { id: "cs_old", payment_status: "unpaid", metadata: { order_id: ORDER }, payment_intent: "pi_x" },
+    { id: "cs_old", payment_status: "paid", metadata: { order_id: "other-order" }, payment_intent: "pi_x" }
+  ]) {
+    const pg = csPostgrest();
+    const urls: string[] = [];
+    const impl = (async (input: URL | string, init?: RequestInit) => {
+      urls.push(`${init?.method} ${String(input)}`);
+      return new Response(JSON.stringify(session), { status: 200 });
+    }) as typeof fetch;
+    try {
+      await withStripeKey(async () => {
+        assert.equal((await refundStripeOrder(ORDER, impl)).status, "failed");
+      });
+      assert.equal(urls.length, 1, "nothing but the session lookup may be sent");
+      assert.equal(pg.calls.some((c) => c.method === "PATCH" && bodyOf(c).gateway_transaction_ref === "pi_x"), false);
+    } finally { pg.restore(); }
+  }
+});
+
+test("a timed-out refund POST on a return item is requested with GATEWAY_REFUND_TIMEOUT and keeps the operation", async () => {
+  const pg = returnRefundPostgrest([itemOperation(ITEM_A, "op_a")]);
+  const impl = withRefundList((async () => { throw new DOMException("The operation timed out", "TimeoutError"); }) as typeof fetch);
+  try {
+    await withStripeKey(async () => {
+      const result = await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, fetchImpl: impl });
+      assert.equal(result.status, "requested");
+      assert.equal(result.code, GATEWAY_REFUND_TIMEOUT);
+    });
+    assert.equal(pg.operations[0].status, "requested");
+  } finally { pg.restore(); }
+});
+
+test("a refund that already exists at Stripe for the return item is adopted instead of POSTed again", async () => {
+  const pg = returnRefundPostgrest([itemOperation(ITEM_A, "op_a")]);
+  const listCalls: string[] = [];
+  const posts: string[] = [];
+  const existing = { id: "re_exist", status: "succeeded", amount: 100000, metadata: { refund_id: "op_a" } };
+  const impl = withRefundList((async (input: URL | string, init?: RequestInit) => {
+    posts.push(`${init?.method} ${String(input)}`);
+    return new Response("{}", { status: 500 });
+  }) as typeof fetch, [{ id: "re_other", status: "succeeded", amount: 100000, metadata: { refund_id: "op_b" } }, existing], listCalls);
+  try {
+    await withStripeKey(async () => {
+      assert.equal((await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, fetchImpl: impl })).status, "refunded");
+    });
+    assert.deepEqual(posts, [], "no POST when Stripe already holds the refund");
+    assert.equal(listCalls[0], "https://api.stripe.com/v1/refunds?payment_intent=pi_paid&limit=100");
+    const completion = pg.calls.find((call) => call.path.endsWith("velura_complete_return_refund"));
+    assert.equal(bodyOf(completion).p_provider_ref, "re_exist");
+  } finally { pg.restore(); }
+});
+
+test("order-level refund key is stable across retries and adopts a refund that already carries it", async () => {
+  const keys: string[] = [];
+  for (const version of [3, 9]) {
+    const pg = fakePostgrest((call) => {
+      if (call.method === "GET" && call.path === "/rest/v1/payment") {
+        return [{ payment_id: "pay_1", gateway_transaction_ref: "pi_paid", version, amount: 500000, refunded_amount: 0, payment_status: "refund_pending" }];
+      }
+      if (call.method === "PATCH") return [{ payment_id: "pay_1" }];
+      return [];
+    });
+    const stripe = stripeReply(200, { id: "re_1", status: "pending", amount: 500000 });
+    try {
+      await withStripeKey(async () => { await refundStripeOrder(ORDER, stripe.impl); });
+      keys.push(stripe.calls[0].headers["idempotency-key"]);
+    } finally { pg.restore(); }
+  }
+  assert.equal(keys[0], keys[1], "payment.version must not change the idempotency key");
+
+  const pg = refundPostgrest();
+  const posts: string[] = [];
+  const existing = { id: "re_exist", status: "succeeded", amount: 500000, metadata: { refund_key: keys[0], order_id: ORDER } };
+  const impl = withRefundList((async (input: URL | string, init?: RequestInit) => {
+    posts.push(`${init?.method} ${String(input)}`);
+    return new Response("{}", { status: 500 });
+  }) as typeof fetch, [existing]);
+  try {
+    await withStripeKey(async () => {
+      assert.deepEqual(await refundStripeOrder(ORDER, impl), { status: "refunded" });
+    });
+    assert.deepEqual(posts, []);
+  } finally { pg.restore(); }
 });

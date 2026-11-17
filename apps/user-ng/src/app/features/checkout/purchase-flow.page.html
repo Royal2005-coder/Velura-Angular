@@ -9,7 +9,7 @@
     <p class="muted intro">Hoàn tất thông tin để đơn hàng được giao nhanh và chính xác.</p>
   </header>
   @if (resumeLoading()) {
-    <section class="panel" role="status">Đang tải đơn hàng để tiếp tục thanh toán…</section>
+    <section class="panel loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải đơn hàng để tiếp tục thanh toán…</span></section>
   } @else if (resumeLocked() && error() && !order()) {
     <section class="panel">
       <p class="error" role="alert">{{ error() }}</p>
@@ -54,7 +54,7 @@
                   </div>
                   <div class="fields">
                     <label class="field"
-                      >Họ tên người nhận *<input
+                      >Họ tên người nhận <span class="req" aria-hidden="true">*</span><input
                         name="name"
                         autocomplete="name"
                         [ngModel]="address.name"
@@ -77,7 +77,7 @@
                     >
                   </div>
                   <label class="field"
-                    >Số điện thoại *
+                    >Số điện thoại <span class="req" aria-hidden="true">*</span>
                     <div class="phone-row">
                       <input
                         name="phone"
@@ -201,7 +201,7 @@
                     <app-address-selector [value]="address" [invalid]="!!fieldErrors()['ward'] || !!fieldErrors()['district']" (selectionChange)="updateGeography($event)" />
                     <small class="error">{{ fieldErrors()['district'] || fieldErrors()['ward'] }}</small>
                     <label class="field"
-                      >Số nhà, tên đường *<input
+                      >Số nhà, tên đường <span class="req" aria-hidden="true">*</span><input
                         name="detail"
                         autocomplete="street-address"
                         [ngModel]="address.detail"
@@ -246,17 +246,17 @@
                     <label class="check"><input type="checkbox" name="otherRecipient" [(ngModel)]="orderOptions.is_other_recipient" />Người khác nhận hàng</label>
                     @if (orderOptions.is_other_recipient) {
                       <div class="fields">
-                        <label class="field">Họ tên người nhận *<input name="otherName" maxlength="100" [(ngModel)]="orderOptions.other_name" required /></label>
-                        <label class="field">Điện thoại người nhận *<input name="otherPhone" type="tel" autocomplete="tel" [(ngModel)]="orderOptions.other_phone" required /></label>
+                        <label class="field">Họ tên người nhận <span class="req" aria-hidden="true">*</span><input name="otherName" maxlength="100" [(ngModel)]="orderOptions.other_name" required /></label>
+                        <label class="field">Điện thoại người nhận <span class="req" aria-hidden="true">*</span><input name="otherPhone" type="tel" autocomplete="tel" [(ngModel)]="orderOptions.other_phone" required /></label>
                       </div>
                     }
                     <label class="check"><input type="checkbox" name="vat" [(ngModel)]="orderOptions.is_vat_invoice" />Yêu cầu xuất hóa đơn VAT</label>
                     @if (orderOptions.is_vat_invoice) {
                       <div class="fields">
-                        <label class="field">Tên công ty *<input name="vatCompany" maxlength="200" [(ngModel)]="orderOptions.vat_company_name" required /></label>
-                        <label class="field">Mã số thuế *<input name="vatTax" maxlength="30" [(ngModel)]="orderOptions.vat_tax_code" required /></label>
-                        <label class="field">Địa chỉ công ty *<input name="vatAddress" maxlength="300" [(ngModel)]="orderOptions.vat_company_address" required /></label>
-                        <label class="field">Email nhận hóa đơn *<input name="vatEmail" type="email" [(ngModel)]="orderOptions.vat_email" required /></label>
+                        <label class="field">Tên công ty <span class="req" aria-hidden="true">*</span><input name="vatCompany" maxlength="200" [(ngModel)]="orderOptions.vat_company_name" required /></label>
+                        <label class="field">Mã số thuế <span class="req" aria-hidden="true">*</span><input name="vatTax" maxlength="30" [(ngModel)]="orderOptions.vat_tax_code" required /></label>
+                        <label class="field">Địa chỉ công ty <span class="req" aria-hidden="true">*</span><input name="vatAddress" maxlength="300" [(ngModel)]="orderOptions.vat_company_address" required /></label>
+                        <label class="field">Email nhận hóa đơn <span class="req" aria-hidden="true">*</span><input name="vatEmail" type="email" [(ngModel)]="orderOptions.vat_email" required /></label>
                       </div>
                     }
                     @if (fieldErrors()['options']) { <p class="error" role="alert">{{ fieldErrors()['options'] }}</p> }
@@ -693,14 +693,14 @@
           [(ngModel)]="addressDraft.email"
         /><small class="error">{{ dialogErrors()['email'] }}</small></label
       ><label class="field"
-        >Người nhận *<input
+        >Người nhận <span class="req" aria-hidden="true">*</span><input
           name="draft-name"
           autocomplete="name"
           [(ngModel)]="addressDraft.name"
           required
         /><small class="error">{{ dialogErrors()['name'] }}</small></label
       ><label class="field"
-        >Số điện thoại *<input
+        >Số điện thoại <span class="req" aria-hidden="true">*</span><input
           name="draft-phone"
           autocomplete="tel"
           [(ngModel)]="addressDraft.phone"
@@ -709,7 +709,7 @@
       ><app-address-selector [value]="addressDraft" [invalid]="!!dialogErrors()['ward'] || !!dialogErrors()['district']" (selectionChange)="updateDraftGeography($event)" />
       <small class="error">{{ dialogErrors()['district'] || dialogErrors()['ward'] }}</small>
       <label class="field"
-        >Số nhà, tên đường *<input
+        >Số nhà, tên đường <span class="req" aria-hidden="true">*</span><input
           name="draft-detail"
           autocomplete="street-address"
           [(ngModel)]="addressDraft.detail"

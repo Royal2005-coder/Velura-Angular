@@ -160,10 +160,22 @@ export function localGatewayConfigured(provider: LocalGateway): boolean {
   return gatewayNotReadyReason(provider) === null;
 }
 
+/** The single client-facing code for "this payment gateway is not configured / not ready". */
+export const GATEWAY_NOT_CONFIGURED = "GATEWAY_NOT_CONFIGURED";
+
+/**
+ * Error for an unconfigured or not-ready gateway. The client sees only the code and a generic
+ * Vietnamese message; the missing-credential reason and provider go to `internal` (server log only).
+ * Operators read the reason through the super_admin gateway-readiness endpoint.
+ */
+export function gatewayNotConfiguredError(provider: LocalGateway, reason: string | null = gatewayNotReadyReason(provider)): HttpError {
+  return new HttpError(503, GATEWAY_NOT_CONFIGURED, "Phương thức thanh toán chưa được cấu hình. Vui lòng chọn phương thức khác.", undefined, { reason, provider });
+}
+
 /** Fail closed rather than create a simulated QR payment in a production ledger. */
 export function assertLocalGatewayReady(provider: LocalGateway): void {
   const reason = gatewayNotReadyReason(provider);
-  if (reason) throw new HttpError(503, "GATEWAY_NOT_CONFIGURED", "Phương thức thanh toán chưa được cấu hình. Vui lòng chọn phương thức khác.", { reason, provider });
+  if (reason) throw gatewayNotConfiguredError(provider, reason);
 }
 
 function sameSignature(actual: string, expected: string): boolean {
@@ -277,11 +289,11 @@ export async function openLocalGateway(orderId: string, provider: LocalGateway, 
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal: AbortSignal.timeout(35000)
       });
     } catch (error) {
-      throw new HttpError(502, "GATEWAY_OPEN_FAILED", "Không kết nối được MoMo.", { reason: error instanceof Error && error.name === "TimeoutError" ? "TIMEOUT" : "NETWORK", provider });
+      throw new HttpError(502, "GATEWAY_OPEN_FAILED", "Không kết nối được MoMo.", undefined, { reason: error instanceof Error && error.name === "TimeoutError" ? "TIMEOUT" : "NETWORK", provider });
     }
     const result = asJsonObject(await response.json().catch(() => ({})));
     if (!response.ok || Number(result.resultCode) !== 0) {
-      throw new HttpError(502, "MOMO_CHECKOUT_FAILED", "Chưa mở được phiên MoMo. Vui lòng thử lại trên đơn hàng hiện tại.", {
+      throw new HttpError(502, "MOMO_CHECKOUT_FAILED", "Chưa mở được phiên MoMo. Vui lòng thử lại trên đơn hàng hiện tại.", undefined, {
         reason: "PROVIDER_REJECTED", provider, http_status: response.status, result_code: result.resultCode, provider_message: asString(result.message)
       });
     }

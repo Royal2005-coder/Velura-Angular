@@ -1,6 +1,6 @@
 # Spec: Orders / Returns / Payments / Forms — 13 requirements (KAN-110)
 
-Source: owner UAT report 2026-11-17 (screenshots #1-#13). Evidence = scout reports (code read, prod cluster unreachable from this workstation: kubectl `100.77.166.27:6443` connect denied, so prod env/log checks are OPEN).
+Source: owner UAT report 2026-11-17 (screenshots #1-#13). Evidence = scout reports plus live production env/log checks via `kubectl --context velura-k3s -n velura` (2026-11-17): PAYMENT_GATEWAY_SIMULATOR=on, ENVIRONMENT=sandbox, no VNPAY_*/MOMO_* env, only STRIPE_SECRET_KEY set.
 Guardrails (AGENTS.md): Standalone+Signals, no `any`, no HttpClient in pages, no fake data replacing real API, JSDoc on public symbols, money/OTP/RBAC/state machine rules unchanged, contract changes via migration + API + UI in same PR.
 
 ## R1 Stripe partial refund hangs / 0đ / status not updated (admin returns)

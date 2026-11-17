@@ -85,7 +85,6 @@
     }
     @if (needsQrScan()) {
       <app-erp-qr-confirm
-        kind="return"
         [open]="flow() !== null"
         [recordId]="record.return_id || ''"
         [recordCode]="record.return_code || ''"
@@ -99,7 +98,14 @@
       />
     }
     @if (flow() === 'pickup') {
-      <p class="flow-hint">ĐVVC, mã vận đơn, người giao và thời điểm lấy hàng đã lấy từ mã QR. Chỉ còn ảnh bàn giao là cần tải lên.</p>
+      <p class="flow-hint">ĐVVC, mã vận đơn và thời điểm lấy hàng đã lấy từ mã QR. Cần ảnh bàn giao{{ qrFacts()?.shipperName ? '' : ' và tên người giao hàng của ĐVVC' }}.</p>
+      @if (qrFacts() && !qrFacts()?.shipperName) {
+        <label class="erp-field">
+          <span>Người giao hàng của ĐVVC <span class="erp-required" aria-hidden="true">*</span></span>
+          <input class="erp-input" aria-required="true" [value]="pickedUpBy()" (input)="setText('pickedUpBy', $event)" placeholder="Nhập đúng tên người nhận hàng trên phiếu giao nhận" />
+          @if (pickedUpBy().trim().length < 2) { <small class="erp-error" role="alert">Nhãn không in tên người giao hàng. Nhập tên người đã nhận kiện (tối thiểu 2 ký tự).</small> }
+        </label>
+      }
       <div class="erp-field">
         <span>Ảnh bàn giao kiện hàng <span class="erp-required" aria-hidden="true">*</span></span>
         <div class="custom-file-row">
@@ -123,13 +129,13 @@
     }
     @if (flow() === 'receive') {
       <p class="flow-hint">Nhận {{ receivedQuantity() }} sản phẩm. Có thể giảm số lượng xử lý phía trên để nhận riêng phần hợp lệ.</p>
-      <label class="erp-field">
-        <span>Kết quả kiểm hàng <span class="erp-required" aria-hidden="true">*</span></span>
-        <select class="erp-select" aria-required="true" [value]="qaCriterion()" (change)="setQaCriterion($event)">
-          @for (criterion of qaCriteria; track criterion.code) { <option [value]="criterion.code">{{ criterion.label }}</option> }
-        </select>
-      </label>
-      <p class="flow-hint">Niêm phong không còn nguyên vẫn được ghi nhận. Tình trạng không đạt chỉ ảnh hưởng phần đang kiểm, không chặn các phần khác. Mô tả chi tiết ở ô ghi chú bên dưới.</p>
+      <fieldset class="erp-field flow-qa">
+        <legend>Kết quả kiểm hàng</legend>
+        @for (criterion of qaCriteria; track criterion.code) {
+          <label class="flow-check"><input type="checkbox" [checked]="qaFailed().includes(criterion.code)" (change)="toggleQaCriterion(criterion.code, $event)" /> {{ criterion.label }}</label>
+        }
+      </fieldset>
+      <p class="flow-hint">{{ qaFailed().length ? 'Đã ghi nhận ' + qaFailed().length + ' lỗi kiểm hàng.' : 'Không tick mục nào nghĩa là đạt: đúng sản phẩm, còn tem/nhãn, nguyên niêm phong.' }} Chọn tất cả lỗi thực tế; lỗi chỉ ảnh hưởng phần đang kiểm, không chặn các phần khác. Mô tả chi tiết ở ô ghi chú bên dưới.</p>
       <label class="erp-field"><span>Hướng xử lý kho <span class="erp-required" aria-hidden="true">*</span></span><select class="erp-select" aria-required="true" [value]="disposition()" (change)="setDisposition($event)"><option value="restock">Nhập tồn bán được</option><option value="repair">Sửa chữa</option><option value="scrap">Loại bỏ</option><option value="return_supplier">Trả nhà cung cấp</option></select></label>
     }
     @if (flow() === 'manual') {

@@ -267,34 +267,30 @@ export function carrierLabel(input: string | null | undefined): string {
 }
 
 /**
- * Mã vận đơn demo ổn định cho một đơn: cùng đơn luôn ra cùng mã, nên in label nhiều lần
- * vẫn khớp. Chỉ dùng cho mã mẫu, không tự ghi vào đơn.
+ * Mã vận đơn mô phỏng ổn định cho một đơn. Phản chiếu đúng thuật toán `createWaybill` của API
+ * (`apps/api/src/carrier/carrier-gateway-simulator.ts`): giữ chữ/số của mã đơn (hoặc id đơn khi
+ * thiếu mã), viết hoa, lấy 9 ký tự cuối, đệm "000" khi dưới 3 ký tự, rồi thêm tiền tố "GHN".
+ * Mã mẫu in ở client vì vậy luôn trùng nhãn do server phát hành cho cùng đơn.
  */
-export function demoTrackingCode(orderCode: string | null | undefined): string {
-  const tail = String(orderCode || '')
-    .replace(/[^A-Za-z0-9]/g, '')
-    .toUpperCase()
-    .slice(-9);
-  return `GHN${tail || 'DEMO00001'}`;
+export function demoTrackingCode(orderCode: string | null | undefined, orderId?: string | null): string {
+  const strip = (value: string | null | undefined): string => String(value ?? '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const seed = strip(String(orderCode ?? '').trim()) || strip(orderId);
+  const tail = (seed.length >= 3 ? seed : `${seed}000`).slice(-9);
+  return `GHN${tail}`;
 }
 
 /**
- * Dữ liệu vận đơn demo cho một đơn: ưu tiên dữ liệu thật đã có trên đơn, còn trống thì suy
- * ra từ mã đơn để mã mẫu luôn quét ra đủ ĐVVC + mã + URL. Đây là dữ liệu của mã mẫu, không
- * phải giá trị hệ thống tự ghi vào đơn khi chưa quét.
+ * Dữ liệu vận đơn mẫu cho một đơn: ưu tiên dữ liệu thật đã có trên đơn, còn trống thì suy ra
+ * bằng đúng thuật toán của API để mã mẫu quét ra đủ ĐVVC + mã + URL như nhãn thật. Không có
+ * tên hay số điện thoại người giao: thông tin đó chỉ đến từ nhãn do ĐVVC in.
  */
 export function demoShipmentFacts(order: {
+  order_id?: string | null;
   order_code?: string | null;
   carrier?: string | null;
   tracking_code?: string | null;
-}): { carrier: string; trackingCode: string; trackingUrl: string; shipperName: string; shipperPhone: string } {
+}): { carrier: string; trackingCode: string; trackingUrl: string } {
   const carrier = String(order.carrier || '').trim() || 'GHN';
-  const trackingCode = String(order.tracking_code || '').trim() || demoTrackingCode(order.order_code);
-  return {
-    carrier,
-    trackingCode,
-    trackingUrl: deriveTrackingUrl(carrier, trackingCode),
-    shipperName: 'Nguyễn Văn Giao (demo)',
-    shipperPhone: '0909000111',
-  };
+  const trackingCode = String(order.tracking_code || '').trim() || demoTrackingCode(order.order_code, order.order_id);
+  return { carrier, trackingCode, trackingUrl: deriveTrackingUrl(carrier, trackingCode) };
 }

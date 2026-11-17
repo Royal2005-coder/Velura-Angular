@@ -9,6 +9,7 @@ import {
   gatewayCredentials,
   gatewayEndpoints,
   gatewayEnvironment,
+  gatewayNotConfiguredError,
   localGatewayConfigured,
   momoSignature,
   sameSignature,
@@ -64,7 +65,7 @@ function jsonRequest(url: string, body: JsonObject): Promise<Response> {
  */
 async function queryVnpay(attempt: GatewayAttempt, credentials: GatewayCredentials, clientIp: string): Promise<GatewayTransactionQuery> {
   const { api } = gatewayEndpoints("VNPAY");
-  if (!api) throw new HttpError(503, "PAYMENT_PROVIDER_UNAVAILABLE", "VNPay chưa cấu hình URL QueryDR. Khai báo VNPAY_API_URL theo hợp đồng.");
+  if (!api) throw gatewayNotConfiguredError("VNPAY", "VNPAY_API_URL_MISSING");
   const request: JsonObject = {
     vnp_RequestId: randomUUID().replace(/-/g, ""), vnp_Version: "2.1.0", vnp_Command: "querydr",
     vnp_TmnCode: credentials.merchantId, vnp_TxnRef: attempt.reference,
@@ -129,7 +130,7 @@ async function queryMomo(attempt: GatewayAttempt, credentials: GatewayCredential
 /** Hỏi nhà mạng về đúng một phiên đã lưu. Không tự suy ra tiền: chỉ nhà mạng trả lời. */
 export async function queryGatewayTransaction(attempt: GatewayAttempt, clientIp = ""): Promise<GatewayTransactionQuery> {
   const credentials = gatewayCredentials(attempt.provider);
-  if (!credentials.secret) throw new HttpError(503, "PAYMENT_PROVIDER_UNAVAILABLE", "Cổng thanh toán chưa được cấu hình.");
+  if (!credentials.secret) throw gatewayNotConfiguredError(attempt.provider, "CREDENTIALS_MISSING");
   return attempt.provider === "VNPAY" ? queryVnpay(attempt, credentials, clientIp) : queryMomo(attempt, credentials);
 }
 
@@ -152,7 +153,7 @@ export interface GatewayRefundQuery {
 export async function queryVnpayRefundStatus(attempt: GatewayAttempt, refundTransactionNo: string, clientIp = ""): Promise<GatewayRefundQuery> {
   const credentials = gatewayCredentials("VNPAY");
   const { api } = gatewayEndpoints("VNPAY");
-  if (!api || !credentials.secret) throw new HttpError(503, "PAYMENT_PROVIDER_UNAVAILABLE", "VNPay chưa cấu hình URL QueryDR.");
+  if (!api || !credentials.secret) throw gatewayNotConfiguredError("VNPAY", api ? "CREDENTIALS_MISSING" : "VNPAY_API_URL_MISSING");
   const request: JsonObject = {
     vnp_RequestId: randomUUID().replace(/-/g, ""), vnp_Version: "2.1.0", vnp_Command: "querydr",
     vnp_TmnCode: credentials.merchantId, vnp_TxnRef: attempt.reference,
@@ -197,7 +198,7 @@ const MOMO_REFUND_QUERY_KEYS = ["accessKey", "orderId", "partnerCode", "requestI
 export async function queryMomoRefundStatus(refundReference: string): Promise<GatewayRefundQuery> {
   const credentials = gatewayCredentials("MOMO");
   const { api } = gatewayEndpoints("MOMO");
-  if (!credentials.secret) throw new HttpError(503, "PAYMENT_PROVIDER_UNAVAILABLE", "MoMo chưa được cấu hình.");
+  if (!credentials.secret) throw gatewayNotConfiguredError("MOMO", "CREDENTIALS_MISSING");
   const fields = { accessKey: credentials.accessKey, orderId: refundReference, partnerCode: credentials.merchantId, requestId: refundReference };
   const request: JsonObject = {
     partnerCode: credentials.merchantId, requestId: refundReference, orderId: refundReference, lang: "vi",
@@ -323,7 +324,7 @@ export async function verifyLocalGatewayOrder(
 export async function handleLocalGatewayVerify(
   req: HttpRequest, res: HttpResponse, corsHeaders: HeaderMap, context: AuthContext, provider: LocalGateway
 ): Promise<void> {
-  if (!localGatewayConfigured(provider)) throw new HttpError(503, "PAYMENT_PROVIDER_UNAVAILABLE", "Cổng thanh toán này chưa khả dụng.");
+  if (!localGatewayConfigured(provider)) throw gatewayNotConfiguredError(provider);
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const body = req.method === "POST" ? await readJson(req) : {};
   const orderId = asString(body.order_id || body.orderId || url.searchParams.get("order_id"));

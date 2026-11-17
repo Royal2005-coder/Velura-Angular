@@ -56,7 +56,7 @@ test("POST action, carrier simulation and payment resolve parse JSON bodies", as
   assert.equal(outcome, "delivered");
 
   let labelOrderId;
-  const label = await route("POST", ["api", "v1", "admin", "orders", ORDER_ID, "carrier-label"], {}, {
+  const label = await route("GET", ["api", "v1", "admin", "orders", ORDER_ID, "carrier-label"], {}, {
     createCarrierLabel: async (_context, id) => { labelOrderId = id; return { trackingCode: "GHNVLR7001" }; }
   });
   assert.equal(label.response.status, 200);

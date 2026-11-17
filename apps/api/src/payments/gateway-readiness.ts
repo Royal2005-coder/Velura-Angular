@@ -1,6 +1,7 @@
 import { config } from "../config.js";
-import { HttpError, sendJson } from "../http.js";
-import type { RouteArgs } from "../types.js";
+import { writeAuditLog } from "../audit.js";
+import { getRequestIp, HttpError, sendJson } from "../http.js";
+import { errorMessage, type RouteArgs } from "../types.js";
 import { gatewayEnvironment, gatewayNotReadyReason, localGatewayConfigured, localGatewaySimulated, realGatewayConfigured, type LocalGateway } from "./local-gateways.js";
 
 /** Booleans only: tells the owner which payment env flags are set, never their values. */
@@ -44,10 +45,25 @@ export function buildGatewayReadiness(): GatewayReadinessReport {
   };
 }
 
-/** `GET /api/v1/admin/payments/gateway-readiness` — super_admin only. */
+/**
+ * `GET /api/v1/admin/payments/gateway-readiness` — super_admin only, the one place that reports
+ * why a gateway is not ready. Guests, customers and other admin roles get 403. The response is
+ * `no-store` and every read is audited (best-effort: a failed audit write never hides the report).
+ */
 export async function handleGatewayReadinessRoute({ req, res, parts, context, headers }: RouteArgs<undefined>): Promise<boolean> {
   if (req.method !== "GET" || parts.join("/") !== "api/v1/admin/payments/gateway-readiness") return false;
-  if (context?.roleCode !== "super_admin") throw new HttpError(403, "FORBIDDEN", "Chỉ super_admin được xem tình trạng cổng thanh toán.");
-  sendJson(res, 200, buildGatewayReadiness(), headers);
+  if (!context?.isAdmin || context.roleCode !== "super_admin") {
+    throw new HttpError(403, "FORBIDDEN", "Chỉ super_admin được xem tình trạng cổng thanh toán.");
+  }
+  const report = buildGatewayReadiness();
+  await writeAuditLog({
+    actor_id: context.profile?.user_id ?? context.authUser?.id ?? null,
+    actor_role: context.roleCode,
+    action: "view_gateway_readiness",
+    module: "payments",
+    new_value: { simulator_enabled: report.payment_gateway_simulator_enabled },
+    ip_address: getRequestIp(req)
+  }).catch((error: unknown) => console.error("[audit] payments gateway-readiness write failed", errorMessage(error)));
+  sendJson(res, 200, report, { ...headers, "cache-control": "no-store" });
   return true;
 }

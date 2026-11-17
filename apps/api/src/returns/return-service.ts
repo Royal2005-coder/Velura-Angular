@@ -22,6 +22,8 @@ import {
 } from "./return-refund-receiver.js";
 import { listReturnEvidence, resolveEvidenceRef, storeReturnEvidence, type ReturnEvidenceKind } from "./return-evidence.js";
 import { recordRefundEvent } from "../payments/payment-metrics.js";
+import { GATEWAY_REFUND_LOOKUP_UNAVAILABLE, GATEWAY_REFUND_TIMEOUT, type RefundResult } from "../payments/stripe.js";
+import { earliestPickupSlot } from "./return-pickup.js";
 import type { ReturnRepository } from "./return-repository.js";
 
 /**
@@ -34,7 +36,7 @@ type ReturnContext = AuthContext & Partial<RequestMeta>;
  */
 export interface ReturnRefundGateway {
   /** Refunds one return part using that part's version; returnItemId is required whenever returnId is supplied. */
-  refund(orderId: string, amount?: number, returnId?: string, expectedVersion?: number, returnItemId?: string): Promise<{ status: "refunded" | "requested" | "failed" | "skipped"; message?: string }>;
+  refund(orderId: string, amount?: number, returnId?: string, expectedVersion?: number, returnItemId?: string): Promise<RefundResult>;
 }
 
 /**
@@ -240,13 +242,12 @@ export function createReturnService({
         package_video_url: row.package_video_url ? await resolveEvidenceRef(row.package_video_url) : null
       })));
       const inbound = resolvedShipments.find((row) => row.direction === "inbound") || null;
-      const pickupSlots = lines.rows.map((line) => asString(line.pickup_scheduled_at)).filter(Boolean).sort();
       const outbound = resolvedShipments.find((row) => row.direction === "outbound") || null;
       const detail: JsonObject = {
         ...ret,
         refundable_amount: refundableAmount,
         /** Giờ hẹn ĐVVC lấy hàng sớm nhất trong các phần hàng đã duyệt (migration 128). */
-        pickup_scheduled_at: pickupSlots[0] || null,
+        pickup_scheduled_at: earliestPickupSlot(lines.rows),
         payment,
         lines: enrichedLines,
         payment_kind: kind,
@@ -384,11 +385,17 @@ export function createReturnService({
       const result = await refunds.refund(orderId, amount, returnId, version, returnItemId);
       if (result.status === "refunded") {
         void sendRefundSuccessEmail(returnId, { method: label, returnItemId });
+      } else if (result.status === "requested" && result.code === GATEWAY_REFUND_TIMEOUT) {
+        // Lệnh hoàn đã gửi nhưng chưa rõ cổng có nhận hay không: không báo "đã yêu cầu hoàn tiền"
+        // cho khách. Phiếu giữ trạng thái chờ; webhook/đối soát sẽ xác nhận rồi mới gửi email.
       } else if (result.status === "requested") {
         // VNPay/MoMo tất toán sau nhiều ngày và không có callback: khách cần biết ngay rằng lệnh đã
         // được gửi chứ chưa về, và email "đã tất toán" sẽ theo sau. Chống trùng theo template_code
         // nên hai email này không chặn nhau.
         void sendRefundSuccessEmail(returnId, { method: label, returnItemId, status: "requested" });
+      } else if (result.status === "failed" && result.code === GATEWAY_REFUND_LOOKUP_UNAVAILABLE) {
+        // Chưa gửi lệnh hoàn nào tới cổng (tra cứu tạm thời lỗi): thử lại an toàn, không mở đường chuyển khoản tay.
+        throw new HttpError(503, GATEWAY_REFUND_LOOKUP_UNAVAILABLE, result.message || "Cổng thanh toán tạm thời không phản hồi. Hãy thử lại sau ít phút.");
       } else if (result.status === "failed") {
         throw new HttpError(422, "GATEWAY_REFUND_FAILED", result.message || `Hoàn tiền qua ${refundChannelName(label)} thất bại.`);
       } else if (result.status === "skipped") {

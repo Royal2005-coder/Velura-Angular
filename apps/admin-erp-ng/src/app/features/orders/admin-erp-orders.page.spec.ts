@@ -46,7 +46,7 @@ type ListOrdersFn = (param?: Record<string, string>) => Observable<AdminListPayl
 
 const shipmentAction: AdminOrderAction = {
   code: 'upsert_shipment',
-  label: 'Tạo/cập nhật vận đơn',
+  label: 'Xác nhận vận đơn',
   to_status: null,
   requires_note: true,
   fields: ['shipment'],
@@ -121,7 +121,7 @@ describe('AdminErpOrdersPage', () => {
       uploadOrderEvidence: () =>
         of({ evidence_id: 'e-default', stage: 'processing', kind: 'image', url: 'https://signed', created_at: '2026-10-23T02:00:00Z' }),
       simulateCarrier: () => of(paidOrder),
-      createOrderCarrierLabel: (orderId: string) =>
+      getOrderCarrierLabel: (orderId: string) =>
         of({
           order_id: orderId,
           order_code: 'VL-1001',
@@ -253,7 +253,7 @@ describe('AdminErpOrdersPage', () => {
     expect(page.shipment().trackingCode).toBe('');
   });
 
-  it('loads the demo shipment of this order from the sample QR or the order QR', async () => {
+  it('loads the shipment of this order from the sample label QR but refuses the plain order QR', async () => {
     const fixture = await boot(() => of({ rows: [paidOrder], count: 1 }));
     const page = fixture.componentInstance;
     page.selected.set(paidOrder);
@@ -264,10 +264,12 @@ describe('AdminErpOrdersPage', () => {
     expect(page.shipment().trackingUrl).toContain('donhang.ghn.vn');
     expect(page.scanNotice()).toContain('Đã khóa');
 
+    page.scanLocked.set(null);
     page.shipment.set({ carrier: '', trackingCode: '', trackingUrl: '' });
     page.applyShipmentScan('http://localhost/orders?focus=o1&code=VL-1001');
-    expect(page.shipment().trackingCode).toBe('GHNVL1001');
-    expect(page.scanNotice()).toContain('demo');
+    expect(page.shipment().trackingCode).toBe('');
+    expect(page.scanLocked()).toBeNull();
+    expect(page.scanError()).toContain('nhãn vận đơn');
   });
 
   it('routes call_confirm through the COD call flow instead of the generic form', async () => {

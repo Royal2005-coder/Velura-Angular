@@ -157,6 +157,8 @@ export class AdminErpContentPage {
   readonly search = signal('');
   readonly rows = signal<AdminBlogRow[]>([]);
   readonly total = signal(0);
+  /** Unfiltered total of all blog articles so switching to Draft/Subscribers never drops "Tất cả bài viết" to 0. */
+  readonly allBlogsTotal = signal(0);
   readonly page = signal(1);
   readonly pageSize = 10;
   readonly loading = signal(true);
@@ -239,8 +241,9 @@ export class AdminErpContentPage {
   readonly bannerLimits = BANNER_FIELD_LIMITS;
   readonly activeBannerCount = computed(() => this.banners().filter((banner) => banner.is_active).length);
 
-  /** The blog queue footer ("Hiển thị … bài viết") only describes blog/subscriber lists. */
-  readonly showPagination = computed(() => this.tab() !== 'banners' && this.tab() !== 'collections');
+  /** The blog queue footer ("Hiển thị … bài viết") and blog search/table switcher only apply to blog/subscriber lists. */
+  readonly isCmsVisualTab = computed(() => this.tab() === 'banners' || this.tab() === 'collections');
+  readonly showPagination = computed(() => !this.isCmsVisualTab());
 
   /** URLs whose image failed to load; templates swap them for a neutral placeholder instead of a black box. */
   readonly brokenImages = signal<Readonly<Record<string, true>>>({});
@@ -330,7 +333,7 @@ export class AdminErpContentPage {
   readonly canEdit = computed(() => this.canCreate() || this.canUpdate());
 
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
-    { key: 'all', label: 'Tất cả bài viết', count: this.total() },
+    { key: 'all', label: 'Tất cả bài viết', count: this.allBlogsTotal() || this.total() },
     { key: 'draft', label: 'Bản nháp', count: this.counts().draft },
     { key: 'published', label: 'Đã công bố', count: this.counts().published },
     { key: 'archived', label: 'Đã lưu trữ', count: this.counts().archived },
@@ -452,7 +455,11 @@ export class AdminErpContentPage {
   constructor() {
     this.loadCategories();
     this.reload();
-    useWorkspaceRefresh(() => this.reload());
+    this.preloadCmsLists();
+    useWorkspaceRefresh(() => {
+      this.reload();
+      this.preloadCmsLists();
+    });
 
     this.productSearch$
       .pipe(
@@ -527,16 +534,37 @@ export class AdminErpContentPage {
         this.cacheProducts(rows.flatMap((row) => row.products || []));
         this.total.set(adminListCount(payload.list as AdminListPayload<AdminBlogRow>));
       }
+      const draftCount = adminListCount(payload.draft);
+      const publishedCount = adminListCount(payload.published);
+      const archivedCount = adminListCount(payload.archived);
+      if (this.tab() === 'all' && !this.search().trim()) {
+        this.allBlogsTotal.set(adminListCount(payload.list as AdminListPayload<AdminBlogRow>));
+      } else {
+        this.allBlogsTotal.set(draftCount + publishedCount + archivedCount);
+      }
       this.counts.update((current) => ({
         ...current,
-        draft: adminListCount(payload.draft),
-        published: adminListCount(payload.published),
-        archived: adminListCount(payload.archived),
+        draft: draftCount,
+        published: publishedCount,
+        archived: archivedCount,
         subscribers: (payload.subs as { count: number }).count || 0,
       }));
       this.loading.set(false);
       this.hasLoadedOnce.set(true);
     });
+  }
+
+  /**
+   * Preloads banner and collection lists on initial paint so subtab count badges reflect live database totals immediately.
+   */
+  private preloadCmsLists(): void {
+    if (!this.canRead()) return;
+    if (typeof this.api.listBanners === 'function') {
+      this.loadBanners();
+    }
+    if (typeof this.api.listCollections === 'function') {
+      this.loadCollectionsList();
+    }
   }
 
   /**
@@ -739,6 +767,11 @@ export class AdminErpContentPage {
         this.bannerError.set(adminErrorMessage(err, 'Tải ảnh poster thất bại.'));
       },
     });
+  }
+
+  /** Clears the optional poster image on a video banner draft. */
+  clearBannerPoster(): void {
+    this.bannerDraft.update((current) => ({ ...current, poster_url: '' }));
   }
 
   onBannerField(field: keyof AdminBannerRow, event: Event): void {

@@ -67,10 +67,17 @@
                 <span class="collection-story__kicker">{{ group.lookbook.kicker }}</span>
                 <h3 class="collection-story__title">{{ group.lookbook.storyHeadline }}</h3>
                 <p class="collection-story__desc">{{ group.lookbook.storyDesc }}</p>
-                <a [routerLink]="group.lookbook.categoryLink" class="collection-story__cta">
-                  <span>{{ group.lookbook.exploreCta }}</span>
-                  <span aria-hidden="true">→</span>
-                </a>
+                @if (isExternalLink(group.lookbook.categoryLink)) {
+                  <a [href]="group.lookbook.categoryLink" target="_blank" rel="noopener noreferrer" class="collection-story__cta">
+                    <span>{{ group.lookbook.exploreCta }}</span>
+                    <span aria-hidden="true">→</span>
+                  </a>
+                } @else {
+                  <a [routerLink]="cmsLink(group.lookbook.categoryLink)" class="collection-story__cta">
+                    <span>{{ group.lookbook.exploreCta }}</span>
+                    <span aria-hidden="true">→</span>
+                  </a>
+                }
               </aside>
 
               <!-- Products Column -->
@@ -87,7 +94,11 @@
                   @if (!group.products.length) {
                     <div class="collections-empty-notice">
                       <p>Đang cập nhật các thiết kế tiêu biểu cho bộ sưu tập này.</p>
-                      <a [routerLink]="group.lookbook.categoryLink" class="btn btn--outline btn--sm">Xem sản phẩm cùng danh mục</a>
+                      @if (isExternalLink(group.lookbook.categoryLink)) {
+                        <a [href]="group.lookbook.categoryLink" target="_blank" rel="noopener noreferrer" class="btn btn--outline btn--sm">Xem sản phẩm cùng danh mục</a>
+                      } @else {
+                        <a [routerLink]="cmsLink(group.lookbook.categoryLink)" class="btn btn--outline btn--sm">Xem sản phẩm cùng danh mục</a>
+                      }
                     </div>
                   } @else {
                     @for (product of group.products; track product.product_id; let i = $index) {

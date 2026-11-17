@@ -373,32 +373,90 @@ export interface RefundResult {
 
 /** Mã lỗi khi Stripe không phản hồi trong thời hạn; kết quả hoàn tiền chưa xác định. */
 export const GATEWAY_REFUND_TIMEOUT = "GATEWAY_REFUND_TIMEOUT";
+/**
+ * Mã lỗi khi bước tra cứu trước khi hoàn (phiên Checkout `cs_…` hoặc danh sách hoàn tiền của
+ * PaymentIntent) bị timeout, 429 hoặc 5xx. Chưa có lệnh hoàn nào được gửi tới Stripe nên thử lại
+ * an toàn; khác hẳn {@link GATEWAY_REFUND_TIMEOUT}, nơi lệnh hoàn đã gửi mà chưa rõ kết quả.
+ */
+export const GATEWAY_REFUND_LOOKUP_UNAVAILABLE = "GATEWAY_REFUND_LOOKUP_UNAVAILABLE";
 /** Mỗi lệnh gọi Stripe trong luồng hoàn tiền không được treo quá thời hạn này. */
 const STRIPE_REFUND_TIMEOUT_MS = 15000;
+const LOOKUP_UNAVAILABLE_MESSAGE = "Chưa tra cứu được giao dịch trên Stripe. Chưa có lệnh hoàn tiền nào được gửi, hãy thử lại sau ít phút.";
+
+/** Kết quả tra cứu Stripe trước khi hoàn: có dữ liệu, tạm thời không tra được (thử lại), hoặc dữ liệu không hợp lệ. */
+type StripeLookup<T> = { kind: "ok"; value: T } | { kind: "unavailable" } | { kind: "invalid"; message: string };
+
+/** GET chỉ đọc nên mọi lỗi mạng, timeout, 429 và 5xx đều là "tạm thời không tra được"; 4xx khác là cố định. */
+async function stripeGet(url: string, fetchImpl: typeof fetch): Promise<StripeLookup<JsonObject>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: "GET",
+      headers: { authorization: `Bearer ${config.stripeSecretKey}` },
+      signal: AbortSignal.timeout(STRIPE_REFUND_TIMEOUT_MS)
+    });
+  } catch {
+    return { kind: "unavailable" };
+  }
+  if (response.status === 429 || response.status >= 500) return { kind: "unavailable" };
+  if (!response.ok) return { kind: "invalid", message: `Stripe trả trạng thái ${response.status}` };
+  try {
+    return { kind: "ok", value: asJsonObject(await response.json()) };
+  } catch {
+    return { kind: "unavailable" };
+  }
+}
 
 /**
  * Payment cũ có thể còn lưu mã phiên Checkout (`cs_…`) thay vì PaymentIntent (`pi_…`), mà Stripe
  * chỉ hoàn tiền theo PaymentIntent. Hỏi Stripe lấy PaymentIntent của phiên rồi lưu lại để các lần
- * sau (webhook hoàn tiền tra theo `pi_`) khớp được. Trả chuỗi rỗng khi không xác định được.
+ * sau (webhook hoàn tiền tra theo `pi_`) khớp được. Phiên phải đã `paid` và, khi Stripe trả về,
+ * metadata `order_id` phải khớp đơn đang hoàn. Timeout/429/5xx trả `unavailable` (chưa gửi gì
+ * tới Stripe, thử lại được), không phải một lệnh hoàn "đang chờ".
  */
-async function resolveStripePaymentIntent(payment: JsonObject, fetchImpl: typeof fetch): Promise<string> {
+async function resolveStripePaymentIntent(orderId: string, payment: JsonObject, fetchImpl: typeof fetch): Promise<StripeLookup<string>> {
   const sessionId = asString(payment.gateway_transaction_ref);
-  if (!sessionId.startsWith("cs_")) return "";
-  const response = await fetchImpl(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, {
-    method: "GET",
-    headers: { authorization: `Bearer ${config.stripeSecretKey}` },
-    signal: AbortSignal.timeout(STRIPE_REFUND_TIMEOUT_MS)
-  });
-  if (!response.ok) return "";
-  const body = asJsonObject(await response.json());
+  const lookup = await stripeGet(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, fetchImpl);
+  if (lookup.kind !== "ok") return lookup;
+  const body = lookup.value;
+  if (asString(body.payment_status) !== "paid") {
+    return { kind: "invalid", message: "Phiên thanh toán Stripe chưa ở trạng thái đã thanh toán" };
+  }
+  const sessionOrder = asString(asJsonObject(body.metadata).order_id) || asString(body.client_reference_id);
+  if (sessionOrder && sessionOrder !== orderId) {
+    return { kind: "invalid", message: "Phiên thanh toán Stripe không thuộc đơn hàng này" };
+  }
   const raw = body.payment_intent;
   const intent = typeof raw === "string" ? raw : asString(asJsonObject(raw).id);
-  if (!intent.startsWith("pi_")) return "";
+  if (!intent.startsWith("pi_")) return { kind: "invalid", message: "Thiếu mã PaymentIntent của giao dịch" };
   await updateRows("payment", {
     payment_id: `eq.${asString(payment.payment_id)}`,
     gateway_transaction_ref: `eq.${sessionId}`
   }, { gateway_transaction_ref: intent, gateway_session_id: asString(payment.gateway_session_id) || sessionId });
-  return intent;
+  return { kind: "ok", value: intent };
+}
+
+/**
+ * Tìm lệnh hoàn đã tồn tại trên Stripe cho PaymentIntent trước khi tạo lệnh mới, để một lệnh đã
+ * được Stripe nhận (mà phản hồi bị mất, kể cả quá hạn 24 giờ của idempotency key) không bị tạo lại.
+ * Khớp theo `metadata.refund_id` (hoàn theo phần hàng) hoặc `metadata.refund_key` + số tiền
+ * (hoàn cấp đơn). Lệnh hoàn cấp đơn cũ chưa có `refund_key` chỉ được nhận khi payment chưa ghi
+ * khoản hoàn nào và số tiền khớp tuyệt đối.
+ */
+async function findExistingStripeRefund(
+  intent: string, orderId: string, amount: number, refundKey: string, operation: JsonObject | null, payment: JsonObject, fetchImpl: typeof fetch
+): Promise<StripeLookup<JsonObject | null>> {
+  const lookup = await stripeGet(`https://api.stripe.com/v1/refunds?payment_intent=${encodeURIComponent(intent)}&limit=100`, fetchImpl);
+  if (lookup.kind !== "ok") return lookup;
+  const refunds = Array.isArray(lookup.value.data) ? lookup.value.data.map(asJsonObject) : [];
+  const match = refunds.find((refund) => {
+    const metadata = asJsonObject(refund.metadata);
+    if (operation) return asString(metadata.refund_id) === asString(operation.refund_id);
+    if (Number(refund.amount) !== amount || refund.status === "failed" || refund.status === "canceled") return false;
+    if (asString(metadata.refund_key)) return asString(metadata.refund_key) === refundKey;
+    return !metadata.refund_id && asString(metadata.order_id) === orderId && Number(payment.refunded_amount || 0) === 0;
+  });
+  return { kind: "ok", value: match ?? null };
 }
 
 /**
@@ -461,38 +519,76 @@ export async function refundStripeOrder(
     await markRefundFailed(orderId, payment, "Chưa cấu hình STRIPE_SECRET_KEY");
     return { status: "failed", message: "Không gửi được yêu cầu hoàn tiền tới Stripe" };
   }
+  /** Bước tra cứu chưa gửi gì tới Stripe: không đụng vào operation, thử lại an toàn. */
+  const lookupUnavailable = async (): Promise<RefundResult> => {
+    if (!operation) await markRefundFailed(orderId, payment, LOOKUP_UNAVAILABLE_MESSAGE);
+    return { status: "failed", message: LOOKUP_UNAVAILABLE_MESSAGE, code: GATEWAY_REFUND_LOOKUP_UNAVAILABLE };
+  };
   try {
-    if (intent.startsWith("cs_")) intent = await resolveStripePaymentIntent(payment, fetchImpl);
+    if (intent.startsWith("cs_")) {
+      const resolved = await resolveStripePaymentIntent(orderId, payment, fetchImpl);
+      if (resolved.kind === "unavailable") return await lookupUnavailable();
+      if (resolved.kind === "invalid") {
+        await markRefundFailed(orderId, payment, resolved.message);
+        return { status: "failed", message: "Không gửi được yêu cầu hoàn tiền tới Stripe" };
+      }
+      intent = resolved.value;
+    }
     if (!intent.startsWith("pi_")) {
       await markRefundFailed(orderId, payment, "Thiếu mã PaymentIntent của giao dịch");
       return { status: "failed", message: "Không gửi được yêu cầu hoàn tiền tới Stripe" };
     }
+    const expectedAmount = refundAmount ?? Number(payment.amount);
+    // Stable across retry_refund: it changes only when the captured/refunded ledger moves, never with payment.version.
+    const refundKey = `refund-${asString(payment.payment_id)}-${expectedAmount}-${Number(payment.refunded_amount || 0)}`;
     const params = new URLSearchParams({ payment_intent: intent, "metadata[order_id]": orderId });
     if (refundAmount !== undefined) params.append("amount", String(refundAmount));
     if (operation) {
       params.append("metadata[return_id]", asString(operation.return_id));
       params.append("metadata[return_item_id]", asString(operation.return_item_id));
       params.append("metadata[refund_id]", asString(operation.refund_id));
+    } else {
+      params.append("metadata[refund_key]", refundKey);
     }
     const providerRef = asString(operation?.provider_ref);
-    const response = await fetchImpl(providerRef
-      ? `https://api.stripe.com/v1/refunds/${encodeURIComponent(providerRef)}`
-      : "https://api.stripe.com/v1/refunds", {
-      method: providerRef ? "GET" : "POST",
-      headers: {
-        authorization: `Bearer ${config.stripeSecretKey}`,
-        "content-type": "application/x-www-form-urlencoded",
-        "idempotency-key": operation ? `return-refund-${asString(operation.refund_id)}` : `refund-${asString(payment.payment_id)}-${String(payment.version ?? 1)}`
-      },
-      ...(providerRef ? {} : { body: params }),
-      signal: AbortSignal.timeout(STRIPE_REFUND_TIMEOUT_MS)
-    });
-    const body = asJsonObject(await response.json());
+    // An unknown earlier POST may already exist at Stripe (even beyond the 24h idempotency window): adopt it.
+    let adopted: JsonObject | null = null;
+    if (!providerRef) {
+      const existing = await findExistingStripeRefund(intent, orderId, expectedAmount, refundKey, operation, payment, fetchImpl);
+      if (existing.kind === "unavailable") return await lookupUnavailable();
+      if (existing.kind === "invalid") {
+        await markRefundFailed(orderId, payment, existing.message);
+        return { status: "failed", message: "Không gửi được yêu cầu hoàn tiền tới Stripe" };
+      }
+      adopted = existing.value;
+    }
+    let ok = true;
+    let httpStatus = 200;
+    let body: JsonObject;
+    if (adopted) {
+      body = adopted;
+    } else {
+      const response = await fetchImpl(providerRef
+        ? `https://api.stripe.com/v1/refunds/${encodeURIComponent(providerRef)}`
+        : "https://api.stripe.com/v1/refunds", {
+        method: providerRef ? "GET" : "POST",
+        headers: {
+          authorization: `Bearer ${config.stripeSecretKey}`,
+          "content-type": "application/x-www-form-urlencoded",
+          "idempotency-key": operation ? `return-refund-${asString(operation.refund_id)}` : refundKey
+        },
+        ...(providerRef ? {} : { body: params }),
+        signal: AbortSignal.timeout(STRIPE_REFUND_TIMEOUT_MS)
+      });
+      ok = response.ok;
+      httpStatus = response.status;
+      body = asJsonObject(await response.json());
+    }
     const refundId = asString(body.id);
-    if (!response.ok) {
-      const message = asString(asJsonObject(body.error).message) || `Stripe trả trạng thái ${response.status}`;
+    if (!ok) {
+      const message = asString(asJsonObject(body.error).message) || `Stripe trả trạng thái ${httpStatus}`;
       // A timeout, rate limit or server failure cannot prove Stripe did not move money.
-      if (operation && (providerRef || response.status >= 500 || response.status === 409 || response.status === 429)) {
+      if (operation && (providerRef || httpStatus >= 500 || httpStatus === 409 || httpStatus === 429)) {
         return { status: "requested", message };
       }
       if (operation) await updateReturnRefundOperation(operation, { status: "failed" });

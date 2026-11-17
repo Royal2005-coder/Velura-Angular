@@ -292,6 +292,7 @@ export function gatewayNote(refund: { status: string; message?: string } | null)
   }
   if (refund.status === 'requested') {
     return 'Đã gửi yêu cầu hoàn tiền tới cổng thanh toán; chờ cổng xác nhận.';
+    return refund.message || 'Đã gửi yêu cầu hoàn tiền tới cổng thanh toán; chờ cổng xác nhận.';
   }
   if (refund.status === 'skipped') {
     return 'Cổng bỏ qua giao dịch này; kiểm tra lại số tiền hoàn.';

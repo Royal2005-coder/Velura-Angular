@@ -1,7 +1,6 @@
 import { Subscription, catchError, forkJoin, of } from 'rxjs';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink, type ParamMap } from '@angular/router';
-import { toDataURL } from 'qrcode';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -39,6 +38,7 @@ import {
   type TicketBrief,
 } from '../../core/admin-erp-service-desk';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
+import { printSlip } from '../../core/print-slip';
 import {
   adminErrorMessage,
   adminListCount,
@@ -766,73 +766,25 @@ export class AdminErpReturnsPage {
    */
   async printReturnLabel(record: AdminReturnRow): Promise<void> {
     const shipment = record.shipment || null;
-    const qr = await toDataURL(buildReturnQrPayload(record.return_id, record.return_code), {
-      width: 640,
-      margin: 2,
-      errorCorrectionLevel: 'M',
-    }).catch(() => '');
-    if (!qr) {
-      this.detailError.set('Không tạo được mã QR để in phiếu hoàn.');
-      return;
-    }
-    const windowRef = window.open('', '_blank', 'width=560,height=780');
-    if (!windowRef) {
-      this.detailError.set('Trình duyệt đang chặn cửa sổ in. Cho phép popup rồi thử lại.');
-      return;
-    }
-    const doc = windowRef.document;
-    doc.title = `Phiếu gửi hoàn ${record.return_code || record.return_id}`;
-    const style = doc.createElement('style');
-    style.textContent = `
-      body{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;margin:24px;color:#2A1A1D}
-      .slip{border:2px solid #2A1A1D;border-radius:12px;padding:20px;max-width:440px}
-      h1{font-size:18px;margin:0 0 4px} .muted{color:#7A5A62;font-size:12px}
-      .code{font-family:ui-monospace,"SFMono-Regular",Consolas,monospace;font-size:15px;font-weight:700;margin:12px 0 4px}
-      .qr{display:block;margin:14px auto;width:240px;height:240px}
-      table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
-      td{padding:5px 0;vertical-align:top} td:first-child{color:#7A5A62;width:38%}
-      .note{margin-top:14px;font-size:12px;line-height:1.5}`;
-    doc.head.appendChild(style);
-
-    const slip = doc.createElement('section');
-    slip.className = 'slip';
-    const title = doc.createElement('h1');
-    title.textContent = 'PHIẾU GỬI HÀNG HOÀN — VELURA';
-    const intro = doc.createElement('div');
-    intro.className = 'muted';
-    intro.textContent = 'Dán phiếu này lên ngoài kiện hàng trước khi ĐVVC lấy hàng.';
-    const code = doc.createElement('div');
-    code.className = 'code';
-    code.textContent = String(record.return_code || record.return_id);
-    const image = doc.createElement('img');
-    image.className = 'qr';
-    image.src = qr;
-    image.alt = 'QR phiếu hoàn';
-
-    const table = doc.createElement('table');
-    const addRow = (label: string, value: unknown): void => {
-      const row = doc.createElement('tr');
-      const key = doc.createElement('td');
-      key.textContent = label;
-      const cell = doc.createElement('td');
-      cell.textContent = String(value ?? '');
-      row.append(key, cell);
-      table.appendChild(row);
-    };
-    addRow('Đơn gốc', record.order_code || record.order_id || '—');
-    addRow('Khách hàng', [record.customer_name, record.customer_phone].filter(Boolean).join(' · ') || '—');
-    addRow('ĐVVC', shipment?.carrier || '—');
-    addRow('Mã vận đơn', shipment?.tracking_code || record.tracking_return_code || '—');
-    addRow('Người gửi', [record.customer_name, record.customer_phone, record.customer_address].filter(Boolean).join(' · ') || '—');
-    addRow('Người nhận', 'Kho Velura — địa chỉ theo hợp đồng ĐVVC');
-
-    const note = doc.createElement('div');
-    note.className = 'note';
-    note.textContent = 'Kho Velura chỉ nhận hàng khi mã QR và mã phiếu khớp. Khách nên quay video đóng gói; ĐVVC chụp ảnh kiện hàng niêm phong khi lấy hàng.';
-    slip.append(title, intro, code, image, table, note);
-    doc.body.appendChild(slip);
-    windowRef.focus();
-    windowRef.setTimeout(() => windowRef.print(), 100);
+    const error = await printSlip({
+      documentTitle: `Phiếu gửi hoàn ${record.return_code || record.return_id}`,
+      title: 'PHIẾU GỬI HÀNG HOÀN — VELURA',
+      intro: 'Dán phiếu này lên ngoài kiện hàng trước khi ĐVVC lấy hàng.',
+      code: String(record.return_code || record.return_id),
+      qrPayload: buildReturnQrPayload(record.return_id, record.return_code),
+      qrAlt: 'QR phiếu hoàn',
+      rows: [
+        ['Đơn gốc', record.order_code || record.order_id || '—'],
+        ['Khách hàng', [record.customer_name, record.customer_phone].filter(Boolean).join(' · ') || '—'],
+        ['ĐVVC', shipment?.carrier || '—'],
+        ['Mã vận đơn', shipment?.tracking_code || record.tracking_return_code || '—'],
+        ['Người gửi', [record.customer_name, record.customer_phone, record.customer_address].filter(Boolean).join(' · ') || '—'],
+        ['Người nhận', 'Kho Velura — địa chỉ theo hợp đồng ĐVVC'],
+      ],
+      note: 'Kho Velura chỉ nhận hàng khi mã QR và mã phiếu khớp. Khách nên quay video đóng gói; ĐVVC chụp ảnh kiện hàng niêm phong khi lấy hàng.',
+      qrErrorMessage: 'Không tạo được mã QR để in phiếu hoàn.',
+    });
+    if (error) this.detailError.set(error);
   }
 
   /**
@@ -1031,7 +983,7 @@ export class AdminErpReturnsPage {
    * Reads the API's `pickup_scheduled_at`; empty for requests approved before it existed.
    */
   pickupSlot(record: AdminReturnRow): string {
-    const slot = (record as AdminReturnRow & { pickup_scheduled_at?: string | null }).pickup_scheduled_at;
+    const slot = record.pickup_scheduled_at;
     return slot ? adminDateTime(slot) : '—';
   }
 

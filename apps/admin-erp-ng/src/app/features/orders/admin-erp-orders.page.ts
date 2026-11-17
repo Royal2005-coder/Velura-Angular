@@ -2,7 +2,6 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, DestroyRef, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink, type ParamMap } from '@angular/router';
 import { catchError, finalize, firstValueFrom, forkJoin, of, switchMap } from 'rxjs';
-import { toDataURL } from 'qrcode';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -28,8 +27,8 @@ import {
 } from '../../core/admin-erp-order-trace';
 import { choiceParam, queryMatches, textParam, watchQueryParams, writeQueryParams, type ListQuery } from '../../core/admin-erp-deep-link';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
+import { printSlip } from '../../core/print-slip';
 import {
-  CARRIER_PROFILES,
   buildOrderQrLink,
   buildShipmentQr,
   carrierLabel,
@@ -192,7 +191,9 @@ export class AdminErpOrdersPage {
   readonly shipmentPhoto = signal<File | null>(null);
   /** Simulated waybill + label QR of the order whose label modal is open. */
   readonly carrierLabel = signal<AdminOrderCarrierLabel | null>(null);
+  /** True while the API is issuing the waybill for the label modal. */
   readonly labelLoading = signal(false);
+  /** Vietnamese error shown in the label modal (issue or print failure); null when none. */
   readonly labelError = signal<string | null>(null);
   /** Exchange orders whose label modal already opened once this session. */
   private readonly exchangeLabelShown = new Set<string>();
@@ -1129,6 +1130,10 @@ export class AdminErpOrdersPage {
       });
       return;
     }
+    if ((action.fields.includes('shipment') || action.fields.includes('tracking')) && !body['trackingCode']) {
+      this.actionError.set('Quét QR trên nhãn vận đơn để lấy mã vận đơn trước khi xác nhận.');
+      return;
+    }
     this.submitting.set(true);
     this.runAction(action, order, body);
   }
@@ -1195,8 +1200,8 @@ export class AdminErpOrdersPage {
 
   /**
    * Fills the shipment from a scanned code. A carrier label that only carries the tracking
-   * number fills that field; the order's own QR fills the demo shipment for that order; a label
-   * for another order is refused instead of silently applied.
+   * number fills that field; a label for another order is refused instead of silently applied.
+   * The order's own QR carries no waybill, so it is refused with a hint to scan the printed label.
    */
   applyShipmentScan(text: string): void {
     this.scanOpen.set(false);
@@ -1207,20 +1212,8 @@ export class AdminErpOrdersPage {
       this.scanError.set('Mã QR này thuộc một đơn khác. Kiểm lại label trước khi lưu vận đơn.');
       return;
     }
-    if (result.kind === 'order' && order) {
-      const demo = demoShipmentFacts(order);
-      this.shipment.set(demo);
-      this.shipmentUrlEdited.set(true);
-      this.scanLocked.set({
-        orderCode: String(order.order_code || ''),
-        carrier: demo.carrier,
-        trackingCode: demo.trackingCode,
-        trackingUrl: demo.trackingUrl,
-        shipperName: demo.shipperName,
-        shipperPhone: demo.shipperPhone,
-      });
-      this.scanError.set(null);
-      this.scanNotice.set(`Mã QR khớp đơn ${order.order_code || ''}: đã điền vận đơn demo ${demo.carrier} · ${demo.trackingCode}.`);
+    if (result.kind === 'order') {
+      this.scanError.set('Đây là mã QR của đơn hàng, không phải nhãn vận đơn. Hãy quét mã QR trên nhãn vận đơn đã in và dán lên kiện hàng.');
       return;
     }
     if (result.kind !== 'tracking' && result.kind !== 'shipment') {
@@ -1283,7 +1276,7 @@ export class AdminErpOrdersPage {
     this.labelError.set(null);
     this.labelLoading.set(true);
     this.modal.set({ kind: 'carrier_label' });
-    this.api.createOrderCarrierLabel(order.order_id).subscribe({
+    this.api.getOrderCarrierLabel(order.order_id).subscribe({
       next: (label) => {
         this.labelLoading.set(false);
         this.carrierLabel.set(label);
@@ -1320,67 +1313,23 @@ export class AdminErpOrdersPage {
    * payload the "Xác nhận vận đơn" scanner reads, so printing and verifying share one source.
    */
   async printOrderLabel(order: AdminOrderRow, label: AdminOrderCarrierLabel): Promise<void> {
-    const qr = await toDataURL(label.labelQr, { width: 640, margin: 2, errorCorrectionLevel: 'M' }).catch(() => '');
-    if (!qr) {
-      this.labelError.set('Không tạo được mã QR để in nhãn.');
-      return;
-    }
-    const windowRef = window.open('', '_blank', 'width=560,height=780');
-    if (!windowRef) {
-      this.labelError.set('Trình duyệt đang chặn cửa sổ in. Cho phép popup rồi thử lại.');
-      return;
-    }
-    const doc = windowRef.document;
-    doc.title = `Nhãn vận đơn ${label.order_code || order.order_code || order.order_id}`;
-    const style = doc.createElement('style');
-    style.textContent = `
-      body{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;margin:24px;color:#2A1A1D}
-      .slip{border:2px solid #2A1A1D;border-radius:12px;padding:20px;max-width:440px}
-      h1{font-size:18px;margin:0 0 4px} .muted{color:#7A5A62;font-size:12px}
-      .code{font-family:ui-monospace,"SFMono-Regular",Consolas,monospace;font-size:15px;font-weight:700;margin:12px 0 4px}
-      .qr{display:block;margin:14px auto;width:240px;height:240px}
-      table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
-      td{padding:5px 0;vertical-align:top} td:first-child{color:#7A5A62;width:38%}
-      .note{margin-top:14px;font-size:12px;line-height:1.5}`;
-    doc.head.appendChild(style);
-
-    const slip = doc.createElement('section');
-    slip.className = 'slip';
-    const title = doc.createElement('h1');
-    title.textContent = 'NHÃN VẬN ĐƠN — VELURA';
-    const intro = doc.createElement('div');
-    intro.className = 'muted';
-    intro.textContent = 'Dán nhãn này lên ngoài kiện hàng, rồi quét lại để xác nhận vận đơn.';
-    const code = doc.createElement('div');
-    code.className = 'code';
-    code.textContent = String(label.order_code || order.order_code || order.order_id);
-    const image = doc.createElement('img');
-    image.className = 'qr';
-    image.src = qr;
-    image.alt = 'QR nhãn vận đơn';
-
-    const table = doc.createElement('table');
-    const addRow = (name: string, value: unknown): void => {
-      const row = doc.createElement('tr');
-      const key = doc.createElement('td');
-      key.textContent = name;
-      const cell = doc.createElement('td');
-      cell.textContent = String(value ?? '');
-      row.append(key, cell);
-      table.appendChild(row);
-    };
-    addRow('ĐVVC', label.carrier || '—');
-    addRow('Mã vận đơn', label.trackingCode || '—');
-    addRow('Người nhận', [order.shipping_name, order.shipping_phone].filter(Boolean).join(' · ') || '—');
-    addRow('Địa chỉ giao', order.shipping_address || '—');
-
-    const note = doc.createElement('div');
-    note.className = 'note';
-    note.textContent = 'Nhãn mô phỏng của ERP Velura; mã vận đơn và QR khớp với dữ liệu đơn hàng.';
-    slip.append(title, intro, code, image, table, note);
-    doc.body.appendChild(slip);
-    windowRef.focus();
-    windowRef.setTimeout(() => windowRef.print(), 100);
+    const error = await printSlip({
+      documentTitle: `Nhãn vận đơn ${label.order_code || order.order_code || order.order_id}`,
+      title: 'NHÃN VẬN ĐƠN — VELURA',
+      intro: 'Dán nhãn này lên ngoài kiện hàng, rồi quét lại để xác nhận vận đơn.',
+      code: String(label.order_code || order.order_code || order.order_id),
+      qrPayload: label.labelQr,
+      qrAlt: 'QR nhãn vận đơn',
+      rows: [
+        ['ĐVVC', label.carrier || '—'],
+        ['Mã vận đơn', label.trackingCode || '—'],
+        ['Người nhận', [order.shipping_name, order.shipping_phone].filter(Boolean).join(' · ') || '—'],
+        ['Địa chỉ giao', order.shipping_address || '—'],
+      ],
+      note: 'Nhãn mô phỏng của ERP Velura; mã vận đơn và QR khớp với dữ liệu đơn hàng.',
+      qrErrorMessage: 'Không tạo được mã QR để in nhãn.',
+    });
+    if (error) this.labelError.set(error);
   }
 
   /**

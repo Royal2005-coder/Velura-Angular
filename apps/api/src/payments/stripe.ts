@@ -171,7 +171,7 @@ export async function createStripePaymentIntent(
   });
   const payload = await response.json() as { id?: string; url?: string; error?: { message?: string } };
   if (!response.ok || !payload.id || !payload.url) {
-    throw new HttpError(502, "STRIPE_INTENT_FAILED", payload.error?.message || "Stripe không tạo được trang thanh toán.");
+    throw new HttpError(502, "STRIPE_INTENT_FAILED", "Stripe không tạo được trang thanh toán.", undefined, { http_status: response.status, provider_message: payload.error?.message });
   }
   try {
     await insertRow("payment", {

@@ -4,9 +4,9 @@ import { AdminErpApiService, AdminReturnItemActionInput, AdminReturnLine, AdminR
 import { QrConfirmFacts } from '../../shared/ui/admin-qr-confirm';
 import { ReturnFlowComponent, ReturnFlowKind } from './return-flow.component';
 
-/** Builds the change event the QA criterion dropdown emits. */
-function pick(code: string): Event {
-  return { target: { value: code } } as unknown as Event;
+/** Builds the change event a QA failure checkbox emits. */
+function tick(checked = true): Event {
+  return { target: { checked } } as unknown as Event;
 }
 
 /** Fixed facts a real scan would publish for the parcel under test. */
@@ -63,7 +63,7 @@ describe('ReturnFlowComponent per-item operations', () => {
 
   it('receives only the selected quantity with tag/condition/proof facts and seal false allowed', () => {
     const { component, actions, uploads } = boot('receive');
-    component.quantity.set(1); component.receivedQuantity.set(1); component.setQaCriterion(pick('seal_broken')); component.proofFile.set(image);
+    component.quantity.set(1); component.receivedQuantity.set(1); component.toggleQaCriterion('seal_broken', tick()); component.proofFile.set(image);
     component.onQrFacts(qrFacts());
     expect(component.canSubmit()).toBe(true);
     component.submit();
@@ -91,9 +91,31 @@ describe('ReturnFlowComponent per-item operations', () => {
   it('records mismatches for the affected part rather than blocking all receipt facts', () => {
     const { component } = boot('receive');
     component.proofFile.set(image); component.onQrFacts(qrFacts());
-    component.setQaCriterion(pick('wrong_product')); component.disposition.set('repair');
+    component.toggleQaCriterion('wrong_product', tick()); component.disposition.set('repair');
     expect(component.matchesProduct()).toBe(false);
     expect(component.tagsIntact() && component.conditionAcceptable() && component.packageMatch() && component.sealIntact()).toBe(true);
+    expect(component.canSubmit()).toBe(true);
+  });
+
+  it('flags every ticked QA failure and clears one when unticked', () => {
+    const { component } = boot('receive');
+    component.toggleQaCriterion('wrong_product', tick());
+    component.toggleQaCriterion('tags_missing', tick());
+    component.toggleQaCriterion('seal_broken', tick());
+    expect([component.matchesProduct(), component.tagsIntact(), component.conditionAcceptable(), component.packageMatch(), component.sealIntact()])
+      .toEqual([false, false, true, true, false]);
+    component.toggleQaCriterion('tags_missing', tick(false));
+    expect(component.tagsIntact()).toBe(true);
+    expect(component.matchesProduct()).toBe(false);
+  });
+
+  it('requires the operator to type the shipper name when the label prints none', () => {
+    const { component } = boot('pickup', { ...line, item_status: 'WAITING_RETURN' });
+    component.pickupPhotos.set([image]);
+    component.onQrFacts(qrFacts({ shipperName: '' }));
+    expect(component.pickedUpBy()).toBe('');
+    expect(component.canSubmit()).toBe(false);
+    component.setText('pickedUpBy', { target: { value: 'Trần Văn Nhận' } } as unknown as Event);
     expect(component.canSubmit()).toBe(true);
   });
 

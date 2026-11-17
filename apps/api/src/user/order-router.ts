@@ -1182,7 +1182,7 @@ async function openPersistedOrderPayment(order: JsonObject, method: unknown, cli
     console.error("[PAYMENT_OPEN_FAILED]", {
       order_id: order.order_id, method: asString(method).toUpperCase(), code,
       status: error instanceof HttpError ? error.status : undefined,
-      details: error instanceof HttpError ? error.details : undefined,
+      details: error instanceof HttpError ? { details: error.details, internal: error.internal } : undefined,
       error: error instanceof HttpError ? undefined : errorMessage(error)
     });
     if (Number(order.points_used || 0) > 0) {

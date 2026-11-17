@@ -254,10 +254,16 @@
               <p class="erp-hint">Chọn một công đoạn trên tiến trình để tải ảnh/video bằng chứng.</p>
             } @else {
               <form class="evidence-form" (submit)="submitEvidence($event)">
-                <label class="erp-field">
+                <div class="erp-field">
                   <span>Ảnh/video bằng chứng cho “{{ stageLabel(selectedStage()) }}” <span class="erp-required" aria-hidden="true">*</span></span>
-                  <input class="erp-input" type="file" name="evidenceFile" accept="image/*,video/*" (change)="onEvidenceFile($event)" required aria-required="true" />
-                </label>
+                  <div class="custom-file-row">
+                    <label class="erp-btn erp-btn--sm custom-file-trigger">
+                      <input type="file" name="evidenceFile" accept="image/*,video/*" class="erp-sr-only" aria-required="true" (change)="onEvidenceFile($event)" />
+                      <span>{{ evidenceFile() ? 'Đổi tệp khác' : 'Chọn ảnh/video' }}</span>
+                    </label>
+                    <span class="custom-file-status" [class.has-file]="!!evidenceFile()">{{ evidenceFile()?.name || 'Chưa chọn tệp' }}</span>
+                  </div>
+                </div>
                 <label class="erp-field">
                   <span>Ghi chú (tuỳ chọn)</span>
                   <textarea class="erp-input" name="evidenceNote" rows="2" [value]="evidenceNote()" (input)="onEvidenceNote($event)"></textarea>

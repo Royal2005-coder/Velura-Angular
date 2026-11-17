@@ -60,7 +60,8 @@ export async function handleOrderRoute({ req, res, url, parts, context, headers,
     return true;
   }
 
-  if (req.method === "POST" && parts[5] === "carrier-label" && parts.length === 6) {
+  // Read-only: the label is derived from the order and nothing is written, so it is a GET.
+  if (req.method === "GET" && parts[5] === "carrier-label" && parts.length === 6) {
     sendJson(res, 200, await service.createCarrierLabel(context, orderId), headers);
     return true;
   }

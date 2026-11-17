@@ -26,15 +26,14 @@ export const RETURN_ITEM_ACTION_LABELS: Readonly<Record<Exclude<ReturnFlowKind, 
   manual: 'Đối soát chuyển khoản COD', stripe: 'Hoàn phần này qua cổng thanh toán',
 };
 /**
- * Warehouse QA criteria offered in the receive form. Each one maps onto the five facts the receive RPC
- * requires: `fails` names the one fact it flags, or is null when the part passes every check.
+ * Warehouse QA failures offered as checkboxes in the receive form. Each one flags exactly one of the
+ * five facts the receive RPC requires; ticking several flags several facts, ticking none passes the part.
  */
 export const RETURN_QA_CRITERIA: ReadonlyArray<{
   code: string;
   label: string;
-  fails: 'matchesProduct' | 'tagsIntact' | 'conditionAcceptable' | 'packageMatch' | 'sealIntact' | null;
+  fails: 'matchesProduct' | 'tagsIntact' | 'conditionAcceptable' | 'packageMatch' | 'sealIntact';
 }> = [
-  { code: 'pass', label: 'Đạt: đúng sản phẩm, còn tem/nhãn, nguyên niêm phong', fails: null },
   { code: 'wrong_product', label: 'Không đạt: sai sản phẩm', fails: 'matchesProduct' },
   { code: 'tags_missing', label: 'Không đạt: mất tem / nhãn', fails: 'tagsIntact' },
   { code: 'condition_bad', label: 'Không đạt: sản phẩm hư hỏng hoặc đã qua sử dụng', fails: 'conditionAcceptable' },
@@ -74,13 +73,17 @@ export class ReturnFlowComponent {
   readonly tracking = signal('');
   readonly carrier = signal('GHN');
   readonly receivedQuantity = signal(1);
-  readonly matchesProduct = signal(true);
-  readonly tagsIntact = signal(true);
-  readonly conditionAcceptable = signal(true);
-  readonly packageMatch = signal(true);
-  readonly sealIntact = signal(true);
-  /** Selected QA criterion code; it drives the five receipt facts, see {@link RETURN_QA_CRITERIA}. */
-  readonly qaCriterion = signal<string>(RETURN_QA_CRITERIA[0].code);
+  /** Codes of the QA failures the warehouse ticked; they drive the five receipt facts, see {@link RETURN_QA_CRITERIA}. */
+  readonly qaFailed = signal<readonly string[]>([]);
+  private readonly failedFacts = computed(
+    () => new Set(RETURN_QA_CRITERIA.filter((item) => this.qaFailed().includes(item.code)).map((item) => item.fails)),
+  );
+  /** Receipt facts for the receive RPC: true unless a ticked failure flags it. */
+  readonly matchesProduct = computed(() => !this.failedFacts().has('matchesProduct'));
+  readonly tagsIntact = computed(() => !this.failedFacts().has('tagsIntact'));
+  readonly conditionAcceptable = computed(() => !this.failedFacts().has('conditionAcceptable'));
+  readonly packageMatch = computed(() => !this.failedFacts().has('packageMatch'));
+  readonly sealIntact = computed(() => !this.failedFacts().has('sealIntact'));
   readonly disposition = signal<AdminReturnDisposition>('restock');
   readonly proofFile = signal<File | null>(null);
   readonly pickupPhotos = signal<File[]>([]);
@@ -174,8 +177,7 @@ export class ReturnFlowComponent {
       } else {
         this.variantChoices.set([]);
       }
-      this.matchesProduct.set(true); this.tagsIntact.set(true); this.conditionAcceptable.set(true);
-      this.packageMatch.set(true); this.sealIntact.set(true); this.qaCriterion.set(RETURN_QA_CRITERIA[0].code); this.disposition.set('restock');
+      this.qaFailed.set([]); this.disposition.set('restock');
       const isManual = flow === 'manual';
       const autoRef = isManual ? this.newTransferRef() : '';
       if (isManual) { this.createDigitalReceiptFile(autoRef).then((f) => this.proofFile.set(f)); } else { this.proofFile.set(null); }
@@ -426,7 +428,7 @@ export class ReturnFlowComponent {
   }
 
   /** Stores ordinary text without silently coercing malformed quantities into valid ones. */
-  setText(field: 'note' | 'replacementVariantId' | 'tracking' | 'carrier' | 'transferReference' | 'transferredAt' | 'contactResult' | 'pickedUpAt', event: Event): void {
+  setText(field: 'note' | 'replacementVariantId' | 'tracking' | 'carrier' | 'transferReference' | 'transferredAt' | 'contactResult' | 'pickedUpAt' | 'pickedUpBy', event: Event): void {
     this[field].set((event.target as HTMLInputElement).value);
   }
 
@@ -496,18 +498,13 @@ export class ReturnFlowComponent {
   }
 
   /**
-   * Picks one QA criterion from the dropdown and maps it onto the five facts the receive RPC needs.
-   * "Đạt" keeps every fact true; any other criterion flags exactly the fact it names.
+   * Ticks or clears one QA failure. Several can be ticked at once; each flags its own receipt fact,
+   * and an empty selection is the "Đạt" case where every fact stays true.
    */
-  setQaCriterion(event: Event): void {
-    const code = (event.target as HTMLSelectElement).value;
-    const criterion = RETURN_QA_CRITERIA.find((item) => item.code === code) || RETURN_QA_CRITERIA[0];
-    this.qaCriterion.set(criterion.code);
-    this.matchesProduct.set(criterion.fails !== 'matchesProduct');
-    this.tagsIntact.set(criterion.fails !== 'tagsIntact');
-    this.conditionAcceptable.set(criterion.fails !== 'conditionAcceptable');
-    this.packageMatch.set(criterion.fails !== 'packageMatch');
-    this.sealIntact.set(criterion.fails !== 'sealIntact');
+  toggleQaCriterion(code: string, event: Event): void {
+    if (!RETURN_QA_CRITERIA.some((item) => item.code === code)) return;
+    const checked = (event.target as HTMLInputElement).checked;
+    this.qaFailed.update((current) => (checked ? [...current.filter((item) => item !== code), code] : current.filter((item) => item !== code)));
   }
 
   /** Only explicit disposition controls sellable restock; the server enforces QA consistency. */
@@ -612,8 +609,8 @@ export class ReturnFlowComponent {
     if (!facts) return;
     if (facts.carrier) this.carrier.set(facts.carrier);
     if (facts.trackingCode) this.tracking.set(facts.trackingCode);
-    // Nhãn không in tên người giao thì ghi nhận theo đơn vị vận chuyển trên nhãn; không bắt nhập tay.
-    this.pickedUpBy.set(facts.shipperName || `Nhân viên ${facts.carrier || 'ĐVVC'}`);
+    // Nhãn không in tên người giao thì để trống: người vận hành phải nhập đúng tên người đã nhận hàng, không tự bịa.
+    this.pickedUpBy.set(facts.shipperName || '');
     const scannedAt = new Date(facts.scannedAt);
     if (!Number.isNaN(scannedAt.getTime())) {
       const local = new Date(scannedAt.getTime() - scannedAt.getTimezoneOffset() * 60_000);

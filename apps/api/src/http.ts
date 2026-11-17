@@ -10,19 +10,39 @@ import {
 
 /**
  * Domain HTTP error mapped to a JSON error body by `sendError`.
+ *
+ * `details` is serialized to the client. `internal` (provider reason, HTTP status, gateway
+ * message…) is for server logs only: `sendError` never writes it to a response.
  */
 export class HttpError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details: unknown;
+  readonly internal: unknown;
 
-  constructor(status: number, code: string, message: string, details?: unknown) {
+  constructor(status: number, code: string, message: string, details?: unknown, internal?: unknown) {
     super(message);
     this.name = "HttpError";
     this.status = status;
     this.code = code;
     this.details = details;
+    this.internal = internal;
   }
+}
+
+/** Keys that identify payment-provider diagnostics; they must never reach a storefront client. */
+const PROVIDER_DIAGNOSTIC_KEYS = ["provider", "provider_message", "result_code", "http_status"] as const;
+
+/**
+ * Drops provider diagnostics from client-bound `details` and logs them server-side instead.
+ * Defense in depth: throw sites should already pass them as `HttpError.internal`.
+ */
+function clientSafeDetails(error: HttpError, requestId: string): unknown {
+  const details = error.details;
+  if (error.internal !== undefined) console.warn("[HTTP_ERROR_INTERNAL]", { requestId, code: error.code, status: error.status, internal: error.internal });
+  if (!isJsonObject(details) || !PROVIDER_DIAGNOSTIC_KEYS.some((key) => key in details)) return details;
+  console.warn("[HTTP_ERROR_PROVIDER_DETAILS]", { requestId, code: error.code, status: error.status, details });
+  return undefined;
 }
 
 /**
@@ -168,7 +188,7 @@ export function sendError(
       error: {
         code: business.code,
         message: business.message,
-        details: isHttpError ? err.details : business.details,
+        details: isHttpError ? clientSafeDetails(error, requestId) : business.details,
         requestId: requestId || undefined,
         timestamp: new Date().toISOString()
       }
@@ -186,7 +206,7 @@ export function sendError(
     error: {
       code: err.code || "INTERNAL_ERROR",
       message,
-      details: isDatabaseError ? undefined : isExplicit ? err.details : (status >= 500 ? undefined : err.details),
+      details: isDatabaseError ? undefined : isHttpError ? clientSafeDetails(error, requestId) : isExplicit ? err.details : (status >= 500 ? undefined : err.details),
       requestId: requestId || undefined,
       timestamp: new Date().toISOString()
     }

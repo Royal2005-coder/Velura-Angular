@@ -8,6 +8,7 @@ import { asJsonObject, asNumber, asString, type HttpRequest, type JsonObject, ty
 import { selectOne } from "../supabase.js";
 import type { UserReturnsRepository } from "./returns-repository.js";
 import { sendReturnIntakeEmail } from "../returns/return-email.js";
+import { earliestPickupSlot } from "../returns/return-pickup.js";
 
 /** A customer may withdraw a request only while no parcel has been handed to the carrier. */
 const CUSTOMER_CANCELLABLE_STATUSES: readonly string[] = ["REQUESTED", "CONTACTING", "WAITING_RETURN"];
@@ -63,7 +64,7 @@ async function customerReturnView(
     customer_address: order ? order.shipping_address || null : null,
     refund_flow: flow,
     /** Giờ hẹn ĐVVC lấy hàng sớm nhất trong các phần hàng đã duyệt (migration 128). */
-    pickup_scheduled_at: items.map((item) => asString(item.pickup_scheduled_at)).filter(Boolean).sort()[0] || null,
+    pickup_scheduled_at: earliestPickupSlot(items),
     refund_receiver: customerRefundReceiver(receiverRequired, receiver),
     can_cancel: CUSTOMER_CANCELLABLE_STATUSES.includes(status),
     can_upload_packing: items.length ? items.some((part) => CUSTOMER_PACKING_STATUSES.includes(asString(part.item_status))) : CUSTOMER_PACKING_STATUSES.includes(status),

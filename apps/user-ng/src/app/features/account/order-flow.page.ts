@@ -1,5 +1,7 @@
 import { Component, DestroyRef, effect, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { filter, firstValueFrom, of, timeout } from 'rxjs';
 import { ActivatedRoute, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import {
   DemoOrder,
@@ -27,10 +29,6 @@ import { VIETNAM_BANKS } from '../../core/models/vietnam-banks';
 import { OTP_COUNTDOWN_SECONDS } from '../../core/utils/otp-policy';
 import { NotificationsService } from '../../core/services/notifications.service';
 
-function sleep(ms: number): Promise<void> {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
-
 /**
  * Guest access, order actions and after-sales share one `OrderAccountModel` injection point:
  * `PurchaseDemoStore` (via `OrderAccountPreviewAdapter`) under `?preview=1`, the real
@@ -57,6 +55,8 @@ export class OrderFlowPage {
   private readonly checkout = inject(CheckoutStore);
   private readonly notifications = inject(NotificationsService);
   private readonly destroyRef = inject(DestroyRef);
+  /** Store loading flag as a stream; replays the latest value once the store's effects have run. */
+  private readonly storeLoading$ = this.model.loading ? toObservable(this.model.loading) : of(false);
   readonly view = signal<
     | 'lookup'
     | 'otp'
@@ -420,11 +420,14 @@ export class OrderFlowPage {
   }
   /** Lets the store's session effect run and its initial refresh finish before reading orders. */
   private async waitForStore(): Promise<void> {
-    await sleep(0);
-    const deadline = Date.now() + 10_000;
-    while (this.model.loading?.() && Date.now() < deadline && !this.destroyed) {
-      await sleep(50);
-    }
+    await firstValueFrom(
+      this.storeLoading$.pipe(
+        filter((loading) => !loading),
+        timeout({ first: 10_000, with: () => of(false) }),
+        takeUntilDestroyed(this.destroyRef),
+      ),
+      { defaultValue: false },
+    );
   }
   private openLoaded(order: DemoOrder, id: string, updateUrl: boolean): void {
     if (!this.authorized(order)) {

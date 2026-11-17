@@ -355,3 +355,12 @@ test("migration 132 adds the CMS columns idempotently without destructive statem
   assert.doesNotMatch(sql, /\bdelete\s+from\b/i);
   assert.doesNotMatch(sql, /\btruncate\b/i);
 });
+
+test("migration 133 refreshes return_exchange aggregate status after exchange order handover", () => {
+  const sql = readFileSync(fileURLToPath(new URL("../../database/migrations/133_exchange_handover_refresh_return_aggregate.sql", import.meta.url)), "utf8");
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.velura_sync_exchange_handover\s*\(/i);
+  assert.match(sql, /returning\s+tracking_code\s+into\s+v_tracking/i);
+  assert.match(sql, /perform\s+public\.velura_refresh_return_aggregate\(v_item\.return_id\)/i);
+  assert.doesNotMatch(sql, /\bdrop\b/i);
+  assert.doesNotMatch(sql, /\bdelete\s+from\b/i);
+});

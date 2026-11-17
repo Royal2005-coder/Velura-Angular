@@ -221,7 +221,7 @@ export interface AdminTableRowAction {
       }
       table.table-fixed {
         table-layout: fixed;
-        min-width: 960px;
+        min-width: 1100px;
       }
       table.table-fixed th,
       table.table-fixed td {

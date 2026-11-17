@@ -45,10 +45,10 @@
     <div class="content-panel__head">
       <div>
         <span class="content-eyebrow">CMS</span>
-        <h2 id="content-title">Bài viết & Bản tin</h2>
+        <h2 id="content-title">{{ tab() === 'banners' ? 'Banner trang sản phẩm' : tab() === 'collections' ? 'Bộ sưu tập & Lookbook' : 'Bài viết & Bản tin' }}</h2>
       </div>
       <div class="content-head-right">
-        @if (tab() !== 'subscribers') {
+        @if (tab() !== 'subscribers' && !isCmsVisualTab()) {
           <div class="content-view-toggle" role="group" aria-label="Kiểu hiển thị">
             <button
               type="button"
@@ -76,12 +76,14 @@
       </div>
     </div>
 
-    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
-      <label class="erp-field content-search">
-        <span>Tiêu đề hoặc slug</span>
-        <input class="erp-input" type="search" [value]="search()" (input)="onSearchInput($event)" placeholder="ví dụ: áo lụa" />
-      </label>
-    </app-erp-filter-bar>
+    @if (!isCmsVisualTab()) {
+      <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+        <label class="erp-field content-search">
+          <span>Tiêu đề hoặc slug</span>
+          <input class="erp-input" type="search" [value]="search()" (input)="onSearchInput($event)" placeholder="ví dụ: áo lụa" />
+        </label>
+      </app-erp-filter-bar>
+    }
 
     @if (loadError()) {
       <div class="content-banner" role="alert">
@@ -162,7 +164,7 @@
         </span>
       </div>
       @if (!homeRunway().complete || homeRunway().missingModel.length || homeRunway().duplicateModel.length) {
-        <div class="content-banner" role="status">
+        <div class="content-banner content-banner--warn" role="status">
           <app-erp-icon name="alert" [size]="'16'" />
           <span>
             Sàn diễn trang chủ cần đúng {{ homeSlots }} bộ sưu tập đang bật, bật “Hiện trên trang chủ” và có ảnh riêng; hiện mới có {{ homeRunway().count }}.
@@ -852,10 +854,23 @@
               <input type="file" accept="image/*" class="erp-sr-only" (change)="onBannerPosterUploaded($event)" [disabled]="bannerUploading()" />
               <span>{{ bDraft.poster_url ? 'Đổi poster' : 'Tải poster' }}</span>
             </label>
+            @if (bDraft.poster_url) {
+              <button class="erp-btn erp-btn--sm" type="button" (click)="clearBannerPoster()">Xóa poster</button>
+            }
             <span class="custom-file-status" [class.has-file]="!!bDraft.poster_url">{{ bDraft.poster_url ? 'Đã có poster' : 'Chưa có poster' }}</span>
           </div>
+          <input class="erp-input" type="url" [value]="bDraft.poster_url || ''" (input)="onBannerField('poster_url', $event)" (blur)="touchBanner('poster_url')" placeholder="https://cdn.velura.vn/... hoặc /assets/..." />
           @if (bannerFieldError('poster_url'); as err) {
             <span class="erp-error" role="alert">{{ err }}</span>
+          }
+          @if (bDraft.poster_url) {
+            <div class="cms-banner-preview">
+              @if (!imageBroken(bDraft.poster_url)) {
+                <img [src]="asset(bDraft.poster_url)" alt="Xem trước ảnh poster" (error)="markImageBroken(bDraft.poster_url)" />
+              } @else {
+                <span>Không tải được ảnh poster</span>
+              }
+            </div>
           }
         </div>
       }

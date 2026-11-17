@@ -1043,6 +1043,7 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
+      object-position: center 20%;
     }
   }
 
@@ -1220,6 +1221,7 @@
   &__preview--tall {
     width: 96px;
     aspect-ratio: 3 / 4;
+    background: repeating-conic-gradient(#e2e8f0 0% 25%, #ffffff 0% 50%) 0 0 / 14px 14px;
 
     img {
       object-fit: contain;
@@ -1257,7 +1259,7 @@
     aspect-ratio: 3 / 4;
     border: 1px dashed var(--erp-line);
     border-radius: 8px;
-    background: var(--erp-surface-muted);
+    background: repeating-conic-gradient(#e2e8f0 0% 25%, #ffffff 0% 50%) 0 0 / 14px 14px;
     color: var(--erp-muted);
     font-size: 12px;
     overflow: hidden;
@@ -1309,7 +1311,7 @@
       width: 100%;
       aspect-ratio: 3 / 4;
       object-fit: contain;
-      background: var(--erp-surface-muted);
+      background: repeating-conic-gradient(#e2e8f0 0% 25%, #ffffff 0% 50%) 0 0 / 12px 12px;
       border-radius: 6px;
     }
 

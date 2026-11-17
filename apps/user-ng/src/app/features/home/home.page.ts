@@ -1,5 +1,5 @@
 import { AfterViewInit, Component, ElementRef, Injector, OnDestroy, ViewChild, afterNextRender, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, UrlTree } from '@angular/router';
 import { catchError, forkJoin, of, take } from 'rxjs';
 import { COLLECTION_LOOKBOOKS, CollectionLookbook } from '../../core/models/collection-lookbook';
 import { CategorySummary, ProductSummary } from '../../core/models/product.interface';
@@ -10,6 +10,7 @@ import { OffersService } from '../../core/services/offers.service';
 import { StyleProfileService } from '../../core/services/style-profile.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { bindHomeCarousel } from '../../core/utils/home-carousel';
+import { isExternalCmsLink, navigateCmsLink, parseInternalCmsLink } from '../../core/utils/cms-link';
 import { ProductCard } from '../../shared/product-card/product-card';
 import { useBodyClass } from '../../core/utils/body-class';
 import { toPublicAsset } from '../../core/utils/money';
@@ -243,11 +244,21 @@ export class HomePage implements AfterViewInit, OnDestroy {
     return diff;
   }
 
+  /** Checks whether a hero CTA URL points to an external HTTPS target. */
+  isExternalLink(url: string | null | undefined): boolean {
+    return isExternalCmsLink(url);
+  }
+
+  /** Parses an internal CMS link into a `UrlTree` so query strings like `?category=dam-vay` stay intact. */
+  cmsLink(url: string | null | undefined): UrlTree | string {
+    return parseInternalCmsLink(this.router, url, '/products');
+  }
+
   onModelClick(index: number): void {
     if (this.activeModelIndex() === index) {
       const looks = this.heroLooks();
       const link = looks[index]?.link || '/products';
-      void this.router.navigateByUrl(link);
+      navigateCmsLink(this.router, link, '/products');
     } else {
       this.activeModelIndex.set(index);
     }

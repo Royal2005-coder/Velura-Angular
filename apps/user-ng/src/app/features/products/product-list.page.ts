@@ -4,7 +4,8 @@ import { VisualSearchModel, type AiSearchResult, type VisualResult, type VisualF
 import { HttpErrorResponse } from '@angular/common/http';
 import { AfterViewInit, Component, DestroyRef, ElementRef, ViewChild, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink, UrlTree } from '@angular/router';
+import { isExternalCmsLink, parseInternalCmsLink } from '../../core/utils/cms-link';
 import { matchesAllSearchWords, normalizeSearchText, OCCASION_VIETNAMESE_MAP } from '../../core/utils/search';
 import { productMaterial, productMaterialText } from '../../core/utils/material';
 import { catchError, finalize, of, switchMap, tap, type Subscription } from 'rxjs';
@@ -221,6 +222,16 @@ export class ProductListPage implements AfterViewInit {
         void Promise.resolve(video.play()).catch(() => undefined);
       }
     }
+  }
+
+  /** Checks whether a banner CTA URL points to an external HTTPS target. */
+  isExternalLink(url: string | null | undefined): boolean {
+    return isExternalCmsLink(url);
+  }
+
+  /** Parses an internal banner CTA link into a `UrlTree` so query strings like `?category=dam-vay` stay intact. */
+  cmsLink(url: string | null | undefined): UrlTree | string {
+    return parseInternalCmsLink(this.router, url, '/products');
   }
 
   toggleVideoSound(): void {

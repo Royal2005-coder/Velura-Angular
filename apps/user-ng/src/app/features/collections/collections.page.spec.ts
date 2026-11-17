@@ -112,4 +112,15 @@ describe('CollectionsPage', () => {
     const withoutLede = await renderCollections([lookbook({ homeStory: '' })], []);
     expect(withoutLede.root.querySelector('.collection-hero__lede')).toBeNull();
   });
+
+  it('preserves query strings on internal CTA links without percent-encoding and handles external HTTPS links', async () => {
+    const internal = await renderCollections([lookbook({ categoryLink: '/products?category=dam-vay' })], []);
+    const internalCta = internal.root.querySelector<HTMLAnchorElement>('.collection-story__cta');
+    expect(internalCta?.getAttribute('href')).toBe('/products?category=dam-vay');
+
+    const external = await renderCollections([lookbook({ categoryLink: 'https://velura.royalai.dev/lookbook' })], []);
+    const externalCta = external.root.querySelector<HTMLAnchorElement>('.collection-story__cta');
+    expect(externalCta?.getAttribute('href')).toBe('https://velura.royalai.dev/lookbook');
+    expect(externalCta?.getAttribute('target')).toBe('_blank');
+  });
 });

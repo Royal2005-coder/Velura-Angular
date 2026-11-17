@@ -39,10 +39,17 @@
         }
         <div class="product-list-editorial-hero__actions">
           @if (currentBanner().link_url) {
-            <a [routerLink]="currentBanner().link_url" class="product-list-editorial-hero__cta-btn">
-              <span>{{ currentBanner().button_text || 'Khám phá ngay' }}</span>
-              <span aria-hidden="true">↗</span>
-            </a>
+            @if (isExternalLink(currentBanner().link_url)) {
+              <a [href]="currentBanner().link_url" target="_blank" rel="noopener noreferrer" class="product-list-editorial-hero__cta-btn">
+                <span>{{ currentBanner().button_text || 'Khám phá ngay' }}</span>
+                <span aria-hidden="true">↗</span>
+              </a>
+            } @else {
+              <a [routerLink]="cmsLink(currentBanner().link_url)" class="product-list-editorial-hero__cta-btn">
+                <span>{{ currentBanner().button_text || 'Khám phá ngay' }}</span>
+                <span aria-hidden="true">↗</span>
+              </a>
+            }
           }
           @if (currentBanner().media_type === 'video') {
             <button

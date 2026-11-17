@@ -379,11 +379,32 @@ export class AdminErpProductsPage {
    * Applies an inbound deep link: the queue tab and the catalog filters another workspace names.
    */
   private applyDeepLink(params: ParamMap): void {
-    this.tab.set(choiceParam(params, 'tab', PRODUCTS_TABS, this.tab()) as ProductsTab);
+    const nextTab = choiceParam(params, 'tab', PRODUCTS_TABS, this.tab()) as ProductsTab;
+    this.tab.set(nextTab);
     this.query.set(textParam(params, 'q'));
     this.status.set(choiceParam(params, 'status', PRODUCT_STATUSES, this.status()));
     this.page.set(1);
     this.reload();
+    if (nextTab !== 'catalog') {
+      this.preloadTabCounts();
+    }
+  }
+
+  /**
+   * Preloads catalog/stock/audit badge totals when deep-linked straight into a non-catalog subtab,
+   * so inactive subtabs never display a misleading 0 before being clicked.
+   */
+  private preloadTabCounts(): void {
+    if (!this.canRead()) return;
+    forkJoin({
+      catalog: this.api.listProducts({ limit: '1' }).pipe(catchError(() => of(EMPTY_LIST))),
+      low: this.api.listProducts({ lowStock: 'true', limit: '1' }).pipe(catchError(() => of(EMPTY_LIST))),
+      logs: this.api.listProductAuditLogs({ limit: '1' }).pipe(catchError(() => of(EMPTY_LIST))),
+    }).subscribe((payload) => {
+      if (!this.total()) this.total.set(adminListCount(payload.catalog));
+      if (this.tab() !== 'stock') this.lowStockTotal.set(adminListCount(payload.low));
+      if (this.tab() !== 'logs') this.logsTotal.set(adminListCount(payload.logs));
+    });
   }
 
   /**

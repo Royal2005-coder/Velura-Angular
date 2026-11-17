@@ -1,10 +1,11 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, UrlTree } from '@angular/router';
 import { COLLECTION_LOOKBOOKS, CollectionLookbook } from '../../core/models/collection-lookbook';
 import { ProductSummary } from '../../core/models/product.interface';
 import { CartLine, CartStore } from '../../core/services/cart.store';
 import { CatalogService } from '../../core/services/catalog.service';
 import { CheckoutStore } from '../../core/services/checkout.store';
+import { isExternalCmsLink, parseInternalCmsLink } from '../../core/utils/cms-link';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { useBodyClass } from '../../core/utils/body-class';
 import { showToast } from '../../core/utils/toast';
@@ -168,6 +169,16 @@ export class CollectionsPage {
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
     void this.router.navigateByUrl('/checkout/shipping');
+  }
+
+  /** Checks whether a collection CTA URL points to an external HTTPS target. */
+  isExternalLink(url: string | null | undefined): boolean {
+    return isExternalCmsLink(url);
+  }
+
+  /** Parses an internal collection link into a `UrlTree` so query strings like `?category=dam-vay` stay intact. */
+  cmsLink(url: string | null | undefined): UrlTree | string {
+    return parseInternalCmsLink(this.router, url, '/products');
   }
 
   /**

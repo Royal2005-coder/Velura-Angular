@@ -170,19 +170,29 @@ export async function supabaseRequest(
 }
 
 /**
- * Resolve the Auth user for a bearer token, or null if invalid.
+ * Resolve the Auth user for a bearer token, or null only when Supabase REJECTED the token (4xx).
+ *
+ * A network blip or 5xx is not a verdict on the token: it is retried (cluster DNS drops single
+ * lookups) and, if it persists, thrown so callers report an outage instead of "token expired".
+ * Swallowing it as null made a valid Google login fail intermittently with INVALID_TOKEN.
  */
 export async function getAuthUser(accessToken: string): Promise<AuthUser | null> {
   if (!accessToken) return null;
-  try {
-    const result = await supabaseRequest("/auth/v1/user", {
-      useAnonKey: true,
-      accessToken,
-      silentError: true
-    });
-    return asAuthUser(result.data);
-  } catch {
-    return null;
+  const attempts = 3;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const result = await supabaseRequest("/auth/v1/user", {
+        useAnonKey: true,
+        accessToken,
+        silentError: true
+      });
+      return asAuthUser(result.data);
+    } catch (error) {
+      const status = error instanceof HttpError ? error.status : 0;
+      if (status >= 400 && status < 500 && status !== 408 && status !== 429) return null;
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+    }
   }
 }
 

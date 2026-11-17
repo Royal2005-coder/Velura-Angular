@@ -128,7 +128,7 @@ spec:
           containers:
           - name: syncer
             image: ghcr.io/royal2005-coder/velura-api@sha256:b4ad23afb741fbd19a803a31a7d9d1fec7ebe15a92dc628e8e927117a4da4ae0
-            command: ["node", "/etc/sync/sync.mjs"]
+            command: ["node", "/app/sync/sync.mjs"]
             securityContext:
               allowPrivilegeEscalation: false
               capabilities:
@@ -157,7 +157,7 @@ spec:
                 memory: 128Mi
             volumeMounts:
             - name: sync-script
-              mountPath: /etc/sync
+              mountPath: /app/sync
           volumes:
           - name: sync-script
             configMap:

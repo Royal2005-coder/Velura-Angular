@@ -41,15 +41,22 @@
             <div class="collection-hero" [style.background]="group.lookbook.heroGradient">
               <div class="collection-hero__glow" aria-hidden="true"></div>
               <span class="collection-hero__script" aria-hidden="true">{{ group.lookbook.script }}</span>
-              <img [src]="getModelCutout(group.lookbook, 0)" alt="" class="collection-model model-1" loading="lazy" />
-              <img [src]="getModelCutout(group.lookbook, 1)" alt="" class="collection-model model-2" loading="lazy" />
-              <img [src]="getModelCutout(group.lookbook, 2)" alt="" class="collection-model model-3" loading="lazy" />
-              <img [src]="getModelCutout(group.lookbook, 3)" alt="" class="collection-model model-4" loading="lazy" />
-              <img [src]="getModelCutout(group.lookbook, 4)" alt="" class="collection-model model-5" loading="lazy" />
+              @if (group.lookbook.heroMode === 'cover' && group.lookbook.banner) {
+                <img [src]="group.lookbook.banner" alt="" class="collection-hero__cover" loading="lazy" />
+              } @else {
+                <img [src]="getModelCutout(group.lookbook, 0)" alt="" class="collection-model model-1" loading="lazy" />
+                <img [src]="getModelCutout(group.lookbook, 1)" alt="" class="collection-model model-2" loading="lazy" />
+                <img [src]="getModelCutout(group.lookbook, 2)" alt="" class="collection-model model-3" loading="lazy" />
+                <img [src]="getModelCutout(group.lookbook, 3)" alt="" class="collection-model model-4" loading="lazy" />
+                <img [src]="getModelCutout(group.lookbook, 4)" alt="" class="collection-model model-5" loading="lazy" />
+              }
               <div class="collection-hero__shade" aria-hidden="true"></div>
               <div class="collection-hero__title-wrap">
                 <span class="collection-hero__tag">{{ group.lookbook.colNumber }}</span>
                 <h2 class="collection-hero__name" [id]="'collection-title-' + group.lookbook.id">{{ group.lookbook.name }}</h2>
+                @if (group.lookbook.homeStory) {
+                  <p class="collection-hero__lede">{{ group.lookbook.homeStory }}</p>
+                }
               </div>
             </div>
 

@@ -88,6 +88,7 @@ interface ApiOrder {
   shipping_address?: string;
   payment_method?: string;
   payment_status?: string;
+  payment_provider?: string | null;
   refund_status?: string;
   refunded_amount?: number;
   can_cancel?: boolean;
@@ -220,7 +221,6 @@ interface ApiReturnDetail extends ApiReturn {
   exchange_order?: ApiReturnExchangeOrder | null;
   evidence?: ApiReturnEvidence[];
   instructions?: string[];
-  response_options?: Array<{ code: string; label: string; requires_note?: boolean; attention_status?: string }>;
   contact_history?: Array<{ responder?: string; code?: string; label?: string; note?: string | null; contacted_at?: string; created_at?: string }>;
 }
 
@@ -295,6 +295,14 @@ function mapOrderItem(item: ApiOrderItem): DemoOrderLine {
   };
 }
 
+/** Customer-facing gateway: COD, or the provider recorded on the payment (orders.payment_method is only ONLINE_PAYMENT). */
+function orderPaymentMethod(order: ApiOrder): DemoOrder['payment'] {
+  const method = order.payment_method?.toUpperCase() || '';
+  if (method === 'COD') return 'COD';
+  const gateway = (order.payment_provider || method).toUpperCase();
+  return gateway === 'MOMO' ? 'MOMO' : gateway === 'VNPAY' ? 'VNPAY' : 'STRIPE';
+}
+
 function mapOrder(order: ApiOrder, member: boolean, userId: string | null): DemoOrder {
   const items = (order.items || []).map(mapOrderItem);
   return {
@@ -306,9 +314,7 @@ function mapOrder(order: ApiOrder, member: boolean, userId: string | null): Demo
     address: mapAddress(order),
     items,
     status: ORDER_STATUS_MAP[order.status || ''] ?? 'pending',
-    payment: order.payment_method?.toUpperCase() === 'COD' ? 'COD'
-      : ['STRIPE', 'ONLINE_PAYMENT'].includes(order.payment_method?.toUpperCase() || '') ? 'STRIPE'
-      : order.payment_method?.toUpperCase() === 'MOMO' ? 'MOMO' : 'VNPAY',
+    payment: orderPaymentMethod(order),
     paymentState: ['paid', 'refund_pending', 'refunded', 'partially_refunded'].includes(order.payment_status || '') ? 'paid'
       : order.payment_status === 'failed' ? 'failed' : order.payment_status === 'expired' ? 'expired'
       : order.status === 'cancelled' ? 'cancelled' : 'pending',
@@ -451,7 +457,6 @@ function mapReturnTracking(row: ApiReturnDetail): ReturnTrackingDetail {
     evidence: (row.evidence || []).map(mapTrackingEvidence),
     instructions: row.instructions || [],
     items: (row.items || []).map(mapReturnItem),
-    responseOptions: row.response_options || [],
     contactHistory: row.contact_history || [],
     version: row.version,
   };
@@ -835,18 +840,6 @@ export class OrderAccountApiStore implements OrderAccountModel {
     this.assertCurrent(context);
     if (!data.evidence) throw new Error('Chưa lưu được bằng chứng đóng gói.');
     return mapTrackingEvidence(data.evidence);
-  }
-
-  /** Customer chooses one option to automate resolution without manual back-and-forth. */
-  async respondReturn(returnId: string, code: string, note = ''): Promise<ReturnTrackingDetail> {
-    const context = this.context();
-    const path = context.userId
-      ? `/api/user/returns/${encodeURIComponent(returnId)}/response`
-      : `/api/user/returns/guest/${encodeURIComponent(returnId)}/response?guest_access_token=${encodeURIComponent(context.guestToken)}`;
-    const data = await firstValueFrom(this.api.post<{ return?: ApiReturnDetail }>(path, { code, note }));
-    this.assertCurrent(context);
-    if (!data.return?.return_id) throw new Error('Không ghi nhận được phản hồi. Vui lòng thử lại.');
-    return mapReturnTracking(data.return);
   }
 
   /** Directs unavailable replacement choices to CSKH because no real mutation exists yet. */

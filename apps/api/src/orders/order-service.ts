@@ -201,7 +201,17 @@ export function createOrderService({
         // Evidence is supplementary; a storage/schema hiccup must not hide the order itself.
         evidence = [];
       }
-      return { ...decorated, evidence };
+      let sourceReturn: JsonObject | null = null;
+      const sourceReturnId = asString(order.source_return_id);
+      if (order.order_kind === "exchange" && sourceReturnId && typeof repository.findSourceReturn === "function") {
+        try {
+          sourceReturn = await repository.findSourceReturn(sourceReturnId, context.accessToken);
+        } catch {
+          // The return reference is context only; a lookup failure must not hide the order.
+          sourceReturn = null;
+        }
+      }
+      return { ...decorated, evidence, ...(order.order_kind === "exchange" ? { source_return: sourceReturn } : {}) };
     },
 
     async listEvidence(context, orderId) {

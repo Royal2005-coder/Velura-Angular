@@ -1,30 +1,104 @@
+/** Cách `/collections` dựng hero: `models` = gradient + 5 người mẫu cutout, `cover` = ảnh bìa full-bleed. */
+export type CollectionHeroMode = 'models' | 'cover';
+
+/** Dạng dữ liệu hiển thị một bộ sưu tập trên storefront (đã chuẩn hóa từ API CMS hoặc fallback tĩnh). */
 export interface CollectionLookbook {
   id: string;
   code?: string;
   name: string;
   label: string;
   quote?: string;
+  /** Ảnh bìa; chỉ hiển thị khi `heroMode === 'cover'`. */
   banner: string;
   decor: string;
   story: string[];
   badge: string;
+  /** Mô tả ngắn (≤160 ký tự): lede hero `/collections` và mô tả runway trang chủ. Rỗng = không có. */
   homeStory: string;
   colNumber: string;
   script: string;
   heroGradient: string;
   kicker: string;
   storyHeadline: string;
+  /** Mô tả chi tiết bên hông (xuống dòng được giữ nguyên). */
   storyDesc: string;
   exploreCta: string;
   categoryLink: string;
   productsSub: string;
   productsTitle: string;
   closingQuote: string;
+  /** 5 người mẫu hero của `/collections` (chế độ `models`). */
   models: string[];
+  heroMode: CollectionHeroMode;
+  /** Ảnh người mẫu cutout riêng cho runway trang chủ; rỗng = chưa có. */
+  homeModel: string;
+  showOnHome: boolean;
+  homeSortOrder: number;
+  /** Id combo/set hiển thị ở `/collections`, theo đúng thứ tự admin chọn. */
+  productIds: string[];
 }
 
-export function normalizeCollectionLookbook(raw: any): CollectionLookbook {
+/** Bản ghi collection từ API (snake_case) hoặc từ model đã chuẩn hóa (camelCase); mọi trường tùy chọn. */
+export interface CollectionLookbookSource {
+  id?: string;
+  code?: string;
+  name?: string;
+  label?: string;
+  quote?: string;
+  banner_url?: string | null;
+  banner?: string;
+  decor_url?: string | null;
+  decor?: string;
+  story_paragraphs?: unknown;
+  story?: unknown;
+  badge?: string | null;
+  home_story?: string | null;
+  homeStory?: string;
+  col_number?: string | null;
+  colNumber?: string;
+  script?: string | null;
+  hero_gradient?: string | null;
+  heroGradient?: string;
+  kicker?: string | null;
+  story_headline?: string | null;
+  storyHeadline?: string;
+  story_desc?: string | null;
+  storyDesc?: string;
+  explore_cta?: string | null;
+  exploreCta?: string;
+  category_link?: string | null;
+  categoryLink?: string;
+  products_sub?: string | null;
+  productsSub?: string;
+  products_title?: string | null;
+  productsTitle?: string;
+  closing_quote?: string | null;
+  closingQuote?: string;
+  models?: unknown;
+  hero_mode?: string | null;
+  heroMode?: string;
+  home_model_url?: string | null;
+  homeModel?: string;
+  show_on_home?: boolean | null;
+  showOnHome?: boolean;
+  home_sort_order?: number | null;
+  homeSortOrder?: number;
+  product_ids?: unknown;
+  productIds?: unknown;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : [];
+}
+
+/**
+ * Chuẩn hóa một bản ghi collection (snake_case từ `GET /api/v1/collections`) sang `CollectionLookbook`.
+ * Trường mới thiếu (API/migration cũ) rơi về mặc định: `heroMode: 'models'`, `showOnHome: false`, `productIds: []`.
+ */
+export function normalizeCollectionLookbook(raw: CollectionLookbookSource): CollectionLookbook {
   const id = raw.code || raw.id || 'collection';
+  const models = stringList(raw.models);
+  const sortOrder = raw.home_sort_order ?? raw.homeSortOrder;
   return {
     id,
     code: id,
@@ -33,9 +107,9 @@ export function normalizeCollectionLookbook(raw: any): CollectionLookbook {
     quote: raw.quote || '',
     banner: raw.banner_url || raw.banner || '',
     decor: raw.decor_url || raw.decor || '/assets/images/collections/soft-ceremony-decor.png',
-    story: Array.isArray(raw.story_paragraphs) ? raw.story_paragraphs : (Array.isArray(raw.story) ? raw.story : []),
+    story: stringList(raw.story_paragraphs ?? raw.story),
     badge: raw.badge || 'ELEGANT',
-    homeStory: raw.home_story || raw.homeStory || raw.story_desc || raw.storyDesc || '',
+    homeStory: raw.home_story || raw.homeStory || '',
     colNumber: raw.col_number || raw.colNumber || 'COLLECTION · VELURA',
     script: raw.script || 'in bloom',
     heroGradient: raw.hero_gradient || raw.heroGradient || 'linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%)',
@@ -47,17 +121,33 @@ export function normalizeCollectionLookbook(raw: any): CollectionLookbook {
     productsSub: raw.products_sub || raw.productsSub || 'SELECTED FOR YOU',
     productsTitle: raw.products_title || raw.productsTitle || 'Những thiết kế nổi bật',
     closingQuote: raw.closing_quote || raw.closingQuote || 'Một chút lãng mạn, vừa đủ cho riêng bạn.',
-    models: Array.isArray(raw.models) && raw.models.length > 0 ? raw.models : [
+    models: models.length > 0 ? models : [
       '/assets/images/models/model_cutout_1.png',
       '/assets/images/models/model_cutout_2.png',
       '/assets/images/models/model_cutout_3.png',
       '/assets/images/models/model_cutout_4.png',
       '/assets/images/models/model_cutout_5.png',
     ],
+    heroMode: (raw.hero_mode ?? raw.heroMode) === 'cover' ? 'cover' : 'models',
+    homeModel: raw.home_model_url || raw.homeModel || '',
+    showOnHome: (raw.show_on_home ?? raw.showOnHome) === true,
+    homeSortOrder: typeof sortOrder === 'number' && Number.isFinite(sortOrder) ? sortOrder : 0,
+    productIds: stringList(raw.product_ids ?? raw.productIds),
   };
 }
 
-export const COLLECTION_LOOKBOOKS: CollectionLookbook[] = [
+/** Mặc định cho các trường CMS mới của fallback tĩnh: hero `models`, không lên runway trang chủ, không có combo chọn sẵn. */
+const STATIC_CMS_DEFAULTS: Pick<CollectionLookbook, 'heroMode' | 'homeModel' | 'showOnHome' | 'homeSortOrder' | 'productIds'> = {
+  heroMode: 'models',
+  homeModel: '',
+  showOnHome: false,
+  homeSortOrder: 0,
+  productIds: [],
+};
+
+type StaticLookbookContent = Omit<CollectionLookbook, keyof typeof STATIC_CMS_DEFAULTS>;
+
+const STATIC_LOOKBOOK_CONTENT: StaticLookbookContent[] = [
   {
     id: 'soft-ceremony',
     name: 'Soft Ceremony',
@@ -239,3 +329,9 @@ export const COLLECTION_LOOKBOOKS: CollectionLookbook[] = [
     ],
   },
 ];
+
+/** Fallback tĩnh khi API collections lỗi/rỗng: nội dung cố định kèm mặc định của các trường CMS mới. */
+export const COLLECTION_LOOKBOOKS: CollectionLookbook[] = STATIC_LOOKBOOK_CONTENT.map((item) => ({
+  ...STATIC_CMS_DEFAULTS,
+  ...item,
+}));

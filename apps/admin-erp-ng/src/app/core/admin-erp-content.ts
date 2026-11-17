@@ -1,4 +1,5 @@
-import type { AdminBlogInput } from './admin-erp-api.service';
+import { environment } from '../../environments/environment';
+import type { AdminBannerRow, AdminBlogInput, AdminCollectionRow } from './admin-erp-api.service';
 import { slugifyProductText } from './admin-erp-catalog';
 import { blogEditorText, sanitizeEditorHtml } from './admin-erp-blog-html';
 
@@ -216,5 +217,246 @@ export function blogRequestBody(draft: BlogDraft, expectedVersion?: number): Adm
     readMinutes: draft.readMinutes,
     isFeatured: draft.isFeatured,
     ...(expectedVersion == null ? {} : { expectedVersion }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Banner & collection CMS rules (KAN-116). Mirror `apps/api/src/{banners,collections}` validation so
+// the operator sees the exact refusal before sending; the API stays the authority.
+// ---------------------------------------------------------------------------
+
+/** Longest stored image/link URL, same ceiling as the API (FR-S3). */
+export const CMS_URL_MAX = 500;
+/** Homepage runway always shows exactly five collections' models. */
+export const HOME_MODEL_SLOTS = 5;
+/** `/collections` hero strip holds exactly five cutouts when `hero_mode = 'models'`. */
+export const COLLECTION_MODEL_SLOTS = 5;
+/** Maximum combo/set cards a collection can pin. */
+export const COLLECTION_COMBO_MAX = 10;
+/** `sort_order` / `home_sort_order` bounds. */
+export const CMS_SORT_MAX = 9999;
+const GRADIENT_PATTERN = /^linear-gradient\([^;{}]{1,300}\)$/;
+const COLLECTION_CODE_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/** Per-field length ceilings for the collection form (FR-2..FR-4). */
+export const COLLECTION_FIELD_LIMITS = {
+  name: 80,
+  code: 60,
+  home_story: 160,
+  story_desc: 600,
+  kicker: 60,
+  story_headline: 120,
+  explore_cta: 40,
+  products_sub: 40,
+  products_title: 80,
+  closing_quote: 200,
+  script: 40,
+  col_number: 60,
+  badge: 30,
+} as const;
+export type CollectionLimitedField = keyof typeof COLLECTION_FIELD_LIMITS;
+
+/** Per-field length ceilings for the banner form (FR-19). */
+export const BANNER_FIELD_LIMITS = { title: 120, subtitle: 240, button_text: 40 } as const;
+
+/**
+ * Resolves a CMS image path against the storefront origin. `/assets/...` files live on the storefront,
+ * not on the admin origin, so a bare relative path 404s here. `http(s)://`, `data:` and anything else pass through.
+ */
+export function resolveStorefrontAsset(url: string | null | undefined, origin: string = environment.storefrontUrl): string {
+  const value = String(url ?? '').trim();
+  if (!value) return '';
+  if (value.startsWith('/') && !value.startsWith('//')) {
+    return `${origin.replace(/\/+$/, '')}${value}`;
+  }
+  return value;
+}
+
+/** Link target the storefront may follow: empty, an in-site path (`/x`, never `//host`) or `https://`. */
+export function isCmsLinkUrl(value: string): boolean {
+  const text = value.trim();
+  if (!text) return true;
+  if (text.length > CMS_URL_MAX) return false;
+  return (text.startsWith('/') && !text.startsWith('//')) || text.startsWith('https://');
+}
+
+/** Stored image URL: `https://…` (any host) or a storefront `/assets/…` path (FR-S3). Blank is "no image". */
+export function isCmsMediaUrl(value: string): boolean {
+  const text = value.trim();
+  if (!text) return true;
+  return text.length <= CMS_URL_MAX && (text.startsWith('https://') || text.startsWith('/assets/'));
+}
+
+function isSortOrder(value: unknown): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= CMS_SORT_MAX;
+}
+
+/** Banner form check (FR-19). Returns a message per field, empty when valid. */
+export function validateBannerDraft(draft: Partial<AdminBannerRow>): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const title = (draft.title ?? '').trim();
+  if (!title) errors['title'] = 'Tiêu đề banner là bắt buộc.';
+  else if (title.length > BANNER_FIELD_LIMITS.title) errors['title'] = `Tiêu đề tối đa ${BANNER_FIELD_LIMITS.title} ký tự.`;
+  if ((draft.subtitle ?? '').trim().length > BANNER_FIELD_LIMITS.subtitle) errors['subtitle'] = `Phụ đề tối đa ${BANNER_FIELD_LIMITS.subtitle} ký tự.`;
+  if ((draft.button_text ?? '').trim().length > BANNER_FIELD_LIMITS.button_text) errors['button_text'] = `Chữ nút bấm tối đa ${BANNER_FIELD_LIMITS.button_text} ký tự.`;
+  if (!isCmsLinkUrl(draft.link_url ?? '')) errors['link_url'] = 'Liên kết phải bắt đầu bằng / (trong website) hoặc https://.';
+  const media = (draft.media_url ?? '').trim();
+  if (!media) errors['media_url'] = 'Hình ảnh hoặc video banner là bắt buộc.';
+  else if (!isCmsMediaUrl(media)) errors['media_url'] = 'Đường dẫn media phải là https://… hoặc /assets/… (tối đa 500 ký tự).';
+  if (!isCmsMediaUrl(draft.poster_url ?? '')) errors['poster_url'] = 'Ảnh poster phải là https://… hoặc /assets/… (tối đa 500 ký tự).';
+  if (!Number.isInteger(draft.sort_order ?? 0) || (draft.sort_order ?? 0) < 0) errors['sort_order'] = 'Thứ tự phải là số nguyên không âm.';
+  return errors;
+}
+
+/** Body for banner create/update: trimmed, placement pinned to the only live one (D5). */
+export function bannerRequestBody(draft: Partial<AdminBannerRow>): Partial<AdminBannerRow> {
+  const mediaType = draft.media_type === 'video' ? 'video' : 'image';
+  return {
+    placement: 'products_hero',
+    title: (draft.title ?? '').trim(),
+    subtitle: (draft.subtitle ?? '').trim() || null,
+    tag_label: (draft.tag_label ?? '').trim() || null,
+    media_type: mediaType,
+    media_url: (draft.media_url ?? '').trim(),
+    poster_url: (draft.poster_url ?? '').trim() || null,
+    button_text: (draft.button_text ?? '').trim() || null,
+    link_url: (draft.link_url ?? '').trim() || null,
+    is_active: draft.is_active !== false,
+    sort_order: Number(draft.sort_order ?? 0),
+    ...(draft.metadata ? { metadata: draft.metadata } : {}),
+  };
+}
+
+/** Context the collection form needs from sibling rows to apply cross-row rules. */
+export interface CollectionValidationContext {
+  /** `true` while editing an existing row (code is then immutable and not re-validated). */
+  editing: boolean;
+  /** Count of OTHER collections that are `is_active` and `show_on_home`. */
+  otherHomeSlotsUsed: number;
+}
+
+/** Collection form check mirroring §5.3 (length, URL, gradient, cross-field and slot rules). */
+export function validateCollectionDraft(draft: Partial<AdminCollectionRow>, context: CollectionValidationContext): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const text = (value: string | null | undefined): string => (value ?? '').trim();
+  const labels: Record<CollectionLimitedField, string> = {
+    name: 'Tên bộ sưu tập',
+    code: 'Mã định danh',
+    home_story: 'Mô tả ngắn',
+    story_desc: 'Mô tả bên hông chi tiết',
+    kicker: 'Kicker',
+    story_headline: 'Tiêu đề câu chuyện',
+    explore_cta: 'Chữ nút CTA',
+    products_sub: 'Dòng phụ cụm sản phẩm',
+    products_title: 'Tiêu đề cụm sản phẩm',
+    closing_quote: 'Trích dẫn',
+    script: 'Chữ ký nghệ thuật',
+    col_number: 'Kỳ / phiên bản',
+    badge: 'Badge',
+  };
+  for (const field of Object.keys(COLLECTION_FIELD_LIMITS) as CollectionLimitedField[]) {
+    if (text(draft[field]).length > COLLECTION_FIELD_LIMITS[field]) {
+      errors[field] = `${labels[field]} tối đa ${COLLECTION_FIELD_LIMITS[field]} ký tự.`;
+    }
+  }
+  if (!text(draft.name)) errors['name'] = 'Tên bộ sưu tập là bắt buộc.';
+  if (!text(draft.story_desc)) errors['story_desc'] = 'Mô tả bên hông chi tiết là bắt buộc.';
+  if (!context.editing) {
+    const code = text(draft.code).toLowerCase();
+    if (!code) errors['code'] = 'Mã định danh (slug) là bắt buộc.';
+    else if (!errors['code'] && !COLLECTION_CODE_PATTERN.test(code)) errors['code'] = 'Mã chỉ gồm chữ thường, số và dấu gạch ngang, ví dụ soft-ceremony.';
+  }
+  if (!isCmsLinkUrl(draft.category_link ?? '')) errors['category_link'] = 'Đường dẫn phải bắt đầu bằng / (trong website) hoặc https://.';
+  const gradient = text(draft.hero_gradient);
+  if (gradient && !GRADIENT_PATTERN.test(gradient)) errors['hero_gradient'] = 'Gradient phải có dạng linear-gradient(...).';
+  if (!isCmsMediaUrl(draft.banner_url ?? '')) errors['banner_url'] = 'Ảnh bìa phải là https://… hoặc /assets/… (tối đa 500 ký tự).';
+  if (!isCmsMediaUrl(draft.home_model_url ?? '')) errors['home_model_url'] = 'Ảnh trang chủ phải là https://… hoặc /assets/… (tối đa 500 ký tự).';
+  const models = (draft.models ?? []).map((url) => url.trim()).filter(Boolean);
+  const slotCount = (draft.models ?? []).length;
+  if (slotCount > COLLECTION_MODEL_SLOTS) errors['models'] = `Tối đa ${COLLECTION_MODEL_SLOTS} ảnh người mẫu.`;
+  else if (models.some((url) => !isCmsMediaUrl(url))) errors['models'] = 'Ảnh người mẫu phải là https://… hoặc /assets/….';
+  if (draft.hero_mode === 'cover' && !text(draft.banner_url)) {
+    errors['banner_url'] = 'Chế độ "Ảnh bìa" cần tải ảnh bìa lên.';
+  }
+  if (draft.is_active !== false && draft.hero_mode !== 'cover' && !errors['models'] && models.length !== COLLECTION_MODEL_SLOTS) {
+    errors['models'] = `Bộ sưu tập đang bật ở chế độ 5 người mẫu cần đủ ${COLLECTION_MODEL_SLOTS} ảnh (hiện có ${models.length}). Tải thêm ảnh hoặc tắt kích hoạt.`;
+  }
+  if (draft.show_on_home) {
+    if (!text(draft.home_model_url)) {
+      errors['home_model_url'] = 'Bật hiển thị trang chủ cần có ảnh người mẫu trang chủ.';
+    }
+    if (draft.is_active !== false && context.otherHomeSlotsUsed + 1 > HOME_MODEL_SLOTS) {
+      errors['show_on_home'] = `Trang chủ đã đủ ${HOME_MODEL_SLOTS} người mẫu. Hãy tắt một bộ sưu tập khác trước.`;
+    }
+  }
+  if (!isSortOrder(draft.sort_order ?? 0)) errors['sort_order'] = `Thứ tự phải là số nguyên từ 0 đến ${CMS_SORT_MAX}.`;
+  if (!isSortOrder(draft.home_sort_order ?? 0)) errors['home_sort_order'] = `Thứ tự trang chủ phải là số nguyên từ 0 đến ${CMS_SORT_MAX}.`;
+  if ((draft.product_ids ?? []).length > COLLECTION_COMBO_MAX) errors['product_ids'] = `Tối đa ${COLLECTION_COMBO_MAX} combo/set.`;
+  return errors;
+}
+
+/** Body for collection create/update (§5.3). `label` is left to the server (= name); `code` is immutable once created. */
+export function collectionRequestBody(draft: Partial<AdminCollectionRow>, editing: boolean): Partial<AdminCollectionRow> {
+  const text = (value: string | null | undefined): string => (value ?? '').trim();
+  const body: Partial<AdminCollectionRow> = {
+    name: text(draft.name),
+    col_number: text(draft.col_number),
+    script: text(draft.script),
+    badge: text(draft.badge),
+    hero_gradient: text(draft.hero_gradient),
+    banner_url: text(draft.banner_url) || null,
+    hero_mode: draft.hero_mode === 'cover' ? 'cover' : 'models',
+    models: (draft.models ?? []).map((url) => url.trim()).filter(Boolean).slice(0, COLLECTION_MODEL_SLOTS),
+    home_story: text(draft.home_story) || null,
+    kicker: text(draft.kicker),
+    story_headline: text(draft.story_headline),
+    story_desc: text(draft.story_desc),
+    explore_cta: text(draft.explore_cta),
+    category_link: text(draft.category_link),
+    products_sub: text(draft.products_sub),
+    products_title: text(draft.products_title),
+    closing_quote: text(draft.closing_quote),
+    home_model_url: text(draft.home_model_url) || null,
+    show_on_home: Boolean(draft.show_on_home),
+    home_sort_order: Number(draft.home_sort_order ?? 0),
+    product_ids: [...new Set(draft.product_ids ?? [])].slice(0, COLLECTION_COMBO_MAX),
+    is_active: draft.is_active !== false,
+    sort_order: Number(draft.sort_order ?? 0),
+  };
+  if (!editing) body.code = text(draft.code).toLowerCase();
+  return body;
+}
+
+/** Returns a copy of `list` with the item at `from` moved to `to`; out-of-range moves return the list unchanged. */
+export function moveListItem<T>(list: readonly T[], from: number, to: number): T[] {
+  const next = [...list];
+  if (from < 0 || from >= next.length || to < 0 || to >= next.length || from === to) return next;
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+/** Live state of the homepage runway across all collections, for the "n/5" chip (FR-14). */
+export interface HomeRunwaySummary {
+  /** Collections that are active, flagged for the homepage and have a model image. */
+  count: number;
+  /** `true` when the runway is complete (exactly five). */
+  complete: boolean;
+  /** Active collections flagged for the homepage that are missing their model image. */
+  missingModel: string[];
+  /** Names sharing a `home_model_url` with another runway collection (E3). */
+  duplicateModel: string[];
+}
+
+/** Counts the runway the storefront will render and reports what is blocking it. */
+export function homeRunwaySummary(collections: readonly Pick<AdminCollectionRow, 'name' | 'is_active' | 'show_on_home' | 'home_model_url'>[]): HomeRunwaySummary {
+  const flagged = collections.filter((c) => c.is_active && c.show_on_home);
+  const ready = flagged.filter((c) => (c.home_model_url ?? '').trim());
+  const urls = ready.map((c) => (c.home_model_url ?? '').trim());
+  return {
+    count: ready.length,
+    complete: ready.length === HOME_MODEL_SLOTS,
+    missingModel: flagged.filter((c) => !(c.home_model_url ?? '').trim()).map((c) => c.name),
+    duplicateModel: ready.filter((c) => urls.filter((url) => url === (c.home_model_url ?? '').trim()).length > 1).map((c) => c.name),
   };
 }

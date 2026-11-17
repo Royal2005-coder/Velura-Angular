@@ -239,14 +239,6 @@ p {
   color: var(--erp-muted);
 }
 
-.erp-required {
-  color: var(--erp-danger, #e11d48);
-  font-weight: 700;
-  margin-left: 3px;
-  display: inline-block;
-  vertical-align: middle;
-}
-
 /* Angular Framework Form Validation Feedback */
 .erp-input.ng-invalid.ng-touched,
 .erp-select.ng-invalid.ng-touched,
@@ -372,8 +364,34 @@ svg.admin-line-icon,
 .erp-required {
   color: var(--erp-danger, #b4233e);
   font-weight: 700;
-  margin-left: 2px;
+  margin-left: 3px;
+  display: inline-block;
+  vertical-align: middle;
   user-select: none;
+}
+
+/* Spinner dùng chung thay cho dòng chữ "Đang tải…"; nhãn chữ đi kèm vẫn giữ để đọc màn hình. */
+.erp-spinner {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  border: 2px solid var(--erp-line, #e5e7eb);
+  border-top-color: var(--erp-accent, #7a283c);
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: erp-spin 700ms linear infinite;
+}
+@keyframes erp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .erp-spinner {
+    animation-duration: 1800ms;
+  }
 }
 
 .erp-field-error {

@@ -57,6 +57,7 @@ begin
  perform public.velura_return_item_action(h,remainder,'reject','{"reason":"Only affected unit qualifies"}',1,actor);
  if (select decision_status from public.return_exchange where return_id=h)<>'PARTIALLY_APPROVED' then raise exception 'Mixed decisions lost'; end if;
  if (select item_status from public.return_item where return_item_id=i)<>'WAITING_RETURN' then raise exception 'Approval did not auto-advance to waiting carrier'; end if;
+ if (select pickup_scheduled_at from public.return_item where return_item_id=i) is distinct from (date_trunc('day', now() at time zone 'Asia/Ho_Chi_Minh') + interval '1 day 9 hours') at time zone 'Asia/Ho_Chi_Minh' then raise exception 'Approval did not store the next-day 09:00 pickup slot'; end if;
  -- Another active request can hold a disjoint original unit, not block the entire purchased line.
  insert into public.return_exchange(order_id,user_id,return_type,status,description) values(order_id_value,actor,'refund','REQUESTED','Disjoint request') returning return_id into second_h;
  insert into public.return_item(return_id,order_item_id,quantity) values(second_h,original_item,1) returning return_item_id into remainder;

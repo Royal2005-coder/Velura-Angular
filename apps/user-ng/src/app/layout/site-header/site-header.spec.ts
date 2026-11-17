@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { of } from 'rxjs';
 import { createStorefrontPage, lastStorefrontFixture, sampleProduct, TestRouteTarget } from '../../../testing/storefront-testing';
 import { CatalogService } from '../../core/services/catalog.service';
+import { AuthService } from '../../core/services/auth.service';
 import { SiteHeader } from './site-header';
 
 describe('SiteHeader', () => {
@@ -166,6 +167,44 @@ describe('SiteHeader', () => {
 
       expect(header.navOpen()).toBe(false);
       expect(header.searchOpen()).toBe(false);
+    });
+
+    it('toggles the account dropdown by click and closes on outside click, Escape and route change', async () => {
+      const header = await createStorefrontPage(SiteHeader, {}, { routes });
+      const router = TestBed.inject(Router);
+      const fixture = lastStorefrontFixture();
+      fixture.detectChanges();
+      const trigger = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.account-dropdown-trigger');
+
+      trigger?.click();
+      fixture.detectChanges();
+      expect(header.accountOpen()).toBe(true);
+      expect((fixture.nativeElement as HTMLElement).querySelector('.account-dropdown-menu')?.classList.contains('is-open')).toBe(true);
+
+      trigger?.click();
+      expect(header.accountOpen()).toBe(false);
+
+      header.accountOpen.set(true);
+      document.body.click();
+      expect(header.accountOpen()).toBe(false);
+
+      header.accountOpen.set(true);
+      header.onEscape();
+      expect(header.accountOpen()).toBe(false);
+
+      header.accountOpen.set(true);
+      await router.navigateByUrl('/about');
+      expect(header.accountOpen()).toBe(false);
+    });
+
+    it('does not show the order lookup item in the member account menu', async () => {
+      await createStorefrontPage(SiteHeader, {}, { routes });
+      const fixture = lastStorefrontFixture();
+      TestBed.inject(AuthService).applySession('token', { user_id: 'member-1', email: 'a@velura.vn', full_name: 'Khách' });
+      fixture.detectChanges();
+      const items = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.account-dropdown-item')).map((el) => el.textContent?.trim());
+      expect(items).toContain('Đơn hàng của tôi');
+      expect(items).not.toContain('Tra cứu đơn hàng');
     });
 
     it('keeps header search input clean while collapsed and displays query upon search focus', async () => {

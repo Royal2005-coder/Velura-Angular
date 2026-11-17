@@ -4,6 +4,11 @@ import { AdminErpApiService, AdminReturnItemActionInput, AdminReturnLine, AdminR
 import { QrConfirmFacts } from '../../shared/ui/admin-qr-confirm';
 import { ReturnFlowComponent, ReturnFlowKind } from './return-flow.component';
 
+/** Builds the change event the QA criterion dropdown emits. */
+function pick(code: string): Event {
+  return { target: { value: code } } as unknown as Event;
+}
+
 /** Fixed facts a real scan would publish for the parcel under test. */
 function qrFacts(overrides: Partial<QrConfirmFacts> = {}): QrConfirmFacts {
   return {
@@ -58,7 +63,7 @@ describe('ReturnFlowComponent per-item operations', () => {
 
   it('receives only the selected quantity with tag/condition/proof facts and seal false allowed', () => {
     const { component, actions, uploads } = boot('receive');
-    component.quantity.set(1); component.receivedQuantity.set(1); component.sealIntact.set(false); component.proofFile.set(image);
+    component.quantity.set(1); component.receivedQuantity.set(1); component.setQaCriterion(pick('seal_broken')); component.proofFile.set(image);
     component.onQrFacts(qrFacts());
     expect(component.canSubmit()).toBe(true);
     component.submit();
@@ -71,11 +76,24 @@ describe('ReturnFlowComponent per-item operations', () => {
     expect(record.return_type).toBe('exchange');
   });
 
+  it('words a gateway requested outcome as pending and always clears saving', () => {
+    const { component, fixture } = boot('stripe', { ...line, item_status: 'RECEIVED', resolution_type: 'refund' });
+    fixture.componentRef.setInput('record', { ...record, payment_kind: 'stripe', refund_flow: 'gateway_auto', refund_receiver_status: 'not_required' });
+    fixture.detectChanges();
+    let message = '';
+    component.done.subscribe((value) => { message = value; });
+    component.submit();
+    expect(component.saving()).toBe(false);
+    expect(message).toContain('chờ cổng');
+    expect(message).not.toContain('đã hoàn tiền');
+  });
+
   it('records mismatches for the affected part rather than blocking all receipt facts', () => {
     const { component } = boot('receive');
     component.proofFile.set(image); component.onQrFacts(qrFacts());
-    component.matchesProduct.set(false); component.tagsIntact.set(false);
-    component.conditionAcceptable.set(false); component.disposition.set('repair');
+    component.setQaCriterion(pick('wrong_product')); component.disposition.set('repair');
+    expect(component.matchesProduct()).toBe(false);
+    expect(component.tagsIntact() && component.conditionAcceptable() && component.packageMatch() && component.sealIntact()).toBe(true);
     expect(component.canSubmit()).toBe(true);
   });
 
@@ -93,7 +111,7 @@ describe('ReturnFlowComponent per-item operations', () => {
     expect(component.canSubmit()).toBe(false);
     fixture.componentRef.setInput('canApprove', true); fixture.detectChanges();
     component.note.set('Đã xác minh bằng chứng và lịch sử gọi không nghe máy');
-    component.onQrFacts(qrFacts()); component.proofFile.set(image);
+    expect(component.needsQrScan()).toBe(false);
     expect(component.canSubmit()).toBe(true); component.submit();
     expect(actions[0].body.action).toBe('approve');
     expect(actions[0].body.expectedVersion).toBe(7);
@@ -218,15 +236,11 @@ describe('ReturnFlowComponent per-item operations', () => {
     expect(actions).toEqual([]);
   });
 
-  it('approves the quantity the customer requested only after scanning the parcel', () => {
+  it('approves the quantity the customer requested without any parcel scan', () => {
     const part: AdminReturnLine = { ...line, decision_status: 'pending', item_status: 'REQUESTED' };
     const { component, actions } = boot('approve', part);
     expect(component.showQuantityEditor()).toBe(false);
     component.note.set('Đã gọi xác nhận đổi size với khách');
-    expect(component.canSubmit()).toBe(false);
-    component.onQrFacts(qrFacts());
-    expect(component.canSubmit()).toBe(false);
-    component.proofFile.set(image);
     expect(component.canSubmit()).toBe(true); component.submit();
     expect(actions[0].body.quantity).toBe(3);
   });

@@ -1,4 +1,4 @@
-import { Observable, forkJoin, of, switchMap } from 'rxjs';
+import { Observable, finalize, forkJoin, of, switchMap } from 'rxjs';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { AdminErpApiService, AdminOrderRow, AdminReturnDisposition, AdminReturnItemAction, AdminReturnItemActionInput, AdminReturnLine, AdminReturnReplacementChoice, AdminReturnRow } from '../../core/admin-erp-api.service';
 import { CONTACT_RESULTS, MIN_NOTE_LENGTH, MIN_TRANSFER_REFERENCE_LENGTH, gatewayNote, gatewayRefundRefused, isGatewayRefundChannel, itemRefundAllowed, refundReceiverBlocked, returnItemActions } from '../../core/admin-erp-service-desk';
@@ -25,6 +25,22 @@ export const RETURN_ITEM_ACTION_LABELS: Readonly<Record<Exclude<ReturnFlowKind, 
   contact: 'Ghi nhận liên hệ khách', 'refund-info': 'Yêu cầu bổ sung tài khoản',
   manual: 'Đối soát chuyển khoản COD', stripe: 'Hoàn phần này qua cổng thanh toán',
 };
+/**
+ * Warehouse QA criteria offered in the receive form. Each one maps onto the five facts the receive RPC
+ * requires: `fails` names the one fact it flags, or is null when the part passes every check.
+ */
+export const RETURN_QA_CRITERIA: ReadonlyArray<{
+  code: string;
+  label: string;
+  fails: 'matchesProduct' | 'tagsIntact' | 'conditionAcceptable' | 'packageMatch' | 'sealIntact' | null;
+}> = [
+  { code: 'pass', label: 'Đạt: đúng sản phẩm, còn tem/nhãn, nguyên niêm phong', fails: null },
+  { code: 'wrong_product', label: 'Không đạt: sai sản phẩm', fails: 'matchesProduct' },
+  { code: 'tags_missing', label: 'Không đạt: mất tem / nhãn', fails: 'tagsIntact' },
+  { code: 'condition_bad', label: 'Không đạt: sản phẩm hư hỏng hoặc đã qua sử dụng', fails: 'conditionAcceptable' },
+  { code: 'package_mismatch', label: 'Không đạt: kiện hàng không khớp', fails: 'packageMatch' },
+  { code: 'seal_broken', label: 'Ghi nhận: niêm phong không còn nguyên', fails: 'sealIntact' },
+];
 
 /** One quantity part is saved at a time; refresh exposes any transactionally split remainder. */
 @Component({
@@ -63,6 +79,8 @@ export class ReturnFlowComponent {
   readonly conditionAcceptable = signal(true);
   readonly packageMatch = signal(true);
   readonly sealIntact = signal(true);
+  /** Selected QA criterion code; it drives the five receipt facts, see {@link RETURN_QA_CRITERIA}. */
+  readonly qaCriterion = signal<string>(RETURN_QA_CRITERIA[0].code);
   readonly disposition = signal<AdminReturnDisposition>('restock');
   readonly proofFile = signal<File | null>(null);
   readonly pickupPhotos = signal<File[]>([]);
@@ -79,6 +97,7 @@ export class ReturnFlowComponent {
    */
   readonly qrFacts = signal<QrConfirmFacts | null>(null);
   readonly contactResults = CONTACT_RESULTS;
+  readonly qaCriteria = RETURN_QA_CRITERIA;
   readonly minNote = MIN_NOTE_LENGTH;
   readonly title = computed(() => this.flow() ? RETURN_ITEM_ACTION_LABELS[this.flow()!] : '');
   /** Approval covers the whole part the customer asked for, so quantity is never edited here. */
@@ -90,7 +109,7 @@ export class ReturnFlowComponent {
   readonly needsConsent = computed(() => this.flow() === 'convert_refund' || this.flow() === 'change_variant');
   /** Steps that confirm a parcel being handled; each one is gated by the QR scan. */
   readonly needsQrScan = computed(() =>
-    ['approve', 'receive', 'pickup', 'ship_exchange', 'complete_exchange'].includes(String(this.flow())),
+    ['receive', 'pickup', 'ship_exchange', 'complete_exchange'].includes(String(this.flow())),
   );
   /** Deep link printed in the return QR, so the scanned URL row points at this exact record. */
   readonly recordHref = computed(() => {
@@ -156,7 +175,7 @@ export class ReturnFlowComponent {
         this.variantChoices.set([]);
       }
       this.matchesProduct.set(true); this.tagsIntact.set(true); this.conditionAcceptable.set(true);
-      this.packageMatch.set(true); this.sealIntact.set(true); this.disposition.set('restock');
+      this.packageMatch.set(true); this.sealIntact.set(true); this.qaCriterion.set(RETURN_QA_CRITERIA[0].code); this.disposition.set('restock');
       const isManual = flow === 'manual';
       const autoRef = isManual ? this.newTransferRef() : '';
       if (isManual) { this.createDigitalReceiptFile(autoRef).then((f) => this.proofFile.set(f)); } else { this.proofFile.set(null); }
@@ -407,7 +426,7 @@ export class ReturnFlowComponent {
   }
 
   /** Stores ordinary text without silently coercing malformed quantities into valid ones. */
-  setText(field: 'note' | 'replacementVariantId' | 'tracking' | 'carrier' | 'transferReference' | 'transferredAt' | 'contactResult' | 'pickedUpBy' | 'pickedUpAt', event: Event): void {
+  setText(field: 'note' | 'replacementVariantId' | 'tracking' | 'carrier' | 'transferReference' | 'transferredAt' | 'contactResult' | 'pickedUpAt', event: Event): void {
     this[field].set((event.target as HTMLInputElement).value);
   }
 
@@ -472,8 +491,23 @@ export class ReturnFlowComponent {
   }
 
   /** QA facts are recorded even when tags, condition or seal are not intact. */
-  setCheck(field: 'customerConsent' | 'matchesProduct' | 'tagsIntact' | 'conditionAcceptable' | 'packageMatch' | 'sealIntact', event: Event): void {
+  setCheck(field: 'customerConsent', event: Event): void {
     this[field].set((event.target as HTMLInputElement).checked);
+  }
+
+  /**
+   * Picks one QA criterion from the dropdown and maps it onto the five facts the receive RPC needs.
+   * "Đạt" keeps every fact true; any other criterion flags exactly the fact it names.
+   */
+  setQaCriterion(event: Event): void {
+    const code = (event.target as HTMLSelectElement).value;
+    const criterion = RETURN_QA_CRITERIA.find((item) => item.code === code) || RETURN_QA_CRITERIA[0];
+    this.qaCriterion.set(criterion.code);
+    this.matchesProduct.set(criterion.fails !== 'matchesProduct');
+    this.tagsIntact.set(criterion.fails !== 'tagsIntact');
+    this.conditionAcceptable.set(criterion.fails !== 'conditionAcceptable');
+    this.packageMatch.set(criterion.fails !== 'packageMatch');
+    this.sealIntact.set(criterion.fails !== 'sealIntact');
   }
 
   /** Only explicit disposition controls sellable restock; the server enforces QA consistency. */
@@ -497,9 +531,9 @@ export class ReturnFlowComponent {
     const flow = this.flow();
     if (!record || !flow || !this.canSubmit()) return;
     this.saving.set(true); this.error.set(null);
-    this.buildRequest(record, flow).subscribe({
-      next: (message) => { this.saving.set(false); this.done.emit(message); },
-      error: (error: unknown) => { this.saving.set(false); this.error.set(adminErrorMessage(error, 'Không ghi nhận được thao tác. Làm mới hồ sơ nếu phiên bản đã thay đổi.')); },
+    this.buildRequest(record, flow).pipe(finalize(() => this.saving.set(false))).subscribe({
+      next: (message) => this.done.emit(message),
+      error: (error: unknown) => this.error.set(adminErrorMessage(error, 'Không ghi nhận được thao tác. Làm mới hồ sơ nếu phiên bản đã thay đổi.')),
     });
   }
 
@@ -510,7 +544,11 @@ export class ReturnFlowComponent {
     const line = this.line()!;
     const version = Number(line.version);
     const itemId = line.return_item_id!;
-    if (flow === 'stripe') return this.api.triggerStripeRefund(record.return_id, { expectedVersion: version, returnItemId: itemId }).pipe(switchMap((result) => of(gatewayNote(result.refund))));
+    if (flow === 'stripe') return this.api.triggerStripeRefund(record.return_id, { expectedVersion: version, returnItemId: itemId }).pipe(switchMap((result) => {
+      // Cổng từ chối là lỗi của thao tác, không phải thành công: giữ hộp thoại mở để người vận hành đọc lý do.
+      if (result.refund?.status === 'failed') throw new Error(gatewayNote(result.refund));
+      return of(gatewayNote(result.refund));
+    }));
     const proof = this.proofFile();
     const proof$ = proof ? this.api.uploadReturnEvidence(record.return_id, proof, flow === 'manual' ? 'refund_proof' : 'qa_photo', note) : of(null);
     const photos$ = flow === 'pickup' ? forkJoin(this.pickupPhotos().map((file) => this.api.uploadReturnEvidence(record.return_id, file, 'pickup_photo', note))) : of([]);
@@ -574,7 +612,8 @@ export class ReturnFlowComponent {
     if (!facts) return;
     if (facts.carrier) this.carrier.set(facts.carrier);
     if (facts.trackingCode) this.tracking.set(facts.trackingCode);
-    if (facts.shipperName) this.pickedUpBy.set(facts.shipperName);
+    // Nhãn không in tên người giao thì ghi nhận theo đơn vị vận chuyển trên nhãn; không bắt nhập tay.
+    this.pickedUpBy.set(facts.shipperName || `Nhân viên ${facts.carrier || 'ĐVVC'}`);
     const scannedAt = new Date(facts.scannedAt);
     if (!Number.isNaN(scannedAt.getTime())) {
       const local = new Date(scannedAt.getTime() - scannedAt.getTimezoneOffset() * 60_000);

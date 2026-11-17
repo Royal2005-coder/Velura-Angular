@@ -82,7 +82,8 @@ function realGatewayCredentials(provider: LocalGateway): GatewayCredentials {
     : { merchantId: config.momoPartnerCode, accessKey: config.momoAccessKey, secret: config.momoSecretKey, simulator: false };
 }
 
-function realGatewayConfigured(provider: LocalGateway): boolean {
+/** Whether this provider has a complete set of REAL merchant credentials (never exposes their values). */
+export function realGatewayConfigured(provider: LocalGateway): boolean {
   const credentials = realGatewayCredentials(provider);
   return Boolean(credentials.merchantId && credentials.secret && (provider === "VNPAY" || credentials.accessKey));
 }
@@ -132,23 +133,37 @@ export function gatewayEndpoints(provider: LocalGateway): GatewayEndpoints {
   return { pay: `${config.momoApiOrigin}/v2/gateway/api`, api: `${config.momoApiOrigin}/v2/gateway/api` };
 }
 
+/** Why a hosted provider cannot open a payment right now; one stable code per failed precondition. */
+export type GatewayNotReadyReason = "API_PUBLIC_ORIGIN_NOT_HTTPS" | "SANDBOX_NOT_ALLOWED_IN_PRODUCTION" | "CREDENTIALS_MISSING";
+
 /**
- * Missing merchant credentials disable the provider before an order is persisted.
+ * First failed precondition of `localGatewayConfigured`, or null when the provider can open payments.
  *
  * Sandbox được phép chạy ở production, nhưng chỉ khi người vận hành khai báo tường minh
  * `PAYMENT_GATEWAY_ENVIRONMENT=sandbox`: mỗi phiên lưu môi trường của nó (migration 112) và callback
  * sai môi trường bị từ chối trước khi động tới tiền, nên "demo thật" không còn phải đánh đổi an toàn.
  */
+export function gatewayNotReadyReason(provider: LocalGateway): GatewayNotReadyReason | null {
+  if (!secureHttps(config.apiPublicOrigin)) return "API_PUBLIC_ORIGIN_NOT_HTTPS";
+  if (config.nodeEnv === "production" && gatewayEnvironment(provider) === "sandbox" && config.paymentGatewayEnvironment !== "sandbox") return "SANDBOX_NOT_ALLOWED_IN_PRODUCTION";
+  return realGatewayConfigured(provider) || localGatewaySimulated(provider) ? null : "CREDENTIALS_MISSING";
+}
+
+/**
+ * Missing merchant credentials disable the provider before an order is persisted.
+ * True needs: HTTPS `API_PUBLIC_ORIGIN`; in production a sandbox host also needs
+ * `PAYMENT_GATEWAY_ENVIRONMENT=sandbox`; and either complete real credentials
+ * (VNPAY_TMN_CODE+VNPAY_HASH_SECRET / MOMO_PARTNER_CODE+MOMO_ACCESS_KEY+MOMO_SECRET_KEY) or
+ * `PAYMENT_GATEWAY_SIMULATOR=on` with a sandbox environment.
+ */
 export function localGatewayConfigured(provider: LocalGateway): boolean {
-  if (!secureHttps(config.apiPublicOrigin)) return false;
-  const environment = gatewayEnvironment(provider);
-  if (config.nodeEnv === "production" && environment === "sandbox" && config.paymentGatewayEnvironment !== "sandbox") return false;
-  return realGatewayConfigured(provider) || localGatewaySimulated(provider);
+  return gatewayNotReadyReason(provider) === null;
 }
 
 /** Fail closed rather than create a simulated QR payment in a production ledger. */
 export function assertLocalGatewayReady(provider: LocalGateway): void {
-  if (!localGatewayConfigured(provider)) throw new HttpError(503, "PAYMENT_PROVIDER_UNAVAILABLE", "Phương thức thanh toán chưa được cấu hình. Vui lòng chọn phương thức khác.");
+  const reason = gatewayNotReadyReason(provider);
+  if (reason) throw new HttpError(503, "GATEWAY_NOT_CONFIGURED", "Phương thức thanh toán chưa được cấu hình. Vui lòng chọn phương thức khác.", { reason, provider });
 }
 
 function sameSignature(actual: string, expected: string): boolean {
@@ -256,11 +271,20 @@ export async function openLocalGateway(orderId: string, provider: LocalGateway, 
       extraData: "", requestType: "captureWallet", autoCapture: true, lang: "vi"
     };
     request.signature = momoSignature(request, MOMO_CREATE_KEYS, credentials.secret);
-    const response = await fetch(`${endpoints.pay}/create`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal: AbortSignal.timeout(35000)
-    });
-    const result = asJsonObject(await response.json());
-    if (!response.ok || Number(result.resultCode) !== 0) throw new HttpError(502, "MOMO_CHECKOUT_FAILED", "Chưa mở được phiên MoMo. Vui lòng thử lại trên đơn hàng hiện tại.");
+    let response: Response;
+    try {
+      response = await fetch(`${endpoints.pay}/create`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal: AbortSignal.timeout(35000)
+      });
+    } catch (error) {
+      throw new HttpError(502, "GATEWAY_OPEN_FAILED", "Không kết nối được MoMo.", { reason: error instanceof Error && error.name === "TimeoutError" ? "TIMEOUT" : "NETWORK", provider });
+    }
+    const result = asJsonObject(await response.json().catch(() => ({})));
+    if (!response.ok || Number(result.resultCode) !== 0) {
+      throw new HttpError(502, "MOMO_CHECKOUT_FAILED", "Chưa mở được phiên MoMo. Vui lòng thử lại trên đơn hàng hiện tại.", {
+        reason: "PROVIDER_REJECTED", provider, http_status: response.status, result_code: result.resultCode, provider_message: asString(result.message)
+      });
+    }
     if (result.partnerCode !== credentials.merchantId || result.orderId !== reference || result.requestId !== reference || Number(result.amount) !== Number(attempt.amount)
       || !momoCreateResponseSigned(result, credentials)) {
       throw new HttpError(502, "MOMO_RESPONSE_INVALID", "Phản hồi thanh toán không hợp lệ.");

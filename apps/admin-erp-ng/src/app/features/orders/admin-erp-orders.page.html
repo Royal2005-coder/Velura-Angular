@@ -354,9 +354,9 @@
           <div class="order-actions">
             <button class="erp-btn erp-btn--sm" type="button" (click)="scanOpen.set(true)">
               <app-erp-icon name="box" [size]="'15'" />
-              Quét QR vận đơn
+              Quét QR trên nhãn vận đơn
             </button>
-            <span class="erp-hint">Quét label ĐVVC để khóa cứng mã đơn, ĐVVC, mã vận đơn, tracking URL và người giao. Sau khi quét chỉ còn ghi chú là sửa được.</span>
+            <span class="erp-hint">Quét nhãn đã in để điền ĐVVC, mã vận đơn và tracking URL. Các trường này không nhập tay.</span>
           </div>
           @if (scanError()) {
             <p class="erp-error" role="alert">{{ scanError() }}</p>
@@ -364,22 +364,18 @@
           @if (scanNotice()) {
             <p class="erp-hint" role="status">{{ scanNotice() }}</p>
           }
-          <label class="erp-field">
-            <span>Đơn vị vận chuyển</span>
-            <input class="erp-input" name="carrier" list="order-carriers" [value]="shipment().carrier" (input)="onShipmentField('carrier', $event)" placeholder="Chọn hoặc nhập, ví dụ GHN" />
-            <datalist id="order-carriers">
-              @for (carrier of carriers; track carrier.code) {
-                <option [value]="carrier.label"></option>
-              }
-            </datalist>
-          </label>
-          <label class="erp-field"><span>Mã vận đơn</span><input class="erp-input" name="trackingCode" [value]="shipment().trackingCode" (input)="onShipmentField('trackingCode', $event)" /></label>
-          <details class="order-shipment-url">
-            <summary>Tracking URL (tự điền theo ĐVVC, sửa được)</summary>
-            <label class="erp-field"><input class="erp-input" name="trackingUrl" type="url" [value]="shipment().trackingUrl" (input)="onShipmentField('trackingUrl', $event)" placeholder="https://..." /></label>
-          </details>
         }
-        <p class="erp-hint">Lưu vận đơn là bàn giao hàng cho ĐVVC luôn trong cùng một bước; hệ thống dùng lại mã vận đơn vừa nhập.</p>
+        <div class="erp-field">
+          <span>Ảnh minh chứng kiện hàng đã dán nhãn <span class="erp-required" aria-hidden="true">*</span></span>
+          <div class="custom-file-row">
+            <label class="erp-btn erp-btn--sm custom-file-trigger">
+              <input type="file" accept="image/*" class="erp-sr-only" aria-required="true" (change)="onShipmentPhoto($event)" />
+              <span>{{ shipmentPhoto() ? 'Đổi ảnh khác' : 'Chọn ảnh minh chứng' }}</span>
+            </label>
+            <span class="custom-file-status" [class.has-file]="!!shipmentPhoto()">{{ shipmentPhoto()?.name || 'Chưa chọn ảnh' }}</span>
+          </div>
+        </div>
+        <p class="erp-hint">Xác nhận vận đơn là bàn giao hàng cho ĐVVC luôn trong cùng một bước; hệ thống dùng lại mã vận đơn vừa quét.</p>
       }
       @if (hasField(action, 'cancel_reason')) {
         <label class="erp-field">
@@ -481,54 +477,33 @@
   }
 </app-erp-modal>
 
-<app-erp-modal [open]="modal()?.kind === 'confirm_qr'" title="Xác nhận đơn hàng bằng QR" size="md" (closed)="closeModal()">
+<app-erp-modal [open]="modal()?.kind === 'carrier_label'" title="Nhãn vận đơn" size="md" (closed)="closeModal()">
   @if (selected(); as order) {
     <div class="order-form">
-      <app-erp-qr-confirm
-        kind="order"
-        [open]="modal()?.kind === 'confirm_qr'"
-        [recordId]="order.order_id"
-        [recordCode]="order.order_code || ''"
-        [recordHref]="orderQr(order)"
-        [knownCarrier]="order.carrier || ''"
-        [knownTracking]="order.tracking_code || ''"
-        [sample]="scanSample()"
-        [sampleCaption]="scanSampleCaption()"
-        (facts)="onConfirmFacts($event)"
-      />
-
-      <label class="erp-field">
-        <span>Ảnh minh chứng xác nhận <span class="erp-required" aria-hidden="true">*</span></span>
-        <input class="erp-input" type="file" accept="image/*" (change)="onConfirmPhoto($event)" />
-        <small>{{ confirmPhoto()?.name || 'Chụp ảnh kiện hàng / phiếu đơn đã đối chiếu.' }}</small>
-      </label>
-      <label class="erp-field">
-        <span>Video minh chứng</span>
-        <input class="erp-input" type="file" accept="video/mp4,video/webm" (change)="onConfirmVideo($event)" />
-        <small>{{ confirmVideo()?.name || 'Tối đa 50 MB, chỉ khi cần ghi lại quá trình đóng gói.' }}</small>
-      </label>
-
-      <div class="cod-quick">
-        @for (note of confirmQuickNotes; track note) {
-          <button class="erp-chip" type="button" (click)="setConfirmQuickNote(note)">{{ note }}</button>
-        }
-      </div>
-      <label class="erp-field">
-        <span>Ghi chú xác nhận</span>
-        <textarea class="erp-input" rows="3" [value]="confirmNote()" (input)="onConfirmNote($event)"></textarea>
-      </label>
-
-      @if (!confirmFacts()) {
-        <p class="erp-hint">Chưa quét mã nên chưa xác nhận được. Thông tin đơn chỉ hiện sau khi quét QR.</p>
+      @if (labelLoading()) {
+        <p class="erp-hint" role="status"><span class="spinner" aria-hidden="true"></span> Đang tạo nhãn vận đơn…</p>
       }
-      @if (actionError()) {
-        <p class="erp-error" role="alert">{{ actionError() }}</p>
+      @if (labelError()) {
+        <p class="erp-error" role="alert">{{ labelError() }}</p>
+      }
+      @if (carrierLabel(); as label) {
+        <app-erp-qr-code [value]="label.labelQr" [caption]="'Nhãn ' + (label.order_code || order.order_code || '')" />
+        <dl class="shipment-locked__grid">
+          <div><dt>Đơn vị vận chuyển</dt><dd>{{ label.carrier }}</dd></div>
+          <div><dt>Mã vận đơn</dt><dd>{{ label.trackingCode }}</dd></div>
+          <div><dt>Người nhận</dt><dd>{{ order.shipping_name || '—' }} · {{ order.shipping_phone || '—' }}</dd></div>
+          <div><dt>Địa chỉ giao</dt><dd>{{ order.shipping_address || '—' }}</dd></div>
+        </dl>
+        <p class="erp-hint">In nhãn, dán lên kiện hàng rồi quét lại ở bước “Xác nhận vận đơn”.</p>
       }
       <div class="order-form__actions">
-        <button class="erp-btn" type="button" (click)="closeModal()" [disabled]="submitting()">Hủy</button>
-        <button class="erp-btn erp-btn--primary" type="button" (click)="submitQrConfirm()" [disabled]="!canSubmitConfirm()">
-          {{ submitting() ? 'Đang xác nhận…' : 'Xác nhận đơn bằng QR' }}
-        </button>
+        <button class="erp-btn" type="button" (click)="closeModal()">Đóng</button>
+        @if (carrierLabel(); as label) {
+          <button class="erp-btn" type="button" (click)="printOrderLabel(order, label)">In nhãn</button>
+        }
+        @if (hasAction(order, 'upsert_shipment')) {
+          <button class="erp-btn erp-btn--primary" type="button" (click)="continueToShipment()">Xác nhận vận đơn</button>
+        }
       </div>
     </div>
   }

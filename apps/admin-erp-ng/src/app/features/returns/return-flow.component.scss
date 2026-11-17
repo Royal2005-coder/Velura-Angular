@@ -49,9 +49,18 @@
   background: var(--erp-surface-muted);
   font-size: 11.5px;
   color: var(--erp-muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.flow-loading {
+  display: flex;
+  align-items: center;
 }
 
 .flow-check input {
+  flex: none;
   margin-top: 2px;
 }
 

@@ -198,8 +198,8 @@
                     </div>
                   }
                   <div class="fields">
-                    <app-address-selector [value]="address" (selectionChange)="updateGeography($event)" />
-                    <small class="error">{{ fieldErrors()['ward'] }}</small>
+                    <app-address-selector [value]="address" [invalid]="!!fieldErrors()['ward'] || !!fieldErrors()['district']" (selectionChange)="updateGeography($event)" />
+                    <small class="error">{{ fieldErrors()['district'] || fieldErrors()['ward'] }}</small>
                     <label class="field"
                       >Số nhà, tên đường *<input
                         name="detail"
@@ -706,8 +706,8 @@
           [(ngModel)]="addressDraft.phone"
           required
         /><small class="error">{{ dialogErrors()['phone'] }}</small></label
-      ><app-address-selector [value]="addressDraft" (selectionChange)="updateDraftGeography($event)" />
-      <small class="error">{{ dialogErrors()['ward'] }}</small>
+      ><app-address-selector [value]="addressDraft" [invalid]="!!dialogErrors()['ward'] || !!dialogErrors()['district']" (selectionChange)="updateDraftGeography($event)" />
+      <small class="error">{{ dialogErrors()['district'] || dialogErrors()['ward'] }}</small>
       <label class="field"
         >Số nhà, tên đường *<input
           name="draft-detail"

@@ -1157,6 +1157,20 @@ async function openLocalPayment(orderId: unknown, method: unknown, clientIp: str
   return provider === "VNPAY" || provider === "MOMO" ? openLocalGateway(asString(orderId),provider,clientIp) : null;
 }
 
+/** Vietnamese storefront message per payment-open failure code; the saved order is never lost. */
+const PAYMENT_OPEN_MESSAGES: Record<string, string> = {
+  GATEWAY_NOT_CONFIGURED: "Đơn hàng đã được lưu. Cổng thanh toán này chưa được cấu hình trên hệ thống; vui lòng chọn phương thức thanh toán khác hoặc liên hệ cửa hàng.",
+  STRIPE_NOT_CONFIGURED: "Đơn hàng đã được lưu. Cổng thanh toán thẻ chưa được cấu hình trên hệ thống; vui lòng chọn phương thức thanh toán khác hoặc liên hệ cửa hàng.",
+  GATEWAY_OPEN_FAILED: "Đơn hàng đã được lưu. Không kết nối được nhà cung cấp thanh toán; vui lòng thử lại trên đơn hàng này.",
+  MOMO_CHECKOUT_FAILED: "Đơn hàng đã được lưu. MoMo từ chối mở phiên thanh toán; vui lòng thử lại trên đơn hàng này hoặc chọn phương thức khác.",
+  MOMO_RESPONSE_INVALID: "Đơn hàng đã được lưu. Phản hồi từ MoMo không hợp lệ; vui lòng thử lại trên đơn hàng này hoặc chọn phương thức khác.",
+  MOMO_AMOUNT_INVALID: "Đơn hàng đã được lưu. MoMo chỉ hỗ trợ thanh toán từ 1.000 đến 50.000.000 đồng; vui lòng chọn phương thức khác.",
+  STRIPE_AMOUNT_TOO_SMALL: "Đơn hàng đã được lưu. Thanh toán thẻ yêu cầu đơn từ 10.000 đồng; vui lòng chọn phương thức khác.",
+  STRIPE_INTENT_FAILED: "Đơn hàng đã được lưu. Stripe không mở được trang thanh toán; vui lòng thử lại trên đơn hàng này.",
+  PAYMENT_SESSION_OPEN: "Đơn hàng đã được lưu. Phiên thanh toán trước vẫn còn mở; hãy hoàn tất ở tab đó hoặc thử lại sau ít phút."
+};
+const PAYMENT_OPEN_DEFAULT_MESSAGE = "Đơn hàng đã được lưu. Chưa mở được phiên thanh toán; vui lòng thanh toán lại trên đơn hàng này.";
+
 async function openPersistedOrderPayment(order: JsonObject, method: unknown, clientIp: string): Promise<JsonObject> {
   try {
     const stripe = await openStripePayment(order.order_id,order.total_amount,method);
@@ -1164,12 +1178,18 @@ async function openPersistedOrderPayment(order: JsonObject, method: unknown, cli
     return {stripe,payment:payment ? {...payment} : null};
   } catch (error) {
     // Placement succeeded. Keep its saved snapshot and capability visible so retries never create a second order.
-    console.error("[PAYMENT_OPEN_FAILED]", {order_id:order.order_id,code:error instanceof HttpError ? error.code : "PROVIDER_NETWORK_ERROR"});
+    const code = error instanceof HttpError ? error.code : "GATEWAY_OPEN_FAILED";
+    console.error("[PAYMENT_OPEN_FAILED]", {
+      order_id: order.order_id, method: asString(method).toUpperCase(), code,
+      status: error instanceof HttpError ? error.status : undefined,
+      details: error instanceof HttpError ? error.details : undefined,
+      error: error instanceof HttpError ? undefined : errorMessage(error)
+    });
     if (Number(order.points_used || 0) > 0) {
       await callRpc("velura_close_failed_loyalty_checkout", { p_order_id: order.order_id, p_actor_id: order.user_id });
       return { stripe: null, payment: null, payment_error: { code: "LOYALTY_CHECKOUT_RELEASED", message: "Không mở được thanh toán. Đơn đã đóng và điểm đã được trả về ví; vui lòng đặt lại đơn." } };
     }
-    return {stripe:null,payment:null,payment_error:{code:error instanceof HttpError ? error.code : "PAYMENT_PROVIDER_UNAVAILABLE",message:"Đơn hàng đã được lưu. Chưa mở được phiên thanh toán; vui lòng thanh toán lại trên đơn hàng này."}};
+    return {stripe:null,payment:null,payment_error:{code,message:PAYMENT_OPEN_MESSAGES[code] ?? PAYMENT_OPEN_DEFAULT_MESSAGE}};
   }
 }
 

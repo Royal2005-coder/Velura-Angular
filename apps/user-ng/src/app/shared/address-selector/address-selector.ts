@@ -26,6 +26,21 @@ export class AddressSelector {
   readonly loading = signal(false);
   readonly error = signal('');
   readonly restoreNotice = signal('');
+  /** Parent-supplied validation failure (e.g. after a submit attempt); empty fields turn red. */
+  readonly invalid = input(false);
+  /** Fields the user has focused and left, so untouched fields are not flagged prematurely. */
+  readonly touched = signal<Record<'province' | 'district' | 'ward', boolean>>({ province: false, district: false, ward: false });
+  readonly provinceInvalid = computed(() => (this.invalid() || this.touched().province) && !this.provinceCode());
+  readonly districtInvalid = computed(() => this.mode() === 'legacy' && (this.invalid() || this.touched().district) && !this.districtCode());
+  readonly wardInvalid = computed(() => (this.invalid() || this.touched().ward) && !this.wardCode());
+  /** Inline reason, shown only for blur-driven validation (a parent supplying `invalid` renders its own text). */
+  readonly invalidMessage = computed(() => {
+    if (this.invalid()) return '';
+    if (this.provinceInvalid()) return 'Vui lòng chọn Tỉnh / Thành phố.';
+    if (this.districtInvalid()) return 'Vui lòng chọn Quận / Huyện.';
+    if (this.wardInvalid()) return 'Vui lòng chọn Phường / Xã / Đặc khu.';
+    return '';
+  });
   readonly province = computed(() => this.provinces().find((unit) => String(unit.code) === this.provinceCode()));
   readonly districts = computed(() => this.mode() === 'legacy' ? this.province()?.districts ?? [] : []);
   readonly district = computed(() => this.districts().find((unit) => String(unit.code) === this.districtCode()));
@@ -77,6 +92,11 @@ export class AddressSelector {
   selectWard(event: Event): void {
     this.wardCode.set((event.target as HTMLSelectElement).value);
     this.publish();
+  }
+
+  /** Marks one field as visited when it loses focus so live validation can flag it. */
+  markTouched(field: 'province' | 'district' | 'ward'): void {
+    if (!this.touched()[field]) this.touched.update((state) => ({ ...state, [field]: true }));
   }
 
   /** Retry the failed snapshot without changing the user's pending address. */

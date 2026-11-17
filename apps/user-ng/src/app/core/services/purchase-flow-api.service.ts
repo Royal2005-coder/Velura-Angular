@@ -42,6 +42,8 @@ export interface PurchaseCheckoutResponse {
   order_access_token?: string;
   order?: PurchaseCreatedOrder;
   stripe?: { url?: string } | null;
+  /** Lý do server không mở được phiên thanh toán; đơn vẫn đã được lưu. `message` là tiếng Việt, theo `code`. */
+  payment_error?: { code: string; message: string } | null;
   /**
    * Phiên hosted của VNPay/MoMo. `qr_url` là DỮ LIỆU để vẽ mã QR (MoMo trả chuỗi NAPAS, VNPay trả
    * chính đường dẫn đã ký) — không phải ảnh, nên storefront tự render bằng thư viện `qrcode`.

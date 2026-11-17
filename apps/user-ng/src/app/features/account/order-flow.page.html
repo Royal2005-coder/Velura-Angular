@@ -957,6 +957,7 @@
                     } @else {
                       <img loading="lazy" decoding="async" [src]="file.url" [alt]="file.name" />
                     }<button
+                      type="button"
                       class="secondary"
                       (click)="removeImage($index)"
                       [attr.aria-label]="'Xóa ảnh ' + file.name"

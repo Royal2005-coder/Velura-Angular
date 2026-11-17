@@ -5,7 +5,7 @@
   </header>
 
   @if (loading()) {
-    <p class="offers-state">Đang tải ví voucher…</p>
+    <p class="offers-state loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải ví voucher…</span></p>
   } @else if (loadError()) {
     <div class="offers-state offers-state--error">
       <p>{{ loadError() }}</p>

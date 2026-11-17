@@ -89,7 +89,7 @@ export const ORDER_ACTIONS: readonly OrderActionSpec[] = [
   { code: "confirm_cod", label: "Xác nhận đơn", actor: "order_admin", from: ["pending"], to: "confirmed", requiresNote: true, fields: [] },
   { code: "start_processing", label: "Bắt đầu chuẩn bị hàng", actor: "order_admin", from: ["confirmed"], to: "processing", requiresNote: true, fields: [] },
   { code: "record_shortage", label: "Ghi nhận thiếu hàng", actor: "order_admin", from: ["processing"], to: null, requiresNote: true, fields: ["shortage"] },
-  { code: "upsert_shipment", label: "Tạo/cập nhật vận đơn", actor: "order_admin", from: ["processing"], to: null, requiresNote: true, fields: ["shipment"] },
+  { code: "upsert_shipment", label: "Xác nhận vận đơn", actor: "order_admin", from: ["processing"], to: null, requiresNote: true, fields: ["shipment"] },
   { code: "confirm_handover", label: "Xác nhận bàn giao ĐVVC", actor: "order_admin", from: ["processing"], to: "shipping", requiresNote: true, fields: [] },
   { code: "carrier_note", label: "Ghi chú liên hệ ĐVVC", actor: "order_admin", from: ["shipping"], to: null, requiresNote: true, fields: [] },
   { code: "update_tracking", label: "Cập nhật tracking", actor: "order_admin", from: ["shipping"], to: null, requiresNote: true, fields: ["tracking"] },

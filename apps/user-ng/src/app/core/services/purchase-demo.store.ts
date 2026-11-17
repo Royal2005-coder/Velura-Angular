@@ -95,6 +95,8 @@ export interface DemoReturnLine {
   attentionStatus?: string;
   reason?: string;
   updatedAt?: string;
+  /** Carrier pickup slot (ISO) booked by Velura for this part; undefined until scheduled. */
+  pickupScheduledAt?: string;
   completedAt?: string;
   replacement?: string;
   /** Actual same-product replacement variant; preview labels never authorize a real exchange. */

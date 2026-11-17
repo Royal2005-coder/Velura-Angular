@@ -79,6 +79,16 @@ describe('ReturnTrackingComponent', () => {
     expect(text).toContain('100000'); expect(text).toContain('Không đúng sản phẩm');
   });
 
+  it('shows the scheduled carrier pickup slot only when the part has one', async () => {
+    const { fixture, component } = boot({ items: [
+      { variantId: 'v1', returnItemId: 'part-a', orderItemId: 'line-a', productName: 'Áo', quantity: 1, itemStatus: 'WAITING_RETURN', decisionStatus: 'approved', resolutionType: 'refund', pickupScheduledAt: '2026-11-20T02:00:00.000Z' },
+      { variantId: 'v2', returnItemId: 'part-b', orderItemId: 'line-b', productName: 'Quần', quantity: 1, itemStatus: 'WAITING_RETURN', decisionStatus: 'approved', resolutionType: 'refund' },
+    ] });
+    await component.load('r1'); fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent || '';
+    expect(text.match(/Lịch ĐVVC đến lấy hàng/g)).toHaveLength(1);
+  });
+
   it('uploads packing photos/video to the model and reloads the detail', async () => {
     const uploads: string[] = [];
     const { fixture, component } = boot({}, uploads);

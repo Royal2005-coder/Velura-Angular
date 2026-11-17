@@ -7,6 +7,8 @@
 .geography select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-dark); background: var(--bg-card, var(--bg)); font: inherit; }
 .geography select:focus-visible { outline: 2px solid var(--primary, var(--accent)); outline-offset: 2px; }
 .geography select:disabled { opacity: .65; }
+.geography__req { color: var(--danger, #d32f2f); font-weight: 700; }
+.geography select.is-invalid { border-color: var(--danger, #d32f2f); box-shadow: 0 0 0 1px var(--danger, #d32f2f); }
 .geography__notice, .geography__error { margin: 0; font-size: .8125rem; line-height: 1.5; }
 .geography__notice { color: var(--soft); }
 .geography__error { color: var(--danger, var(--text-dark)); }

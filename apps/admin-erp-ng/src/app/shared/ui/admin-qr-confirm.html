@@ -9,13 +9,9 @@
       <button class="erp-btn erp-btn--sm" type="button" (click)="openScan()">Quét lại mã khác</button>
     </div>
     <dl class="qr-confirm__grid">
-      @if (kind() === 'return') {
-        <div><dt>Mã phiếu</dt><dd class="is-mono">{{ facts.returnCode || recordCode() || '—' }}</dd></div>
-        @if (orderCode()) {
-          <div><dt>Đơn hàng</dt><dd class="is-mono">{{ orderCode() }}</dd></div>
-        }
-      } @else {
-        <div><dt>Mã đơn</dt><dd class="is-mono">{{ facts.orderCode || recordCode() || '—' }}</dd></div>
+      <div><dt>Mã phiếu</dt><dd class="is-mono">{{ facts.returnCode || recordCode() || '—' }}</dd></div>
+      @if (orderCode()) {
+        <div><dt>Đơn hàng</dt><dd class="is-mono">{{ orderCode() }}</dd></div>
       }
       @if (recordHref()) {
         <div class="qr-confirm__wide">
@@ -43,10 +39,10 @@
         </svg>
       </span>
       <div class="qr-confirm__copy">
-        <strong>{{ heroTitle() }}</strong>
-        <p>{{ intro() || heroIntro() }}</p>
+        <strong>{{ heroTitle }}</strong>
+        <p>{{ heroIntro }}</p>
         <ol>
-          @for (step of steps(); track step) {
+          @for (step of steps; track step) {
             <li>{{ step }}</li>
           }
         </ol>
@@ -68,9 +64,9 @@
 
 <app-erp-qr-scan
   [open]="scanOpen()"
-  [title]="scanTitle()"
-  [hint]="scanHint()"
-  [steps]="steps()"
+  [title]="scanTitle"
+  [hint]="scanHint"
+  [steps]="steps"
   [sample]="sample()"
   [sampleCaption]="sampleCaption()"
   (scanned)="applyScan($event)"

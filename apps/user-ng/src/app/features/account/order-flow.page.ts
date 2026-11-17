@@ -1,5 +1,7 @@
 import { Component, DestroyRef, effect, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { filter, firstValueFrom, of, timeout } from 'rxjs';
 import { ActivatedRoute, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import {
   DemoOrder,
@@ -15,6 +17,7 @@ import {
   withinReturnWindow,
 } from '../../core/services/purchase-demo.store';
 import { ORDER_ACCOUNT_MODEL, type ComboComponentItem, type OrderAccountModel, type RefundBankDetails, type ReplacementChoice, type ReturnReasonCode } from '../../core/services/order-account.model';
+import { ApiRequestError } from '../../core/models/api-request-error';
 import { orderAccountErrorMessage } from '../../core/services/order-account-api.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { formatSizeDisplay } from '../../core/utils/size';
@@ -52,6 +55,8 @@ export class OrderFlowPage {
   private readonly checkout = inject(CheckoutStore);
   private readonly notifications = inject(NotificationsService);
   private readonly destroyRef = inject(DestroyRef);
+  /** Store loading flag as a stream; replays the latest value once the store's effects have run. */
+  private readonly storeLoading$ = this.model.loading ? toObservable(this.model.loading) : of(false);
   readonly view = signal<
     | 'lookup'
     | 'otp'
@@ -199,6 +204,7 @@ export class OrderFlowPage {
   private challengeOrderId = '';
   private challengeMode: 'phone' | 'code' = 'phone';
   private timeout: ReturnType<typeof setTimeout> | undefined;
+  private destroyed = false;
 
   constructor() {
     effect(() => {
@@ -248,6 +254,7 @@ export class OrderFlowPage {
       this.cooldown.update((value) => Math.max(0, value - 1));
     }, 1000);
     this.destroyRef.onDestroy(() => {
+      this.destroyed = true;
       clearInterval(timer);
       clearTimeout(this.timeout);
       this.clearEvidence();
@@ -367,28 +374,64 @@ export class OrderFlowPage {
   }
   /** Open an authorized order on its canonical detail URL, unless an internal after-sales view owns the URL. */
   open(id: string, updateUrl = true): void {
-    const existing = this.model.orders().find((row) => row.id === id || row.orderId === id);
+    const existing = this.findOrder(id);
     if (existing) {
       this.openLoaded(existing, id, updateUrl);
       return;
     }
-    // Not loaded yet (real mode, direct/cold link) — fetch this one order, then retry.
-    if (this.model.ensureOrderLoaded) {
-      this.model
-        .ensureOrderLoaded(id)
-        .then(() => {
-          const order = this.model.orders().find((row) => row.id === id || row.orderId === id);
-          if (order) this.openLoaded(order, id, updateUrl);
-          else this.openUnauthorized();
-        })
-        .catch(() => this.openUnauthorized());
+    void this.loadThenOpen(id, updateUrl);
+  }
+  private findOrder(id: string): DemoOrder | undefined {
+    return this.model.orders().find((row) => row.id === id || row.orderId === id);
+  }
+  /**
+   * Cold link / refresh: wait for the store's initial load (it resets and reloads orders when
+   * the session settles), then fetch this one order, retrying once with a fresh context before
+   * surfacing the real failure.
+   */
+  private async loadThenOpen(id: string, updateUrl: boolean): Promise<void> {
+    if (!this.model.ensureOrderLoaded) {
+      this.openFailed(undefined);
       return;
     }
-    this.openUnauthorized();
+    let failure: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await this.waitForStore();
+      if (this.destroyed) return;
+      const found = this.findOrder(id);
+      if (found) {
+        this.openLoaded(found, id, updateUrl);
+        return;
+      }
+      try {
+        await this.model.ensureOrderLoaded(id);
+        failure = undefined;
+      } catch (error) {
+        failure = error;
+      }
+      if (this.destroyed) return;
+      const loaded = this.findOrder(id);
+      if (loaded) {
+        this.openLoaded(loaded, id, updateUrl);
+        return;
+      }
+    }
+    this.openFailed(failure);
+  }
+  /** Lets the store's session effect run and its initial refresh finish before reading orders. */
+  private async waitForStore(): Promise<void> {
+    await firstValueFrom(
+      this.storeLoading$.pipe(
+        filter((loading) => !loading),
+        timeout({ first: 10_000, with: () => of(false) }),
+        takeUntilDestroyed(this.destroyRef),
+      ),
+      { defaultValue: false },
+    );
   }
   private openLoaded(order: DemoOrder, id: string, updateUrl: boolean): void {
     if (!this.authorized(order)) {
-      this.openUnauthorized();
+      this.openFailed(undefined);
       return;
     }
     this.selectedId.set(order.id);
@@ -911,8 +954,20 @@ export class OrderFlowPage {
   private authorized(order: DemoOrder): boolean {
     return this.model.canAccess(order) && (this.model.member() || this.verified());
   }
-  private openUnauthorized(): void {
-    this.error.set('Vui lòng xác thực chủ đơn trước khi xem chi tiết.');
+  /**
+   * The "xác thực" prompt is only truthful for a guest, or a 401/403 from the API. Everything
+   * else (network, 404, stale session) surfaces the real reason instead of a false auth error.
+   */
+  private openFailed(failure: unknown): void {
+    const status = failure instanceof ApiRequestError ? failure.status : 0;
+    const authFailure = !this.model.member() && (!failure || status === 401 || status === 403);
+    this.error.set(
+      authFailure
+        ? 'Vui lòng xác thực chủ đơn trước khi xem chi tiết.'
+        : failure
+          ? orderAccountErrorMessage(failure)
+          : 'Không tìm thấy đơn hàng. Vui lòng thử lại.',
+    );
     this.view.set(this.model.member() ? 'list' : 'lookup');
   }
   private clearEvidence(): void {

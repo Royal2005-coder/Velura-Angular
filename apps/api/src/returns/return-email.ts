@@ -307,6 +307,30 @@ Trân trọng,
 
 
 /**
+ * Payload QR của phiếu hoàn, trùng định dạng ERP và storefront in/quét (`velura:return:1?id=&code=`),
+ * để shipper và kho quét cùng một mã dù mã đến từ email hay từ trang theo dõi.
+ */
+export function buildReturnQrPayload(returnId: string, returnCode: string): string {
+  const params = new URLSearchParams({ id: returnId });
+  if (returnCode) params.set("code", returnCode);
+  return `velura:return:1?${params.toString()}`;
+}
+
+/**
+ * Giờ hẹn ĐVVC lấy hàng hoàn dạng đọc được (giờ Việt Nam), lấy từ `return_item.pickup_scheduled_at`
+ * do trigger duyệt ghi. Thiếu dữ liệu (phiếu duyệt trước migration 128) thì không bịa giờ.
+ */
+export function formatReturnPickupSlot(value: unknown): string | null {
+  const date = new Date(asString(value));
+  if (!asString(value) || Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric", hour12: false
+  }).formatToParts(date);
+  const pick = (type: string) => parts.find((part) => part.type === type)?.value || "";
+  return `${pick("hour")}:${pick("minute")} ngày ${pick("day")}/${pick("month")}/${pick("year")}`;
+}
+
+/**
  * Gửi email duyệt phần hàng kèm QR phiếu hoàn và hướng dẫn ĐVVC lấy hàng vào ngày mai.
  * Mỗi phần hàng chỉ gửi một lần; outbox giữ metadata để CSKH đối soát.
  */
@@ -318,7 +342,7 @@ export async function sendReturnApprovedEmail(returnId: string, returnItemId: st
     });
     if (!ret) return false;
     const item = await selectOne("return_item", {
-      select: "return_item_id,order_item_id,quantity,resolution_type",
+      select: "return_item_id,order_item_id,quantity,resolution_type,pickup_scheduled_at",
       return_item_id: `eq.${returnItemId}`,
       return_id: `eq.${returnId}`
     });
@@ -345,6 +369,7 @@ export async function sendReturnApprovedEmail(returnId: string, returnItemId: st
     const returnCode = asString(ret.return_code) || asString(ret.tracking_return_code);
     const trackingLink = `https://velura.royalai.dev/account/orders/${asString(ret.order_id)}`;
     const product = asString(itemInfo?.product_name) || "Sản phẩm đổi/trả";
+    const pickupSlot = formatReturnPickupSlot(item.pickup_scheduled_at);
 
     // 1. Kích hoạt notification lên icon chuông Storefront nếu người dùng là thành viên (user_id hợp lệ)
     if (userId) {
@@ -352,7 +377,7 @@ export async function sendReturnApprovedEmail(returnId: string, returnItemId: st
         userId,
         "return_approved",
         `Yêu cầu đổi/trả #${returnCode} đã được phê duyệt`,
-        `Yêu cầu cho sản phẩm ${product} (Đơn hàng #${order.order_code || returnCode}) đã được phê duyệt. Vui lòng đóng gói và bàn giao cho ĐVVC.`,
+        `Yêu cầu cho sản phẩm ${product} (Đơn hàng #${order.order_code || returnCode}) đã được phê duyệt. Vui lòng đóng gói và bàn giao cho ĐVVC${pickupSlot ? `; ĐVVC dự kiến đến lấy lúc ${pickupSlot}` : ""}.`,
         `/account/orders/${asString(ret.order_id)}`
       ).catch((err) => console.warn(`[RETURN_APPROVED_NOTIF] Failed to create notification: ${err}`));
     }
@@ -368,14 +393,16 @@ export async function sendReturnApprovedEmail(returnId: string, returnItemId: st
       return true;
     }
 
-    const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(returnCode)}`;
+    const pickupText = pickupSlot ? `ĐVVC dự kiến đến lấy hàng lúc ${pickupSlot}.` : "ĐVVC sẽ liên hệ với bạn để hẹn giờ lấy hàng.";
+    const pickupHtml = pickupSlot ? `ĐVVC dự kiến đến lấy lúc <strong>${pickupSlot}</strong>.` : "ĐVVC sẽ liên hệ với bạn để hẹn giờ lấy hàng.";
+    const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(buildReturnQrPayload(returnId, returnCode))}`;
     const subject = `[Velura] Yêu cầu đổi/trả ${returnCode} đã được duyệt`;
     const text = `Kính chào ${name},
 
 Yêu cầu đổi/trả của bạn đã được duyệt.
 - Mã phiếu: ${returnCode}
 - Sản phẩm: ${product} × ${asNumber(item.quantity)}
-- ĐVVC sẽ đến lấy hàng vào 09:00 ngày mai (demo).
+- ${pickupText}
 - Dán QR trong email lên kiện hàng và đưa mã cho shipper quét.
 Theo dõi tại: ${trackingLink}`;
     const html = `
@@ -387,7 +414,7 @@ Theo dõi tại: ${trackingLink}`;
           <div style="text-align:center;margin:24px 0;">
             <img src="${qr}" alt="QR phiếu hoàn" width="240" height="240" style="display:block;margin:0 auto;border:1px solid #E5E7EB;border-radius:12px;padding:8px;background:#fff;" />
             <p style="font-family:monospace;color:#374151;font-weight:700;font-size:16px;letter-spacing:1px;margin-top:12px;">${returnCode}</p>
-            <p style="color:#6b7280;font-size:14px;">Dán QR lên kiện hàng. ĐVVC dự kiến đến lấy lúc <strong>09:00 ngày mai</strong>.</p>
+            <p style="color:#6b7280;font-size:14px;">Dán QR lên kiện hàng. ${pickupHtml}</p>
             <a href="${trackingLink}" style="display:inline-block;background:#7C5454;color:#fff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:600;">Theo dõi đổi/trả</a>
           </div>
           <p style="color:#6b7280;font-size:13px;">Nếu chưa nhận được liên hệ của ĐVVC, vui lòng phản hồi email này để CSKH hỗ trợ.</p>

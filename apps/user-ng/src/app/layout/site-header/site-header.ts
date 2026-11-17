@@ -59,6 +59,8 @@ export class SiteHeader {
   readonly wishlistCount = this.wishlist.itemCount;
   readonly notificationCount = this.notifications.unreadCount;
   readonly notificationOpen = signal(false);
+  /** Whether the avatar's account dropdown is open; click-driven so it can always be dismissed. */
+  readonly accountOpen = signal(false);
   readonly pushPermissionGranted = signal(
     typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted'
   );
@@ -157,6 +159,7 @@ export class SiteHeader {
   /** Mirrors the committed route's `q` into the header, and closes suggestions/nav on every commit. */
   private syncSearchToRoute(url: string): void {
     this.searchOpen.set(false);
+    this.accountOpen.set(false);
     this.navOpen.set(false);
     let parsed: URL;
     try {
@@ -245,6 +248,16 @@ export class SiteHeader {
     this.notificationOpen.update((open) => !open);
   }
 
+  /** Toggles the account dropdown from the avatar button. */
+  toggleAccount(): void {
+    this.accountOpen.update((open) => !open);
+  }
+
+  /** Closes the account dropdown after an item is chosen. */
+  closeAccount(): void {
+    this.accountOpen.set(false);
+  }
+
   /** Closes the notification popover when the member clicks anywhere outside it. */
   @HostListener('window:scroll')
   onWindowScroll(): void {
@@ -256,6 +269,7 @@ export class SiteHeader {
   @HostListener('document:click', ['$event'])
   closeNotificationsOnOutsideClick(event: MouseEvent): void {
     const target = event.target;
+    if (!(target instanceof Element && target.closest('.header-account-dropdown'))) this.accountOpen.set(false);
     if (target instanceof Element && target.closest('.header-notification')) return;
     this.notificationOpen.set(false);
   }
@@ -266,6 +280,7 @@ export class SiteHeader {
     this.searchOpen.set(false);
     this.navOpen.set(false);
     this.notificationOpen.set(false);
+    this.accountOpen.set(false);
   }
 
   /** Navigates to a notification target and records that it was seen. */

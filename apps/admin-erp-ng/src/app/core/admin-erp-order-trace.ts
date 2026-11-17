@@ -15,7 +15,7 @@ export const ORDER_EVENT_LABELS: Readonly<Record<string, string>> = {
   auto_confirm_cod: 'Tự xác nhận COD',
   start_processing: 'Bắt đầu chuẩn bị hàng',
   record_shortage: 'Ghi nhận thiếu hàng',
-  upsert_shipment: 'Tạo/cập nhật vận đơn',
+  upsert_shipment: 'Xác nhận vận đơn',
   confirm_handover: 'Bàn giao đơn vị vận chuyển',
   carrier_note: 'Ghi chú liên hệ đơn vị vận chuyển',
   update_tracking: 'Cập nhật tracking',

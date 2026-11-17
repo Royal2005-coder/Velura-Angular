@@ -334,7 +334,7 @@ export async function handleOrdersRoute(
         const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
           selectRows("order_item", { order_id: "eq." + order.order_id }),
           selectRows("order_status_history", { order_id: "eq." + order.order_id, select: "new_status,changed_at" }),
-          selectRows("payment", { order_id: "eq." + order.order_id, select: "payment_status,created_at,refund_amount,refunded_amount" })
+          selectRows("payment", { order_id: "eq." + order.order_id, select: "payment_status,payment_provider,created_at,refund_amount,refunded_amount" })
         ]);
         let itemsWithProduct = await attachProductMeta(items);
         if (order.status === "delivered") {
@@ -380,7 +380,7 @@ export async function handleOrdersRoute(
         const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
           selectRows("order_item", { order_id: `eq.${order.order_id}` }),
           selectRows("order_status_history", { order_id: `eq.${order.order_id}`, select: "new_status,changed_at" }),
-          selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,gateway_response_code,created_at,refund_amount,refunded_amount" })
+          selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,payment_provider,gateway_response_code,created_at,refund_amount,refunded_amount" })
         ]);
         let itemsWithProduct = await attachProductMeta(items);
         if (order.status === "delivered") {
@@ -407,7 +407,7 @@ export async function handleOrdersRoute(
         const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
           selectRows("order_item", { order_id: `eq.${order.order_id}` }),
           selectRows("order_status_history", { order_id: `eq.${order.order_id}`, select: "new_status,changed_at" }),
-          selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,gateway_response_code,created_at,refund_amount,refunded_amount" })
+          selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,payment_provider,gateway_response_code,created_at,refund_amount,refunded_amount" })
         ]);
         let itemsWithProduct = await attachProductMeta(items);
         if (order.status === "delivered") {
@@ -429,7 +429,7 @@ export async function handleOrdersRoute(
         const orderIds = orders.map(o => String(o.order_id)).filter(Boolean);
         const [allItemsRes, allPaymentsRes] = await Promise.all([
           selectRows("order_item", { order_id: `in.(${orderIds.join(",")})` }),
-          selectRows("payment", { order_id: `in.(${orderIds.join(",")})`, select: "order_id,payment_status,gateway_response_code,created_at,refund_amount,refunded_amount" }),
+          selectRows("payment", { order_id: `in.(${orderIds.join(",")})`, select: "order_id,payment_status,payment_provider,gateway_response_code,created_at,refund_amount,refunded_amount" }),
         ]);
         const itemsWithProduct = await attachProductMeta(allItemsRes.rows);
         const itemsByOrder = new Map<string, JsonObject[]>();

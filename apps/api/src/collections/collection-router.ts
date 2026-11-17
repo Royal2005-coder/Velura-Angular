@@ -1,4 +1,5 @@
 import { HttpError, readJson, sendJson } from "../http.js";
+import { requireCmsPermission } from "../content/cms-permission.js";
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "../types.js";
 import type { CollectionService } from "./collection-service.js";
 import type { CreateCollectionInput, UpdateCollectionInput } from "./collection-types.js";
@@ -12,7 +13,7 @@ export async function handleCollectionRoute(args: {
   headers: HeaderMap;
   service: CollectionService;
 }): Promise<boolean> {
-  const { req, res, parts, headers, service } = args;
+  const { req, res, parts, context, headers, service } = args;
 
   // 1. Public routes: GET /api/v1/collections OR /api/content/collections
   const isPublicCollection =
@@ -32,6 +33,7 @@ export async function handleCollectionRoute(args: {
   const isAdminNested = parts[1] === "v1" && parts[2] === "admin" && parts[3] === "content" && parts[4] === "collections";
 
   if (isAdminDirect || isAdminNested) {
+    requireCmsPermission(context, req.method);
     const collectionId = isAdminNested ? (parts[5] || null) : (parts[4] || null);
 
     if (req.method === "GET") {

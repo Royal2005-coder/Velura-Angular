@@ -1,4 +1,5 @@
 <main class="flow flow--orders">
+  <app-loading-overlay [active]="busy() && (view() === 'return' || view() === 'return-summary')" label="Đang gửi yêu cầu, vui lòng không đóng trang…" />
   @if (preview) { <p class="badge" role="status">Dữ liệu xem thử · thao tác không thay đổi đơn hàng thật</p> }
   <header class="flow-header flow-header--orders">
     <div class="flow-heading">
@@ -569,7 +570,7 @@
                 {{ item.address.ward }}, {{ item.address.district }}, {{ item.address.province }}
               </p>
               <p>
-                Thanh toán: <strong>{{ item.payment }}</strong>
+                Thanh toán: <strong>{{ paymentLabel(item.payment) }}</strong>
               </p>
               @if (item.status === 'cancelled') {
                 <p class="muted">
@@ -585,7 +586,7 @@
                   }}
                 </p>
                 @if (item.refund) {
-                  <p>@if (item.refundedAmount !== undefined && item.refund === 'completed') { Số tiền đã hoàn: {{ money(item.refundedAmount) }} } @else { CSKH sẽ xác nhận số tiền hoàn. } · Kênh thanh toán: {{ item.payment }}</p>
+                  <p>@if (item.refundedAmount !== undefined && item.refund === 'completed') { Số tiền đã hoàn: {{ money(item.refundedAmount) }} } @else { CSKH sẽ xác nhận số tiền hoàn. } · Kênh thanh toán: {{ paymentLabel(item.payment) }}</p>
                   @if (item.refundCompletedAt) {
                     <p>Thời gian hoàn tất: {{ date(item.refundCompletedAt) }}</p>
                   }

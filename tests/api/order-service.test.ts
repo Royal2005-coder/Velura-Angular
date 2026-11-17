@@ -195,6 +195,34 @@ test("carrier label is issued only for processing orders or confirmed exchange o
   }
 });
 
+test("order detail names the return an exchange order belongs to and tolerates a failed lookup", async () => {
+  const returnId = "70000000-0000-4000-8000-000000000001";
+  const exchange = { ...pendingCod, status: "confirmed", order_kind: "exchange", source_return_id: returnId, parent_order_id: ORDER_ID };
+  const lookups = [];
+  const withReturn = createOrderService({ repository: repository(exchange, {
+    findSourceReturn: async (id) => { lookups.push(id); return { return_id: returnId, return_code: "RT-1", tracking_return_code: null }; }
+  }).repo });
+  const detail = await withReturn.get(context("admin_operator_donhang"), ORDER_ID);
+  assert.deepEqual(lookups, [returnId]);
+  assert.equal(detail.source_return.return_code, "RT-1");
+  assert.equal(detail.source_return_id, returnId);
+
+  const failing = createOrderService({ repository: repository(exchange, {
+    findSourceReturn: async () => { throw new Error("rls"); }
+  }).repo });
+  const fallback = await failing.get(context("admin_operator_donhang"), ORDER_ID);
+  assert.equal(fallback.source_return, null);
+  assert.equal(fallback.status, "confirmed");
+
+  let called = false;
+  const sale = createOrderService({ repository: repository({ ...pendingCod, order_kind: "sale", source_return_id: returnId }, {
+    findSourceReturn: async () => { called = true; return null; }
+  }).repo });
+  const saleDetail = await sale.get(context("admin_operator_donhang"), ORDER_ID);
+  assert.equal(called, false);
+  assert.equal("source_return" in saleDetail, false);
+});
+
 test("simulation without a carrier gate fails closed instead of moving the order", async () => {
   const shipping = { ...pendingCod, order_code: "VLR-7001", status: "shipping", tracking_code: "GHN123456" };
   const { repo, calls } = repository(shipping);

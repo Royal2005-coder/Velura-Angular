@@ -30,33 +30,16 @@ export class CollectionsPage {
     const filter = this.filter();
     const availableLookbooks = this.lookbooks();
     const lookbooks = filter === 'all' ? availableLookbooks : availableLookbooks.filter((item) => item.id === filter);
-    const allProducts = this.products();
+    const productsById = new Map(this.products().map((row) => [row.product_id, row]));
 
-    return lookbooks.map((lookbook, index) => {
-      let items = allProducts.filter((row) => row.collection === lookbook.name);
-      if (!items.length && allProducts.length) {
-        items = allProducts.filter((row) =>
-          lookbook.categoryLink.includes(row.category_slug || '') ||
-          (lookbook.id === 'soft-ceremony' && row.category_slug === 'dam-vay') ||
-          (lookbook.id === 'the-urban-rhythm' && (row.category_slug === 'set-do' || row.category_slug === 'quan')) ||
-          (lookbook.id === 'weekend-escape' && (row.category_slug === 'set-do' || row.category_slug === 'ao')) ||
-          (lookbook.id === 'midnight-mirage' && (row.category_slug === 'dam-vay' || row.category_slug === 'ao')) ||
-          (lookbook.id === 'the-afterglow' && row.category_slug === 'dam-vay')
-        );
-      }
-      if (!items.length && allProducts.length) {
-        items = allProducts.slice(index * 3, index * 3 + 5);
-      }
-      if (!items.length && allProducts.length) {
-        items = allProducts.slice(0, 5);
-      }
-
-      return {
-        lookbook,
-        reverse: index % 2 === 1,
-        products: items.slice(0, 5),
-      };
-    });
+    return lookbooks.map((lookbook, index) => ({
+      lookbook,
+      reverse: index % 2 === 1,
+      // Combo/set được chọn tường minh trong CMS: giữ đúng thứ tự `productIds`, bỏ id không còn trong catalog.
+      products: lookbook.productIds
+        .map((id) => productsById.get(id))
+        .filter((row): row is ProductSummary => row !== undefined),
+    }));
   });
 
   constructor() {

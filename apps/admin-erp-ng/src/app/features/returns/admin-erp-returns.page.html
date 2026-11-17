@@ -405,6 +405,7 @@
               @if (line.exchange_order; as exchange) {
                 <div class="desk-note">
                   <p>Đơn đổi: <strong>{{ exchange.order_code || exchange.order_id }}</strong> · {{ exchange.status }} · {{ exchange.carrier || '—' }} · {{ exchange.tracking_code || '—' }}</p>
+                  @if (exchange.tracking_url) { <p><a class="erp-chip" [href]="exchange.tracking_url" target="_blank" rel="noopener">Theo dõi hàng đổi</a></p> }
                   <p>Người nhận: {{ exchange.shipping_name || '—' }} · {{ exchange.shipping_phone || '—' }}</p>
                   <p>Địa chỉ: {{ exchange.shipping_address || '—' }}</p>
                   @for (item of exchange.items || []; track item.item_id) {
@@ -622,7 +623,7 @@
   }
 </app-erp-drawer>
 
-<app-erp-return-flow [flow]="flow()" [record]="selected()" [line]="flowLine()" [order]="orderContext()" [canApprove]="canApprove()" [canOperate]="canOperate()" [canFinance]="canFinance()" [presetTracking]="carrierTracking()" (done)="onFlowDone($event)" (dismissed)="closeFlow()" />
+<app-erp-return-flow [flow]="flow()" [record]="selected()" [line]="flowLine()" [order]="orderContext()" [canApprove]="canApprove()" [canOperate]="canOperate()" [canFinance]="canFinance()" [presetTracking]="carrierTracking()" (next)="onFlowNext($event)" (done)="onFlowDone($event)" (dismissed)="closeFlow()" />
 
 <app-erp-qr-scan
   [open]="scanOpen()"

@@ -988,7 +988,7 @@
                   <a class="secondary" routerLink="/contact">Liên hệ tư vấn</a>
                   <div class="actions">
                     <button type="button" class="secondary" (click)="dismissPointWarning()">Quay lại chỉnh sửa</button>
-                    <button type="button" [disabled]="busy()" (click)="continueAfterPointWarning()">Tôi hiểu &amp; gửi yêu cầu</button>
+                    <button type="button" [disabled]="busy()" (click)="continueAfterPointWarning()">{{ busy() ? 'Đang gửi yêu cầu…' : 'Tôi hiểu & gửi yêu cầu' }}</button>
                   </div>
                 </div>
               } @else {

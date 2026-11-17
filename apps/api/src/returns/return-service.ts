@@ -194,7 +194,7 @@ export function createReturnService({
       // Kèm giá trị hoàn được để form duyệt hoàn tiền điền sẵn đúng số, không bắt gõ tay.
       // Các phép đọc độc lập chạy song song; mỗi phép là một PostgREST round-trip.
       const [refundableAmount, payment, lines, shipments, events, evidence, refundOperations] = await Promise.all([
-        repository.getRefundableAmount(returnId, context.accessToken),
+        repository.getRefundableAmount(returnId),
         ret.order_id && repository.getPaymentByOrderId
           ? repository.getPaymentByOrderId(asString(ret.order_id), context.accessToken)
           : Promise.resolve(null),

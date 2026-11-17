@@ -799,7 +799,7 @@ export class OrderFlowPage {
   }
   /** The warning screen already restates the request, so acknowledging it submits directly. */
   continueAfterPointWarning(): void {
-    this.pointRefundWarning.set(false);
+    // Keep the warning panel (with its "sending" label) on screen until the Model answers, so the wait is visible.
     this.error.set('');
     this.submitReturn();
   }
@@ -819,12 +819,14 @@ export class OrderFlowPage {
       this.model
         .createReturn(order.id, this.returnKind, this.selectedLines(), this.returnReason, this.evidence(), this.returnReasonCode || undefined, bank)
         .then((request) => {
+          this.pointRefundWarning.set(false);
           this.requestId.set(request.id);
           this.error.set('');
           this.view.set('tracking');
           void this.notifications.refresh();
         })
         .catch((error) => {
+          this.pointRefundWarning.set(false);
           this.error.set(orderAccountErrorMessage(error));
           this.view.set('return');
         })

@@ -19,7 +19,8 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
   styles: [
     `
       :host {
-        display: inline-block;
+        display: inline-flex;
+        flex-shrink: 0;
         max-width: 100%;
         vertical-align: middle;
         overflow: hidden;
@@ -63,7 +64,7 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
       .badge--success {
         background: var(--erp-success-soft);
         color: var(--erp-success);
-        border-color: color-mix(in srgb, var(--erp-success) 22%, transparent);
+        border-color: var(--erp-success-line, #a7f3d0);
       }
       .badge--warning {
         background: var(--erp-warning-soft);
@@ -78,7 +79,7 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
       .badge--info {
         background: var(--erp-info-soft);
         color: var(--erp-info);
-        border-color: color-mix(in srgb, var(--erp-info) 22%, transparent);
+        border-color: var(--erp-info-line, #bfdbfe);
       }
     `,
   ],

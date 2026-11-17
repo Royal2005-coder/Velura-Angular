@@ -4,18 +4,24 @@
   subtitle="Chiến dịch, mã giảm giá, ngân sách và thống kê trên API hiện tại. Mọi thao tác ghi dùng expectedVersion."
 >
   <div actions>
-    @if (canMutate()) {
-      @if (view() === 'campaigns') {
-        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCampaignForm()">Tạo chiến dịch</button>
-      }
-      @if (view() === 'vouchers') {
-        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openVoucherForm()">Tạo voucher</button>
-      }
-    }
     <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
       <app-erp-icon name="refresh" [size]="'15'" />
       {{ loading() ? 'Đang tải…' : 'Làm mới' }}
     </button>
+    @if (canMutate()) {
+      @if (view() === 'campaigns') {
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCampaignForm()">
+          <app-erp-icon name="plus" [size]="'15'" />
+          Tạo chiến dịch
+        </button>
+      }
+      @if (view() === 'vouchers') {
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openVoucherForm()">
+          <app-erp-icon name="plus" [size]="'15'" />
+          Tạo voucher
+        </button>
+      }
+    }
   </div>
 </app-erp-page-header>
 

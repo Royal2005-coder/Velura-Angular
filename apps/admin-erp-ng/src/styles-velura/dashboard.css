@@ -39,7 +39,7 @@ svg.admin-line-icon,
 
 /* Taste-calibrated Root Design Tokens from UI/UX Specification */
 :root {
-  --font: 'Inter', 'Be Vietnam Pro', system-ui, sans-serif;
+  --font: var(--erp-font, 'Be Vietnam Pro', system-ui, -apple-system, sans-serif);
   --brand-bg-strong: #FBE8EC;
   --fixed: 204px;
 
@@ -120,7 +120,7 @@ svg.admin-line-icon,
   --shadow-modal: 0 20px 48px rgba(15, 23, 42, 0.20), 0 4px 12px rgba(15, 23, 42, 0.08);
 
   /* Fonts (Section 4.2) */
-  --font-sans: 'Inter', 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+  --font-sans: var(--erp-font, 'Be Vietnam Pro', system-ui, -apple-system, sans-serif);
 
   /* Backward Compatibility Aliases */
   --color-canvas: var(--bg-app);
@@ -1403,7 +1403,7 @@ svg.admin-line-icon,
   font-size: 1.1875rem;
   font-weight: 700;
   color: var(--color-text-primary, #302326);
-  font-family: "Be Vietnam Pro", "DM Sans", sans-serif;
+  font-family: var(--erp-font-mono, 'JetBrains Mono', 'Be Vietnam Pro', sans-serif);
   line-height: 1;
   font-variant-numeric: tabular-nums lining-nums;
 }

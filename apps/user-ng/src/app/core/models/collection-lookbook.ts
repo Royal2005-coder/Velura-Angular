@@ -36,6 +36,12 @@ export interface CollectionLookbook {
   homeSortOrder: number;
   /** Id combo/set hiển thị ở `/collections`, theo đúng thứ tự admin chọn. */
   productIds: string[];
+  /** Tọa độ ngang tâm ảnh bìa (`0`–`100%`, mặc định `50`). */
+  coverX: number;
+  /** Tọa độ dọc tâm ảnh bìa (`0`–`100%`, mặc định `16` để giữ trọn phần đầu người mẫu). */
+  coverY: number;
+  /** Hệ số thu phóng ảnh bìa (`1`–`2.4`, mặc định `1`). */
+  coverZoom: number;
 }
 
 /** Bản ghi collection từ API (snake_case) hoặc từ model đã chuẩn hóa (camelCase); mọi trường tùy chọn. */
@@ -85,6 +91,30 @@ export interface CollectionLookbookSource {
   homeSortOrder?: number;
   product_ids?: unknown;
   productIds?: unknown;
+  styling_metadata?: unknown;
+  coverX?: number;
+  coverY?: number;
+  coverZoom?: number;
+}
+
+function clampCoord(value: unknown, fallback: number, min: number, max: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.round(Math.min(max, Math.max(min, value)) * 100) / 100;
+}
+
+/** Tính chuỗi CSS `object-position`, `transform-origin` và `transform` đồng nhất với trình căn ảnh Admin ERP. */
+export function collectionCoverFraming(
+  lookbook: Pick<CollectionLookbook, 'coverX' | 'coverY' | 'coverZoom'>,
+): { objectPosition: string; transformOrigin: string; transform: string | null } {
+  const x = clampCoord(lookbook.coverX, 50, 0, 100);
+  const y = clampCoord(lookbook.coverY, 16, 0, 100);
+  const zoom = clampCoord(lookbook.coverZoom, 1, 1, 2.4);
+  const pos = `${x}% ${y}%`;
+  return {
+    objectPosition: pos,
+    transformOrigin: pos,
+    transform: zoom > 1.001 ? `scale(${zoom})` : null,
+  };
 }
 
 function stringList(value: unknown): string[] {
@@ -99,6 +129,10 @@ export function normalizeCollectionLookbook(raw: CollectionLookbookSource): Coll
   const id = raw.code || raw.id || 'collection';
   const models = stringList(raw.models);
   const sortOrder = raw.home_sort_order ?? raw.homeSortOrder;
+  const meta =
+    typeof raw.styling_metadata === 'object' && raw.styling_metadata !== null && !Array.isArray(raw.styling_metadata)
+      ? (raw.styling_metadata as Record<string, unknown>)
+      : {};
   return {
     id,
     code: id,
@@ -133,16 +167,25 @@ export function normalizeCollectionLookbook(raw: CollectionLookbookSource): Coll
     showOnHome: (raw.show_on_home ?? raw.showOnHome) === true,
     homeSortOrder: typeof sortOrder === 'number' && Number.isFinite(sortOrder) ? sortOrder : 0,
     productIds: stringList(raw.product_ids ?? raw.productIds),
+    coverX: clampCoord(meta['cover_x'] ?? raw.coverX, 50, 0, 100),
+    coverY: clampCoord(meta['cover_y'] ?? raw.coverY, 16, 0, 100),
+    coverZoom: clampCoord(meta['cover_zoom'] ?? raw.coverZoom, 1, 1, 2.4),
   };
 }
 
 /** Mặc định cho các trường CMS mới của fallback tĩnh: hero `models`, không lên runway trang chủ, không có combo chọn sẵn. */
-const STATIC_CMS_DEFAULTS: Pick<CollectionLookbook, 'heroMode' | 'homeModel' | 'showOnHome' | 'homeSortOrder' | 'productIds'> = {
+const STATIC_CMS_DEFAULTS: Pick<
+  CollectionLookbook,
+  'heroMode' | 'homeModel' | 'showOnHome' | 'homeSortOrder' | 'productIds' | 'coverX' | 'coverY' | 'coverZoom'
+> = {
   heroMode: 'models',
   homeModel: '',
   showOnHome: false,
   homeSortOrder: 0,
   productIds: [],
+  coverX: 50,
+  coverY: 16,
+  coverZoom: 1,
 };
 
 type StaticLookbookContent = Omit<CollectionLookbook, keyof typeof STATIC_CMS_DEFAULTS>;

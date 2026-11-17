@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { ORDER_ACCOUNT_MODEL, type ReturnTrackingDetail } from '../../core/services/order-account.model';
 import { ReturnTrackingComponent } from './return-tracking.component';
 
@@ -44,7 +45,7 @@ describe('ReturnTrackingComponent', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [ReturnTrackingComponent],
-      providers: [{ provide: ORDER_ACCOUNT_MODEL, useValue: model }],
+      providers: [provideRouter([]), { provide: ORDER_ACCOUNT_MODEL, useValue: model }],
     });
     const fixture = TestBed.createComponent(ReturnTrackingComponent);
     fixture.componentRef.setInput('returnId', 'r1');

@@ -1,4 +1,4 @@
-import { Component, DestroyRef, effect, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, effect, computed, inject, signal, HostListener } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { filter, firstValueFrom, of, timeout } from 'rxjs';
@@ -25,6 +25,7 @@ import { isGuestPreview, isPreviewMode } from '../../core/utils/preview-mode';
 import { DeliverySimulation } from '../../shared/delivery-simulation/delivery-simulation';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { ReturnTrackingComponent } from './return-tracking.component';
+import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { VIETNAM_BANKS } from '../../core/models/vietnam-banks';
 import { OTP_COUNTDOWN_SECONDS } from '../../core/utils/otp-policy';
 import { NotificationsService } from '../../core/services/notifications.service';
@@ -36,7 +37,7 @@ import { NotificationsService } from '../../core/services/notifications.service'
  */
 @Component({
   selector: 'app-order-flow',
-  imports: [FormsModule, RouterLink, RouterLinkActive, DeliverySimulation, ReturnTrackingComponent],
+  imports: [FormsModule, RouterLink, RouterLinkActive, DeliverySimulation, ReturnTrackingComponent, LoadingOverlay],
   templateUrl: './order-flow.page.html',
   styleUrls: [
     '../shared/purchase-flow.css',
@@ -121,6 +122,9 @@ export class OrderFlowPage {
   readonly requestCanCancel = (request: DemoReturn) => request.status
     ? ['REQUESTED', 'CONTACTING', 'WAITING_RETURN'].includes(request.status)
     : !request.cancelledAt && !request.completedAt && !request.rejectedAt && request.stage < this.model.cancellableBeforeStage;
+  /** Customer-readable gateway name; the raw enum is internal. */
+  readonly paymentLabel = (method: DemoOrder['payment']): string =>
+    ({ COD: 'Thanh toán khi nhận hàng (COD)', STRIPE: 'Thẻ quốc tế (Stripe)', MOMO: 'Ví MoMo', VNPAY: 'VNPay' })[method];
   readonly orderSteps = computed<DemoOrderStatus[]>(() =>
     this.order()?.payment !== 'COD'
       ? ['pending_payment', 'confirmed', 'preparing', 'shipping', 'delivered']
@@ -254,6 +258,7 @@ export class OrderFlowPage {
       this.cooldown.update((value) => Math.max(0, value - 1));
     }, 1000);
     this.destroyRef.onDestroy(() => {
+      this.saveReturnDraft();
       this.destroyed = true;
       clearInterval(timer);
       clearTimeout(this.timeout);
@@ -588,6 +593,45 @@ export class OrderFlowPage {
     return 'Đang chờ CSKH xử lý';
   }
 
+  private returnDraftKey(orderId: string): string {
+    return 'velura.return-draft.' + orderId;
+  }
+
+  /**
+   * Keeps the half-filled return form across reloads or tab loss. Evidence files and bank
+   * account numbers are deliberately not stored.
+   */
+  @HostListener('window:pagehide')
+  saveReturnDraft(): void {
+    const order = this.order();
+    const view = this.view();
+    if (!order || (view !== 'return' && view !== 'return-summary')) return;
+    try {
+      sessionStorage.setItem(
+        this.returnDraftKey(order.id),
+        JSON.stringify({ kind: this.returnKind, reason: this.returnReason, code: this.returnReasonCode, lines: this.selectedLines() }),
+      );
+    } catch {
+      /* storage unavailable: the form simply starts empty next time */
+    }
+  }
+
+  private restoreReturnDraft(orderId: string): void {
+    try {
+      const raw = sessionStorage.getItem(this.returnDraftKey(orderId));
+      if (!raw) return;
+      const draft = JSON.parse(raw) as { kind?: string; reason?: string; code?: string; lines?: DemoReturnLine[] };
+      const order = this.order();
+      const lines = (draft.lines || []).filter((l) => order?.items.some((i) => i.variant_id === l.variantId && l.quantity > 0 && l.quantity <= i.availableQuantity));
+      if (draft.kind === 'refund' || draft.kind === 'exchange') this.returnKind = draft.kind;
+      this.returnReason = typeof draft.reason === 'string' ? draft.reason : '';
+      this.returnReasonCode = (typeof draft.code === 'string' ? draft.code : '') as ReturnReasonCode | '';
+      if (lines.length) this.selections.set(Object.fromEntries(lines.map((l) => [l.variantId, l])));
+    } catch {
+      sessionStorage.removeItem(this.returnDraftKey(orderId));
+    }
+  }
+
   /** Start a new request; auto-selects the sole item when order has only 1 eligible item. */
   startReturn(): void {
     const order = this.order();
@@ -605,6 +649,8 @@ export class OrderFlowPage {
     this.clearEvidence();
     this.returnReason = '';
     this.returnReasonCode = '';
+    this.returnKind = 'refund';
+    this.restoreReturnDraft(order.id);
     this.error.set('');
     this.view.set('return');
     void this.model.loadReplacementChoices?.(order.id);
@@ -820,6 +866,7 @@ export class OrderFlowPage {
         .createReturn(order.id, this.returnKind, this.selectedLines(), this.returnReason, this.evidence(), this.returnReasonCode || undefined, bank)
         .then((request) => {
           this.pointRefundWarning.set(false);
+          sessionStorage.removeItem(this.returnDraftKey(order.id));
           this.requestId.set(request.id);
           this.error.set('');
           this.view.set('tracking');

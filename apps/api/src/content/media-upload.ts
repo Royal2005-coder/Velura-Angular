@@ -8,10 +8,11 @@ import {
   uploadToSupabaseStorage,
   VIDEO_MIME_TYPES,
 } from "../storage.js";
+import { requirePermission } from "../rbac.js";
+import { CMS_UPLOAD_PREFIX, categoryAllowsVideo, parseUploadCategory, validateCmsUpload } from "./media-image-rules.js";
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "../types.js";
 
-const ALLOWED_MEDIA_TYPES = [...IMAGE_MIME_TYPES, ...VIDEO_MIME_TYPES];
-const MAX_MEDIA_BYTES = MAX_VIDEO_BYTES; // Up to 50MB for video, validated per type
+const ALL_MEDIA_TYPES = [...IMAGE_MIME_TYPES, ...VIDEO_MIME_TYPES];
 
 export async function handleAdminMediaUpload(args: {
   req: HttpRequest;
@@ -21,7 +22,7 @@ export async function handleAdminMediaUpload(args: {
   context: AuthContext;
   headers: HeaderMap;
 }): Promise<boolean> {
-  const { req, res, url, parts, headers } = args;
+  const { req, res, url, parts, context, headers } = args;
 
   const isMediaUploadRoute =
     (parts[1] === "v1" && parts[2] === "admin" && parts[3] === "content" && parts[4] === "upload-media") ||
@@ -29,22 +30,27 @@ export async function handleAdminMediaUpload(args: {
 
   if (!isMediaUploadRoute) return false;
 
+  requirePermission(context, "content", "create");
+
   if (req.method !== "POST") {
     throw new HttpError(405, "METHOD_NOT_ALLOWED", "Chỉ chấp nhận phương thức POST");
   }
 
-  const category = url.searchParams.get("category") || "media";
-  const prefix = category === "banner" ? "banners" : category === "collection" ? "collections" : "cms-media";
+  const category = parseUploadCategory(url.searchParams.get("category"));
+  const prefix = CMS_UPLOAD_PREFIX[category];
 
+  // Đọc nhận cả video để video sai danh mục bị từ chối bằng VIDEO_NOT_ALLOWED thay vì lỗi kiểu tệp chung.
   const file = await readMultipartFile(req, {
-    maxBytes: MAX_MEDIA_BYTES,
-    allowedTypes: ALLOWED_MEDIA_TYPES,
+    maxBytes: categoryAllowsVideo(category) ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES,
+    allowedTypes: ALL_MEDIA_TYPES,
   });
 
   const isVideo = VIDEO_MIME_TYPES.includes(file.mimeType);
   if (!isVideo && file.fileBuffer.length > MAX_IMAGE_BYTES) {
     throw new HttpError(413, "PAYLOAD_TOO_LARGE", "Ảnh tải lên vượt quá dung lượng tối đa 10MB");
   }
+
+  await validateCmsUpload({ category, buffer: file.fileBuffer, mimeType: file.mimeType });
 
   const publicUrl = await uploadToSupabaseStorage(
     file.fileBuffer,

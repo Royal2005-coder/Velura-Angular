@@ -362,3 +362,163 @@ describe('AdminErpContentPage', () => {
     expect(page.draft()?.productIds).toContain('p-1');
   });
 });
+
+describe('AdminErpContentPage banners & collections (KAN-116)', () => {
+  const BANNER = {
+    banner_id: 'bn-1',
+    placement: 'products_hero' as const,
+    title: 'Mùa thu',
+    subtitle: null,
+    tag_label: null,
+    media_type: 'video' as const,
+    media_url: 'https://cdn.velura.vn/a.mp4',
+    poster_url: 'https://cdn.velura.vn/a.jpg',
+    button_text: null,
+    link_url: '/products',
+    is_active: true,
+    sort_order: 0,
+    created_at: '2026-11-01T00:00:00Z',
+    updated_at: '2026-11-01T00:00:00Z',
+  };
+  const COLLECTION = {
+    collection_id: 'c-1',
+    code: 'soft-ceremony',
+    name: 'Soft Ceremony',
+    label: 'Soft Ceremony',
+    badge: 'ELEGANT',
+    col_number: '01',
+    script: 'soft',
+    hero_gradient: 'linear-gradient(115deg, #fff 0%, #eee 100%)',
+    banner_url: null,
+    hero_mode: 'models' as const,
+    models: ['/assets/1.png', '/assets/2.png', '/assets/3.png', '/assets/4.png', '/assets/5.png'],
+    home_story: null,
+    kicker: 'k',
+    story_headline: 'h',
+    story_desc: 'desc',
+    explore_cta: 'go',
+    category_link: '/products',
+    products_sub: 's',
+    products_title: 't',
+    closing_quote: 'q',
+    home_model_url: null,
+    show_on_home: false,
+    home_sort_order: 0,
+    product_ids: ['combo-1'],
+    story_paragraphs: [],
+    is_active: true,
+    sort_order: 0,
+    created_at: '2026-11-01T00:00:00Z',
+    updated_at: '2026-11-01T00:00:00Z',
+  };
+
+  function boot() {
+    TestBed.resetTestingModule();
+    const updated: { id: string; body: Record<string, unknown> }[] = [];
+    const uploads: string[] = [];
+    const productCalls: Record<string, string>[] = [];
+    const api = {
+      listBlogs: () => of({ rows: [], count: 0 }),
+      listContentCategories: () => of({ rows: [] }),
+      listCategories: () => of({ rows: [], count: 0 }),
+      listSubscribers: () => of({ rows: [], count: 0, activeCount: 0, unsubscribedCount: 0 }),
+      listBanners: () => of({ success: true, data: [BANNER] }),
+      listCollections: () => of({ success: true, data: [COLLECTION] }),
+      listProducts: (params: Record<string, string> = {}) => {
+        productCalls.push(params);
+        return of({ rows: [{ product_id: 'combo-1', name: 'Set áo dài', slug: 'set', status: 'on_sale', base_price: 900000, images: [] }, { product_id: 'combo-2', name: 'Set lụa', slug: 'set-lua', status: 'on_sale', base_price: 800000, images: [] }], count: 2 });
+      },
+      uploadCmsMedia: (file: File, category: string) => {
+        uploads.push(category);
+        return of({ success: true, url: `https://cdn.velura.vn/${file.name}`, mediaType: 'image' as const });
+      },
+      updateCollection: (id: string, body: Record<string, unknown>) => {
+        updated.push({ id, body });
+        return of({ success: true, data: { ...COLLECTION, ...body } });
+      },
+    };
+    TestBed.configureTestingModule({
+      imports: [AdminErpContentPage],
+      providers: [provideRouter([]), { provide: AdminErpApiService, useValue: api }],
+    });
+    TestBed.inject(AdminErpSessionService).applyAuthContext(context({ content: ['read', 'create', 'update'] }));
+    const fixture = TestBed.createComponent(AdminErpContentPage);
+    fixture.detectChanges();
+    return { fixture, page: fixture.componentInstance, updated, uploads, productCalls };
+  }
+
+  function el(fixture: { nativeElement: unknown }): HTMLElement {
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('does not paginate the banner and collection tabs but still paginates the blog list', () => {
+    const { fixture, page } = boot();
+    expect(el(fixture).querySelector('app-erp-pagination')).not.toBeNull();
+    page.setTab('banners');
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('app-erp-pagination')).toBeNull();
+    expect(el(fixture).textContent).not.toContain('Hiển thị');
+    page.setTab('collections');
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('app-erp-pagination')).toBeNull();
+  });
+
+  it('renders banner cards as still images with a status badge and no embedded video', () => {
+    const { fixture, page } = boot();
+    page.setTab('banners');
+    fixture.detectChanges();
+    const root = el(fixture);
+    expect(root.querySelector('video')).toBeNull();
+    expect(root.querySelector('.cms-card app-erp-status-badge')?.textContent).toContain('Đang bật');
+    expect(page.bannerThumb(BANNER)).toBe(BANNER.poster_url);
+  });
+
+  it('edits a collection without a label field, with cover upload, five cutout slots and combo ordering', () => {
+    const { fixture, page, updated, uploads, productCalls } = boot();
+    page.setTab('collections');
+    page.openEditCollection(COLLECTION);
+    page.fetchCombos();
+    fixture.detectChanges();
+    const root = el(fixture);
+
+    expect(root.querySelector('input[data-field="label"]')).toBeNull();
+    expect(page.modelSlotIndexes.length).toBe(5);
+    expect(productCalls.some((call) => call['isCombo'] === 'true')).toBe(true);
+
+    const file = new File(['x'], 'cover.jpg', { type: 'image/jpeg' });
+    page.onCollectionImageSelected('cover', { target: { files: [file], value: '' } } as unknown as Event);
+    expect(uploads).toEqual(['collection-cover']);
+    expect(page.collectionDraft().banner_url).toBe('https://cdn.velura.vn/cover.jpg');
+
+    page.addCombo({ product_id: 'combo-2', name: 'Set lụa', slug: 'set-lua', images: [], status: 'on_sale', base_price: 800000, sale_price: null });
+    page.moveCombo(1, -1);
+    expect(page.collectionDraft().product_ids).toEqual(['combo-2', 'combo-1']);
+    page.removeCombo('combo-1');
+    expect(page.collectionDraft().product_ids).toEqual(['combo-2']);
+
+    page.saveCollection();
+    expect(updated.length).toBe(1);
+    const body = updated[0].body;
+    expect(body['hero_mode']).toBe('models');
+    expect(body['home_model_url']).toBeNull();
+    expect(body['show_on_home']).toBe(false);
+    expect(body['home_sort_order']).toBe(0);
+    expect(body['product_ids']).toEqual(['combo-2']);
+    expect('label' in body).toBe(false);
+  });
+
+  it('blocks show_on_home without a homepage image and disables Save', () => {
+    const { fixture, page, updated } = boot();
+    page.setTab('collections');
+    page.openEditCollection(COLLECTION);
+    page.collectionDraft.update((draft) => ({ ...draft, show_on_home: true }));
+    fixture.detectChanges();
+
+    expect(page.collectionErrors()['home_model_url']).toBeTruthy();
+    expect(page.collectionInvalid()).toBe(true);
+    const save = el(fixture).querySelector<HTMLButtonElement>('[data-testid="collection-save"]');
+    expect(save?.disabled).toBe(true);
+    page.saveCollection();
+    expect(updated.length).toBe(0);
+  });
+});

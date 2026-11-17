@@ -6,37 +6,35 @@ Source of truth for `apps/admin-erp-ng`. Tokens live only in `apps/admin-erp-ng/
 A warm, quiet operations console: cocoa-brown navigation rail, blush-white canvas, white working surfaces, one maroon accent. Density "Daily App Balanced" (6/10): every screen is a list or a detail that an operator scans many times a day, so hierarchy comes from weight and spacing, not decoration. Variance low (symmetric grids, predictable placement of actions). Motion restrained (140 ms ease on hover/press, no looping effects).
 
 ## 2. Color Palette & Roles
-- **Blush Canvas** (#FAF5F7) — app background, filter bands
-- **Pure Surface** (#FFFFFF) — cards, tables, drawers, header
-- **Petal Tint** (#FDF2F4) — hover rows, soft accent fills
-- **Rose Line** (#F0DDE2) — 1px card borders and dividers; **Subtle Line** (#F7ECEF) row separators
-- **Control Border** (#A97886) — inputs/selects (3.67:1, WCAG 1.4.11)
-- **Cocoa Ink** (#2A1A1D) — headings and values; **Body** (#351D25); **Mauve Muted** (#7A5A62) labels; **Soft** (#806870) captions (≥4.6:1)
-- **Velvet Maroon** (#7A283C, hover #631F30) — the single accent: primary buttons, links, active state
-- **Rose Focus** (#C94F70) — focus ring and active indicator only, never text (4.34:1)
-- **Cocoa Rail** (#3A2622) with text #EBDCD8 (10.65:1), muted #C9B3AD (7.12:1), active pill rgba(201,79,112,.22)
-- Status on tint: success #42624D/#F1F5E8, warning #8A5523/#FBF0E4, danger #B4233E/#FCE9ED, info #6F4A62/#F5EEF3 (all ≥5.4:1)
+- **Slate Canvas** (`#F8FAFC`) — app background, filter bands; **Soft Container** (`#F1F5F9`)
+- **Pure Surface** (`#FFFFFF`) — cards, tables, drawers, sidebar, sticky header
+- **Rose Tint** (`#FFF1F3` / `#FFE4E6`) — selected pills, subtle active highlights
+- **Structural Lines** — `--erp-line` (`#E2E8F0`) 1px card borders; `--erp-line-subtle` (`#F1F5F9`) row separators; `--erp-line-strong` (`#CBD5E1`) neutral button borders
+- **Control Border** (`#8492A6`, hover `#64748B`) — inputs/selects (`3.16:1` on `#FFFFFF`, `3.02:1` on `#F8FAFC`, WCAG 2.1 SC 1.4.11)
+- **Authoritative Ink** (`#0F172A`) — headings, values, body; **Muted** (`#64748B`) labels; **Soft** (`#94A3B8`) captions
+- **Luxury Rose** (`#BE185D`, hover `#9D174D`) — the single accent: primary buttons, active tabs, focus rings, active nav indicator
+- **Status on tint**: success `#059669`/`#ECFDF5` (line `#A7F3D0`), warning `#D97706`/`#FFFBEB` (line `#FDE68A`), danger `#E11D48`/`#FFF1F2` (line `#FECDD3`), info `#2563EB`/`#EFF6FF` (line `#BFDBFE`)
 
 ## 3. Typography Rules
-- **UI:** Be Vietnam Pro 400/500/600/700 — drawn for Vietnamese diacritics; 14px base, 1.5 leading; tables 13.5px with tabular figures.
-- **Numbers:** JetBrains Mono 500/600 for KPI values and codes operators compare.
+- **UI:** Be Vietnam Pro 400/500/600/700 (`--erp-font`, `--erp-display`) — drawn for Vietnamese diacritics; 14px base, 1.5 leading; tables 13.5–14px with tabular figures.
+- **Numbers:** JetBrains Mono 500/600 (`--erp-font-mono`) for KPI values, counts, and codes operators compare.
 - **Headings:** Be Vietnam Pro 600, tight tracking (−0.015em); page title 22–26px, section 15–18px.
-- **Wordmark only:** Cormorant Garamond 600 for the "Velura" logo. No serif anywhere else in the console.
+- **Wordmark only:** Cormorant Garamond 600 (`--erp-brand`) for the "Velura ERP" logo. No serif anywhere else in the console.
 - **Banned:** Inter, DM Sans, Playfair, generic system serif in UI.
 
 ## 4. Component Stylings
-- **Buttons:** 38px, radius 10px, flat. Primary = maroon fill; ghost = white with rose line; danger = red fill. No glow.
-- **Inputs:** label above, 40px, Control Border, rose focus ring, error text below.
-- **Cards:** white, 1px Rose Line, radius 14px, shadow tinted maroon at 5%. Used for grouping, not decoration.
+- **Buttons:** 38px (`32px` `--sm`), radius 8px, flat. Secondary = white with `--erp-line-strong` & dark ink; Primary = Luxury Rose fill; Danger = solid Rose 600 (confirm dialogs) or `--danger-outline` (card/row delete actions so primary & destructive buttons never clash). No glow.
+- **Inputs:** label above, 40px, `--erp-control-border` (`>= 3.0:1`), rose focus ring, error text below.
+- **Cards:** white, 1px `--erp-line`, radius 12px, diffused slate shadow. Used for grouping, not decoration.
 - **KPI widgets:** compact (14px padding), 28px tinted icon chip, mono value 22px, one-line hint. One row on ≥1280px.
-- **Tables:** white sticky header with bottom rule, uppercase 12px muted labels, petal hover, numeric columns right-aligned.
-- **Badges:** pill, status tint + dot.
-- **Modal / drawer:** radius 20px, warm backdrop rgba(42,20,28,.45).
+- **Tables:** white sticky header with bottom rule, uppercase 12px muted labels, subtle hover, numeric columns right-aligned.
+- **Badges:** pill (`flex-shrink: 0`), status tint + semantic border + dot.
+- **Modal / drawer:** radius 16px, warm backdrop (`z-index: 80` for workspace modals, `z-index: 120` for confirm dialogs).
 - **Loading:** skeleton rows/values matching the final layout; no spinners in tables.
 - **Empty states:** icon + one sentence saying what is missing and where the data comes from.
 
 ## 5. Layout Principles
-Sidebar 250px (76px icon rail when collapsed, persisted in `localStorage['velura-erp-sidebar-collapsed']`), header 60px, content max-width 1480px with 24–26px gutters. Page = header (eyebrow, title, one-line purpose, actions right) → KPI row → one workspace card (tabs + filter band + table + pagination). Below 920px the rail becomes an off-canvas drawer; all grids collapse; no horizontal page scroll (tables scroll inside their card).
+Sidebar 260px (72px icon rail when collapsed, persisted in `localStorage['velura-erp-sidebar-collapsed']`), aligned 56px (`--erp-topbar-h`) brand & sticky header divider, content max-width 1480px with 24–26px gutters. Page = header (eyebrow, title, one-line purpose, actions right) → KPI row → one workspace card (tabs + filter band + table/cards + pagination). Below 920px the rail becomes an off-canvas drawer; all grids collapse; no horizontal page scroll (tables scroll inside their card).
 
 ## 6. Motion & Interaction
 transform/opacity only, 100–140 ms ease; hover lift −1px on cards; `prefers-reduced-motion` removes transitions. Keyboard: visible focus everywhere, ⌘K search, `/` focuses the page's first filter, tablists with arrow keys, ↑/↓ between table rows, Enter opens a row, J/K previous/next record in a drawer, Escape closes only the top-most overlay.

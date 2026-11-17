@@ -53,6 +53,8 @@ export interface AdminCollectionRow {
   home_sort_order: number;
   /** Ordered combo/set product ids shown on `/collections` (max 10). */
   product_ids: string[];
+  /** Visual framing & cover positioning metadata (`cover_x`, `cover_y`, `cover_zoom`). */
+  styling_metadata?: Record<string, unknown>;
   story_paragraphs: string[];
   is_active: boolean;
   sort_order: number;

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AdminErpConfirmService } from '../../core/admin-erp-confirm.service';
 import { AdminErpModal } from './admin-modal';
 
@@ -9,7 +9,7 @@ import { AdminErpModal } from './admin-modal';
   imports: [AdminErpModal],
   template: `
     @if (confirm.pending(); as request) {
-      <app-erp-modal [open]="true" [title]="request.title" size="sm" (closed)="cancel()">
+      <app-erp-modal [open]="true" [elevated]="true" [title]="request.title" size="sm" (closed)="cancel()">
         @if (request.message) {
           <p class="confirm__message">{{ request.message }}</p>
         }
@@ -57,6 +57,13 @@ export class AdminErpConfirmHost {
     const request = this.confirm.pending();
     return !request?.requireReason || this.reason().trim().length >= this.minLength();
   });
+
+  constructor() {
+    effect(() => {
+      this.confirm.pending();
+      untracked(() => this.reason.set(''));
+    });
+  }
 
   protected onReason(event: Event): void {
     this.reason.set((event.target as HTMLTextAreaElement).value);

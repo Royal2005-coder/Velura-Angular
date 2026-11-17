@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
-import { COLLECTION_LOOKBOOKS, CollectionLookbook } from '../../core/models/collection-lookbook';
+import { COLLECTION_LOOKBOOKS, CollectionLookbook, normalizeCollectionLookbook } from '../../core/models/collection-lookbook';
 import { ProductSummary } from '../../core/models/product.interface';
 import { ApiService } from '../../core/services/api.service';
 import { CatalogService } from '../../core/services/catalog.service';
@@ -122,5 +122,30 @@ describe('CollectionsPage', () => {
     const externalCta = external.root.querySelector<HTMLAnchorElement>('.collection-story__cta');
     expect(externalCta?.getAttribute('href')).toBe('https://velura.royalai.dev/lookbook');
     expect(externalCta?.getAttribute('target')).toBe('_blank');
+  });
+
+  it('applies top-weighted default framing (50% 16%) and custom styling_metadata crop/zoom to cover hero images', async () => {
+    const defaultCover = normalizeCollectionLookbook({
+      code: 'midnight-mirage',
+      name: 'Midnight Mirage',
+      hero_mode: 'cover',
+      banner_url: 'https://cdn.example.com/midnight.jpg',
+    });
+    const customCover = normalizeCollectionLookbook({
+      code: 'custom-framing',
+      name: 'Custom Framing',
+      hero_mode: 'cover',
+      banner_url: 'https://cdn.example.com/custom.jpg',
+      styling_metadata: { cover_x: 42.5, cover_y: 12, cover_zoom: 1.35 },
+    });
+
+    const { root } = await renderCollections([defaultCover, customCover], []);
+    const covers = root.querySelectorAll<HTMLImageElement>('.collection-hero__cover');
+    expect(covers.length).toBe(2);
+    expect(covers[0].style.objectPosition).toBe('50% 16%');
+    expect(covers[0].style.transform).toBe('');
+    expect(covers[1].style.objectPosition).toBe('42.5% 12%');
+    expect(covers[1].style.transformOrigin).toBe('42.5% 12%');
+    expect(covers[1].style.transform).toBe('scale(1.35)');
   });
 });

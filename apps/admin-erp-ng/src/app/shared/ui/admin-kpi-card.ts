@@ -69,21 +69,36 @@ export type AdminKpiTone = 'neutral' | 'accent' | 'success' | 'warning' | 'dange
       .kpi:hover .kpi__icon {
         transform: scale(1.05);
       }
+      .kpi--accent {
+        border-top: 2px solid var(--erp-accent);
+      }
       .kpi--accent .kpi__icon {
         background: var(--erp-accent-soft);
         color: var(--erp-accent);
+      }
+      .kpi--success {
+        border-top: 2px solid var(--erp-success);
       }
       .kpi--success .kpi__icon {
         background: var(--erp-success-soft);
         color: var(--erp-success);
       }
+      .kpi--warning {
+        border-top: 2px solid var(--erp-warning);
+      }
       .kpi--warning .kpi__icon {
         background: var(--erp-warning-soft);
         color: var(--erp-warning);
       }
+      .kpi--danger {
+        border-top: 2px solid var(--erp-danger);
+      }
       .kpi--danger .kpi__icon {
         background: var(--erp-danger-soft);
         color: var(--erp-danger);
+      }
+      .kpi--info {
+        border-top: 2px solid var(--erp-info);
       }
       .kpi--info .kpi__icon {
         background: var(--erp-info-soft);

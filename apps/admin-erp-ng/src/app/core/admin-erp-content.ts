@@ -115,10 +115,10 @@ export const emptyBlogDraft: BlogDraft = {
 };
 
 /**
- * Đổi tiêu đề thành slug ASCII, cắt theo trần 120 ký tự của RPC.
+ * Đổi tiêu đề thành slug ASCII, cắt theo trần 120 ký tự của RPC và gỡ dấu gạch nối thừa ở cuối.
  */
 export function blogSlugFromTitle(title: string): string {
-  return slugifyProductText(title).slice(0, 120);
+  return slugifyProductText(title).slice(0, 120).replace(/-+$/g, '');
 }
 
 /**
@@ -227,6 +227,8 @@ export function blogRequestBody(draft: BlogDraft, expectedVersion?: number): Adm
 
 /** Longest stored image/link URL, same ceiling as the API (FR-S3). */
 export const CMS_URL_MAX = 500;
+/** Longest stored `category_link` on a collection (`collection-service.ts` enforces 255). */
+export const CMS_COLLECTION_LINK_MAX = 255;
 /** Homepage runway always shows exactly five collections' models. */
 export const HOME_MODEL_SLOTS = 5;
 /** `/collections` hero strip holds exactly five cutouts when `hero_mode = 'models'`. */
@@ -272,11 +274,45 @@ export function resolveStorefrontAsset(url: string | null | undefined, origin: s
   return value;
 }
 
+/**
+ * Sinh mã định danh (slug) bộ sưu tập từ tên tiếng Việt, cắt tối đa 60 ký tự và loại bỏ dấu `-` thừa ở cuối.
+ */
+export function collectionCodeFromName(name: string): string {
+  return slugifyProductText(name).slice(0, COLLECTION_FIELD_LIMITS.code).replace(/-+$/g, '');
+}
+
+/**
+ * Chuẩn hóa thông số kéo/cắt khung ảnh (`posX`, `posY`, `zoom`) đồng nhất 1:1 giữa Admin ERP và Storefront.
+ */
+export function computeMediaFraming(
+  rawX: unknown,
+  rawY: unknown,
+  rawZoom: unknown,
+  defaultY: number,
+): { posX: number; posY: number; zoom: number; objectPosition: string; transformOrigin: string; transform: string | null } {
+  const clamp = (val: unknown, fallback: number, min: number, max: number, factor: number): number =>
+    typeof val === 'number' && Number.isFinite(val)
+      ? Math.round(Math.min(max, Math.max(min, val)) * factor) / factor
+      : fallback;
+  const posX = clamp(rawX, 50, 0, 100, 10);
+  const posY = clamp(rawY, defaultY, 0, 100, 10);
+  const zoom = clamp(rawZoom, 1, 1, 2.4, 100);
+  const pos = `${posX}% ${posY}%`;
+  return {
+    posX,
+    posY,
+    zoom,
+    objectPosition: pos,
+    transformOrigin: pos,
+    transform: zoom > 1.001 ? `scale(${zoom})` : null,
+  };
+}
+
 /** Link target the storefront may follow: empty, an in-site path (`/x`, never `//host`) or `https://`. */
-export function isCmsLinkUrl(value: string): boolean {
+export function isCmsLinkUrl(value: string, maxLength: number = CMS_URL_MAX): boolean {
   const text = value.trim();
   if (!text) return true;
-  if (text.length > CMS_URL_MAX) return false;
+  if (text.length > maxLength) return false;
   return (text.startsWith('/') && !text.startsWith('//')) || text.startsWith('https://');
 }
 
@@ -366,7 +402,9 @@ export function validateCollectionDraft(draft: Partial<AdminCollectionRow>, cont
     if (!code) errors['code'] = 'Mã định danh (slug) là bắt buộc.';
     else if (!errors['code'] && !COLLECTION_CODE_PATTERN.test(code)) errors['code'] = 'Mã chỉ gồm chữ thường, số và dấu gạch ngang, ví dụ soft-ceremony.';
   }
-  if (!isCmsLinkUrl(draft.category_link ?? '')) errors['category_link'] = 'Đường dẫn phải bắt đầu bằng / (trong website) hoặc https://.';
+  if (!isCmsLinkUrl(draft.category_link ?? '', CMS_COLLECTION_LINK_MAX)) {
+    errors['category_link'] = `Đường dẫn phải bắt đầu bằng / (trong website) hoặc https:// (tối đa ${CMS_COLLECTION_LINK_MAX} ký tự).`;
+  }
   const gradient = text(draft.hero_gradient);
   if (gradient && !GRADIENT_PATTERN.test(gradient)) errors['hero_gradient'] = 'Gradient phải có dạng linear-gradient(...).';
   if (!isCmsMediaUrl(draft.banner_url ?? '')) errors['banner_url'] = 'Ảnh bìa phải là https://… hoặc /assets/… (tối đa 500 ký tự).';
@@ -398,12 +436,14 @@ export function validateCollectionDraft(draft: Partial<AdminCollectionRow>, cont
 /** Body for collection create/update (§5.3). `label` is left to the server (= name); `code` is immutable once created. */
 export function collectionRequestBody(draft: Partial<AdminCollectionRow>, editing: boolean): Partial<AdminCollectionRow> {
   const text = (value: string | null | undefined): string => (value ?? '').trim();
+  const gradient = text(draft.hero_gradient);
+  const categoryLink = text(draft.category_link);
   const body: Partial<AdminCollectionRow> = {
     name: text(draft.name),
     col_number: text(draft.col_number),
     script: text(draft.script),
     badge: text(draft.badge),
-    hero_gradient: text(draft.hero_gradient),
+    ...(gradient ? { hero_gradient: gradient } : editing ? {} : { hero_gradient: '' }),
     banner_url: text(draft.banner_url) || null,
     hero_mode: draft.hero_mode === 'cover' ? 'cover' : 'models',
     models: (draft.models ?? []).map((url) => url.trim()).filter(Boolean).slice(0, COLLECTION_MODEL_SLOTS),
@@ -412,7 +452,7 @@ export function collectionRequestBody(draft: Partial<AdminCollectionRow>, editin
     story_headline: text(draft.story_headline),
     story_desc: text(draft.story_desc),
     explore_cta: text(draft.explore_cta),
-    category_link: text(draft.category_link),
+    ...(categoryLink ? { category_link: categoryLink } : editing ? {} : { category_link: '' }),
     products_sub: text(draft.products_sub),
     products_title: text(draft.products_title),
     closing_quote: text(draft.closing_quote),
@@ -422,6 +462,9 @@ export function collectionRequestBody(draft: Partial<AdminCollectionRow>, editin
     product_ids: [...new Set(draft.product_ids ?? [])].slice(0, COLLECTION_COMBO_MAX),
     is_active: draft.is_active !== false,
     sort_order: Number(draft.sort_order ?? 0),
+    ...(draft.styling_metadata && Object.keys(draft.styling_metadata).length > 0
+      ? { styling_metadata: draft.styling_metadata }
+      : {}),
   };
   if (!editing) body.code = text(draft.code).toLowerCase();
   return body;

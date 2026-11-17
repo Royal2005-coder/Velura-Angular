@@ -784,7 +784,7 @@ Trân trọng,
 export async function sendReturnIntakeEmail(returnId: string): Promise<boolean> {
   try {
     const ret = await selectOne("return_exchange", {
-      select: "return_id,order_id,user_id,return_type,tracking_return_code,return_code,reason,description",
+      select: "return_id,order_id,user_id,return_type,tracking_return_code,return_code,description",
       return_id: `eq.${returnId}`
     });
     if (!ret) return false;

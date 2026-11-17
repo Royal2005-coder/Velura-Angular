@@ -1,7 +1,7 @@
 import { AfterViewInit, Component, ElementRef, Injector, OnDestroy, ViewChild, afterNextRender, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { catchError, forkJoin, of, take } from 'rxjs';
-import { COLLECTION_LOOKBOOKS } from '../../core/models/collection-lookbook';
+import { COLLECTION_LOOKBOOKS, CollectionLookbook } from '../../core/models/collection-lookbook';
 import { CategorySummary, ProductSummary } from '../../core/models/product.interface';
 import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
@@ -90,6 +90,42 @@ export const HERO_LOOKS: HeroLook[] = [
     link: '/products?category=ao',
   },
 ];
+
+/** Số người mẫu cố định của runway 3D trang chủ. */
+export const HOME_RUNWAY_SIZE = 5;
+const HOME_DESCRIPTION_MAX = 160;
+
+function homeDescription(collection: CollectionLookbook): string {
+  const text = (collection.homeStory || collection.storyDesc || '').trim();
+  if (!text) return 'Những thiết kế thanh lịch tôn vinh phong cách riêng của bạn.';
+  return text.length > HOME_DESCRIPTION_MAX ? `${text.slice(0, HOME_DESCRIPTION_MAX - 1).trimEnd()}…` : text;
+}
+
+/**
+ * Dựng runway trang chủ từ CMS: các bộ sưu tập `showOnHome` có `homeModel`, sắp theo `homeSortOrder` rồi thứ tự gốc.
+ * Mỗi người mẫu mang tên và link của chính bộ sưu tập. Chỉ khi có đúng 5 người mẫu hợp lệ mới trả về danh sách
+ * (nhiều hơn 5 lấy 5 đầu); ít hơn 5 trả `null` để trang giữ `HERO_LOOKS` tĩnh.
+ */
+export function buildHomeRunwayLooks(collections: readonly CollectionLookbook[]): HeroLook[] | null {
+  const eligible = collections
+    .map((collection, order) => ({ collection, order }))
+    .filter(({ collection }) => collection.showOnHome && collection.homeModel.trim().length > 0)
+    .sort((a, b) => a.collection.homeSortOrder - b.collection.homeSortOrder || a.order - b.order)
+    .slice(0, HOME_RUNWAY_SIZE);
+  if (eligible.length !== HOME_RUNWAY_SIZE) return null;
+  return eligible.map(({ collection }) => ({
+    id: collection.id,
+    collectionName: collection.name || 'Velura Collection',
+    title: collection.storyHeadline || collection.name,
+    eyebrow: 'VELURA',
+    season: collection.colNumber || 'SPRING / SUMMER 2027',
+    description: homeDescription(collection),
+    badge: collection.badge || 'ELEGANT',
+    looksCount: collection.kicker || '10 LOOKS',
+    image: collection.homeModel,
+    link: collection.categoryLink || `/collections#${collection.id}`,
+  }));
+}
 
 interface UnpaidNotice {
   orderId: string;
@@ -231,14 +267,13 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   /**
    * Safe image error fallback preventing infinite retry loop and missing assets.
+   * Falls back to the bundled cutout of the same runway position, so one broken upload never duplicates another model.
    */
-  onModelImgError(event: Event, fallbackPath?: string): void {
-    const img = event.target as HTMLImageElement;
-    if (!img) return;
-    if (!img.dataset['fallback']) {
-      img.dataset['fallback'] = '1';
-      img.src = '/assets/images/models/model_cutout_1.png';
-    }
+  onModelImgError(event: Event, index: number): void {
+    const img = event.target as HTMLImageElement | null;
+    if (!img || img.dataset['fallback']) return;
+    img.dataset['fallback'] = '1';
+    img.src = `/assets/images/models/model_cutout_${(index % HOME_RUNWAY_SIZE) + 1}.png`;
   }
 
   /**
@@ -253,32 +288,12 @@ export class HomePage implements AfterViewInit, OnDestroy {
         .getCollections()
         .pipe(
           take(1),
-          catchError(() => of<any[]>([]))
+          catchError(() => of<CollectionLookbook[]>([]))
         )
         .subscribe((collections) => {
-          if (collections && collections.length >= 3) {
-            // Take exactly up to 5 collections to preserve 5-position 3D runway layout
-            const targetCols = collections.slice(0, 5);
-            const dynamicLooks: HeroLook[] = targetCols.map((col, idx) => {
-              const defaultFallbackCutout = `/assets/images/models/model_cutout_${(idx % 5) + 1}.png`;
-              const modelImg = (col.models && col.models.length > 0 && col.models[0])
-                ? col.models[0]
-                : defaultFallbackCutout;
-
-              return {
-                id: col.code || col.id,
-                collectionName: col.name || 'Velura Collection',
-                title: col.storyHeadline || col.name,
-                eyebrow: 'VELURA',
-                season: col.colNumber || 'SPRING / SUMMER 2027',
-                description: col.storyDesc || col.homeStory || 'Những thiết kế thanh lịch tôn vinh phong cách riêng của bạn.',
-                badge: col.badge || 'ELEGANT',
-                looksCount: col.kicker || '10 LOOKS',
-                image: modelImg,
-                link: col.categoryLink || `/collections#${col.code || col.id}`,
-              };
-            });
-            this.heroLooks.set(dynamicLooks);
+          const runway = buildHomeRunwayLooks(collections ?? []);
+          if (runway) {
+            this.heroLooks.set(runway);
           }
         });
     }

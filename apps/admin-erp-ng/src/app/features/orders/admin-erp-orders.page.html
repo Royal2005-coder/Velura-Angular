@@ -139,6 +139,18 @@
         }
       </section>
 
+      @if (order.source_return) {
+        <section class="order-section">
+          <h4>Phiếu đổi trả gốc</h4>
+          <p><strong>{{ order.source_return.return_code }}</strong></p>
+          <div class="order-actions">
+            @for (link of sourceReturnLinks(); track link.label) {
+              <a class="erp-btn erp-btn--sm" [routerLink]="link.commands" [queryParams]="link.query">{{ link.label }}</a>
+            }
+          </div>
+        </section>
+      }
+
       <section class="order-section">
         <h4>Liên kết nghiệp vụ</h4>
         <div class="order-actions">
@@ -302,8 +314,16 @@
       @if (selected()?.allowed_actions?.length && hasAction(selected()!, 'call_confirm')) {
         <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCodCall(selected()!)">Gọi xác nhận</button>
       }
+      @if (canShowLabel()) {
+        <button class="erp-btn erp-btn--sm" type="button" (click)="openCarrierLabel(selected()!)">Nhãn vận đơn / In lại</button>
+      }
       @for (action of primaryActions(); track action.code) {
-        <button class="erp-btn erp-btn--sm" type="button" (click)="openAction(action)">{{ action.label }}</button>
+        <button
+          class="erp-btn erp-btn--sm"
+          [class.erp-btn--primary]="action.code === 'upsert_shipment'"
+          type="button"
+          (click)="openAction(action)"
+        >{{ action.label }}</button>
       }
       @for (action of destructiveActions(); track action.code) {
         <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="openAction(action)">{{ action.label }}</button>
@@ -500,16 +520,13 @@
           <div><dt>Người nhận</dt><dd>{{ order.shipping_name || '—' }} · {{ order.shipping_phone || '—' }}</dd></div>
           <div><dt>Địa chỉ giao</dt><dd>{{ order.shipping_address || '—' }}</dd></div>
         </dl>
-        <p class="erp-hint">In nhãn, dán lên kiện hàng rồi quét lại ở bước “Xác nhận vận đơn”.</p>
+        <p class="erp-hint">In nhãn, dán lên kiện hàng rồi đóng cửa sổ. Chuẩn bị xong hàng thì bấm “Xác nhận vận đơn” ở màn hình đơn để quét QR.</p>
       }
       <div class="order-form__actions">
-        <button class="erp-btn" type="button" (click)="closeModal()">Đóng</button>
         @if (carrierLabel(); as label) {
           <button class="erp-btn" type="button" (click)="printOrderLabel(order, label)">In nhãn</button>
         }
-        @if (hasAction(order, 'upsert_shipment')) {
-          <button class="erp-btn erp-btn--primary" type="button" (click)="continueToShipment()">Xác nhận vận đơn</button>
-        }
+        <button class="erp-btn erp-btn--primary" type="button" (click)="closeModal()">Xong - quay lại xử lý đơn</button>
       </div>
     </div>
   }

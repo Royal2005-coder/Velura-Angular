@@ -42,6 +42,7 @@
             >
               <h2>Thông tin giao hàng</h2>
               <p class="muted">Điền một lần, kiểm tra và hoàn tất ngay tại đây.</p>
+              <app-loading-overlay [active]="busy()" label="Đang xử lý đơn hàng, vui lòng không đóng trang…" />
               <fieldset [disabled]="busy()">
                 <section class="form-section">
                   <div class="section-heading">
@@ -62,7 +63,7 @@
                         (blur)="validateField('name')"
                         [attr.aria-invalid]="!!fieldErrors()['name']"
                         required
-                      /><small class="error">{{ fieldErrors()['name'] }}</small></label
+                      />@if (fieldErrors()['name']) {<small class="error" role="alert">{{ fieldErrors()['name'] }}</small>}</label
                     >
                     <label class="field"
                       >Email (tùy chọn)<input
@@ -73,7 +74,7 @@
                         [ngModel]="address.email"
                         (ngModelChange)="editField('email', $event)"
                         (blur)="validateField('email')"
-                      /><small class="error">{{ fieldErrors()['email'] }}</small></label
+                      />@if (fieldErrors()['email']) {<small class="error" role="alert">{{ fieldErrors()['email'] }}</small>}</label
                     >
                   </div>
                   <label class="field"
@@ -118,7 +119,7 @@
                         }
                       }
                     </div>
-                    <small class="error">{{ fieldErrors()['phone'] }}</small></label
+                    @if (fieldErrors()['phone']) {<small class="error" role="alert">{{ fieldErrors()['phone'] }}</small>}</label
                   >
                   @if (!member()) {
                     @if (otpPhone() && !sendingOtp()) {
@@ -199,7 +200,7 @@
                   }
                   <div class="fields">
                     <app-address-selector [value]="address" [invalid]="!!fieldErrors()['ward'] || !!fieldErrors()['district']" (selectionChange)="updateGeography($event)" />
-                    <small class="error">{{ fieldErrors()['district'] || fieldErrors()['ward'] }}</small>
+                    @if (fieldErrors()['district'] || fieldErrors()['ward']) {<small class="error" role="alert">{{ fieldErrors()['district'] || fieldErrors()['ward'] }}</small>}
                     <label class="field"
                       >Số nhà, tên đường <span class="req" aria-hidden="true">*</span><input
                         name="detail"
@@ -208,7 +209,7 @@
                         (ngModelChange)="editField('detail', $event)"
                         (blur)="validateField('detail')"
                         required
-                      /><small class="error">{{ fieldErrors()['detail'] }}</small></label
+                      />@if (fieldErrors()['detail']) {<small class="error" role="alert">{{ fieldErrors()['detail'] }}</small>}</label
                     >
                   </div>
                   @if (member()) {
@@ -691,30 +692,30 @@
           name="draft-email"
           type="email"
           [(ngModel)]="addressDraft.email"
-        /><small class="error">{{ dialogErrors()['email'] }}</small></label
+        />@if (dialogErrors()['email']) {<small class="error" role="alert">{{ dialogErrors()['email'] }}</small>}</label
       ><label class="field"
         >Người nhận <span class="req" aria-hidden="true">*</span><input
           name="draft-name"
           autocomplete="name"
           [(ngModel)]="addressDraft.name"
           required
-        /><small class="error">{{ dialogErrors()['name'] }}</small></label
+        />@if (dialogErrors()['name']) {<small class="error" role="alert">{{ dialogErrors()['name'] }}</small>}</label
       ><label class="field"
         >Số điện thoại <span class="req" aria-hidden="true">*</span><input
           name="draft-phone"
           autocomplete="tel"
           [(ngModel)]="addressDraft.phone"
           required
-        /><small class="error">{{ dialogErrors()['phone'] }}</small></label
+        />@if (dialogErrors()['phone']) {<small class="error" role="alert">{{ dialogErrors()['phone'] }}</small>}</label
       ><app-address-selector [value]="addressDraft" [invalid]="!!dialogErrors()['ward'] || !!dialogErrors()['district']" (selectionChange)="updateDraftGeography($event)" />
-      <small class="error">{{ dialogErrors()['district'] || dialogErrors()['ward'] }}</small>
+      @if (dialogErrors()['district'] || dialogErrors()['ward']) {<small class="error" role="alert">{{ dialogErrors()['district'] || dialogErrors()['ward'] }}</small>}
       <label class="field"
         >Số nhà, tên đường <span class="req" aria-hidden="true">*</span><input
           name="draft-detail"
           autocomplete="street-address"
           [(ngModel)]="addressDraft.detail"
           required
-        /><small class="error">{{ dialogErrors()['detail'] }}</small></label
+        />@if (dialogErrors()['detail']) {<small class="error" role="alert">{{ dialogErrors()['detail'] }}</small>}</label
       >
       <div class="actions">
         <label class="check"

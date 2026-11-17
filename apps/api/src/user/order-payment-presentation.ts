@@ -9,6 +9,8 @@ export function customerPaymentFacts(payments: readonly JsonObject[]): JsonObjec
     (payment.payment_status === "refunded" ? payment.refund_amount : 0)), 0);
   return {
     payment_status: latest?.payment_status ?? "pending",
+    /** Gateway the customer actually chose (stripe, vnpay, momo); `orders.payment_method` only says ONLINE_PAYMENT. */
+    payment_provider: latest ? asString(latest.payment_provider).toLowerCase() || null : null,
     refund_status: sorted.some((payment) => payment.payment_status === "refund_pending") ? "pending" : refunded > 0 ? "completed" : null,
     refunded_amount: refunded
   };

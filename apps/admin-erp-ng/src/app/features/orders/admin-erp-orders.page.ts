@@ -21,8 +21,11 @@ import {
   handoverNote,
   logsForOrderLink,
   mergeOrderTrace,
+  orderFocusLink,
   returnsForOrderLink,
   returnTrace,
+  returnFocusLink,
+  type OrderTraceLink,
   type OrderTraceOrigin,
 } from '../../core/admin-erp-order-trace';
 import { choiceParam, queryMatches, textParam, watchQueryParams, writeQueryParams, type ListQuery } from '../../core/admin-erp-deep-link';
@@ -195,8 +198,6 @@ export class AdminErpOrdersPage {
   readonly labelLoading = signal(false);
   /** Vietnamese error shown in the label modal (issue or print failure); null when none. */
   readonly labelError = signal<string | null>(null);
-  /** Exchange orders whose label modal already opened once this session. */
-  private readonly exchangeLabelShown = new Set<string>();
   readonly scanOpen = signal(false);
   readonly scanError = signal<string | null>(null);
   readonly scanNotice = signal<string | null>(null);
@@ -216,10 +217,10 @@ export class AdminErpOrdersPage {
   readonly copiedPhone = signal(false);
   private copiedPhoneTimer: ReturnType<typeof setTimeout> | null = null;
   private detailRequestId = 0;
-  /** Whether the open order may show its carrier label: preparing, or a confirmed exchange order. */
+  /** Whether the open order may show its carrier label again: only while it is being prepared. */
   readonly canShowLabel = computed(() => {
     const order = this.selected();
-    return !!order && this.canMutate() && (order.status === 'processing' || (order.status === 'confirmed' && order.order_kind === 'exchange'));
+    return !!order && order.status === 'processing' && this.canMutate();
   });
   readonly codDecision = signal<'' | 'confirm' | 'cancel' | 'no_answer' | 'invalid'>('');
   readonly codCancelReason = signal('customer_request');
@@ -336,6 +337,16 @@ export class AdminErpOrdersPage {
     if (this.canReadReturns()) links.push(returnsForOrderLink(order.order_id));
     const phone = String(order.shipping_phone || '');
     if (phone) links.push({ label: 'Đơn khác của khách này', commands: ['/orders'], query: { q: phone } });
+    return links;
+  });
+  /** Return and original order an exchange order belongs to; empty for sale orders. */
+  readonly sourceReturnLinks = computed(() => {
+    const order = this.selected();
+    const sourceReturn = order?.source_return;
+    if (!order || !sourceReturn) return [];
+    const links: OrderTraceLink[] = [];
+    if (this.canReadReturns()) links.push(returnFocusLink(sourceReturn.return_id, 'Mở phiếu đổi trả'));
+    if (order.parent_order_id) links.push(orderFocusLink(order.parent_order_id, 'Đơn hàng gốc'));
     return links;
   });
   readonly primaryActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => !action.destructive && action.code !== 'call_confirm'));
@@ -752,7 +763,6 @@ export class AdminErpOrdersPage {
         this.loadOrderAudit(orderId);
         this.loadLinkedReturns(orderId);
         then?.(order);
-        this.maybeShowExchangeLabel(order);
       },
       error: (error: unknown) => {
         if (requestId !== this.detailRequestId) return;
@@ -1269,7 +1279,8 @@ export class AdminErpOrdersPage {
 
   /**
    * Opens the label modal: asks the API for the order's waybill + label QR so the operator can
-   * print it, stick it on the parcel and scan it back in "Xác nhận vận đơn".
+   * print it and stick it on the parcel. The dialog is informational: closing it changes nothing.
+   * The operator comes back later and presses "Xác nhận vận đơn" to scan the label.
    */
   openCarrierLabel(order: AdminOrderRow): void {
     if (!this.canMutate()) return;
@@ -1289,26 +1300,6 @@ export class AdminErpOrdersPage {
   }
 
   /**
-   * Exchange orders skip the sale-style confirmation: when the drawer opens one that is confirmed
-   * or preparing, its label is offered once per session.
-   */
-  private maybeShowExchangeLabel(order: AdminOrderRow): void {
-    if (order.order_kind !== 'exchange' || !this.canMutate()) return;
-    if (order.status !== 'confirmed' && order.status !== 'processing') return;
-    if (this.exchangeLabelShown.has(order.order_id) || this.modal()) return;
-    this.exchangeLabelShown.add(order.order_id);
-    this.openCarrierLabel(order);
-  }
-
-  /** Moves from the label modal to the "Xác nhận vận đơn" form (scanner opens at once). */
-  continueToShipment(): void {
-    const order = this.selected();
-    const action = order?.allowed_actions?.find((item) => item.code === 'upsert_shipment');
-    this.closeModal();
-    if (action) this.openAction(action);
-  }
-
-  /**
    * Prints the label the packer sticks on the parcel. The QR is the same `velura:shipment:1`
    * payload the "Xác nhận vận đơn" scanner reads, so printing and verifying share one source.
    */
@@ -1325,6 +1316,7 @@ export class AdminErpOrdersPage {
         ['Mã vận đơn', label.trackingCode || '—'],
         ['Người nhận', [order.shipping_name, order.shipping_phone].filter(Boolean).join(' · ') || '—'],
         ['Địa chỉ giao', order.shipping_address || '—'],
+        ...(order.source_return?.return_code ? ([['Phiếu đổi trả', order.source_return.return_code]] as const) : []),
       ],
       note: 'Nhãn mô phỏng của ERP Velura; mã vận đơn và QR khớp với dữ liệu đơn hàng.',
       qrErrorMessage: 'Không tạo được mã QR để in nhãn.',

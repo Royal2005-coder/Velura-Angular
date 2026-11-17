@@ -235,6 +235,7 @@ export interface AdminTableRowAction {
         text-align: left;
         vertical-align: middle;
         white-space: nowrap;
+        overflow: hidden;
       }
       td.is-clamped {
         white-space: normal;

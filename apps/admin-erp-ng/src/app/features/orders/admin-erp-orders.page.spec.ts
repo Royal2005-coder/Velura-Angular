@@ -390,11 +390,15 @@ describe('AdminErpOrdersPage', () => {
   });
 
   it('shows the carrier label modal after start_processing succeeds', async () => {
+    const actions: string[] = [];
     const fixture = await boot(
       () => of({ rows: [codOrder], count: 1 }),
       [],
       {
-        performOrderAction: () => of({ order: { ...paidOrder, status: 'processing', version: 3 }, refund: null }),
+        performOrderAction: (_orderId: string, action: string) => {
+          actions.push(action);
+          return of({ order: { ...paidOrder, status: 'processing', version: 3 }, refund: null });
+        },
       },
     );
     const page = fixture.componentInstance;
@@ -403,24 +407,130 @@ describe('AdminErpOrdersPage', () => {
     page.openAction(startAction);
     page.submitAction(formEvent({ note: '' }));
 
+    expect(actions).toEqual(['start_processing']);
+    expect(page.scanOpen()).toBe(false);
     expect(page.modal()?.kind).toBe('carrier_label');
     expect(page.carrierLabel()?.trackingCode).toBe('GHNVL1001');
     expect(page.carrierLabel()?.labelQr).toContain('velura:shipment:1');
     expect(page.scanSample()).toBe(page.carrierLabel()?.labelQr);
   });
 
-  it('offers the label of a confirmed exchange order when its drawer opens', async () => {
+  it('label dialog is dismiss-only: closing it never opens the scanner or performs an action', async () => {
+    const actions: string[] = [];
+    const fixture = await boot(
+      () => of({ rows: [paidOrder], count: 1 }),
+      [],
+      {
+        performOrderAction: (_orderId: string, action: string) => {
+          actions.push(action);
+          return of({ order: paidOrder, refund: null });
+        },
+      },
+    );
+    const page = fixture.componentInstance;
+    page.selected.set({ ...paidOrder, allowed_actions: [shipmentAction] });
+    page.openCarrierLabel(page.selected()!);
+    expect(page.modal()?.kind).toBe('carrier_label');
+    expect(page.carrierLabel()).not.toBeNull();
+
+    page.closeModal();
+
+    expect(actions).toEqual([]);
+    expect(page.scanOpen()).toBe(false);
+    expect(page.modal()).toBeNull();
+    expect((page as unknown as Record<string, unknown>)['continueToShipment']).toBeUndefined();
+  });
+
+  it('printing the label never performs an order action', async () => {
+    const actions: string[] = [];
+    const fixture = await boot(
+      () => of({ rows: [paidOrder], count: 1 }),
+      [],
+      {
+        performOrderAction: (_orderId: string, action: string) => {
+          actions.push(action);
+          return of({ order: paidOrder, refund: null });
+        },
+      },
+    );
+    const page = fixture.componentInstance;
+    page.selected.set({ ...paidOrder, allowed_actions: [shipmentAction] });
+    page.openCarrierLabel(page.selected()!);
+    await page.printOrderLabel(page.selected()!, page.carrierLabel()!);
+
+    expect(actions).toEqual([]);
+    expect(page.scanOpen()).toBe(false);
+  });
+
+  it('offers the label again from the drawer while processing', async () => {
+    const fixture = await boot(() => of({ rows: [paidOrder], count: 1 }));
+    const page = fixture.componentInstance;
+
+    page.selected.set({ ...paidOrder, status: 'processing', allowed_actions: [shipmentAction] });
+    expect(page.canShowLabel()).toBe(true);
+    page.openCarrierLabel(page.selected()!);
+    expect(page.carrierLabel()?.order_id).toBe('o1');
+
+    page.selected.set({ ...paidOrder, status: 'confirmed', allowed_actions: [] });
+    expect(page.canShowLabel()).toBe(false);
+  });
+
+  it('does not auto-open a label for a confirmed exchange order', async () => {
     const exchange: AdminOrderRow = { ...paidOrder, order_id: 'o9', order_kind: 'exchange', status: 'confirmed', allowed_actions: [] };
+    const labelCalls: string[] = [];
+    const startAction = { code: 'start_processing', label: 'Bắt đầu chuẩn bị', to_status: 'processing', requires_note: false, fields: [], destructive: false };
     const fixture = await boot(
       () => of({ rows: [exchange], count: 1 }),
       [],
-      { getOrder: () => of(exchange) },
+      {
+        getOrder: () => of({ ...exchange, allowed_actions: [startAction] }),
+        getOrderCarrierLabel: (orderId: string) => {
+          labelCalls.push(orderId);
+          return of({ order_id: orderId, order_code: 'VL-1001', carrier: 'GHN', trackingCode: 'GHNVL1001', trackingUrl: '', labelQr: 'velura:shipment:1?order=VL-1001' });
+        },
+        performOrderAction: () => of({ order: { ...exchange, status: 'processing', version: 4 }, refund: null }),
+      },
     );
     const page = fixture.componentInstance;
 
     page.openDetail('o9');
+    expect(page.modal()).toBeNull();
+    expect(labelCalls).toEqual([]);
+    expect(page.canShowLabel()).toBe(false);
+
+    page.openAction(startAction);
+    page.submitAction(formEvent({ note: '' }));
     expect(page.modal()?.kind).toBe('carrier_label');
-    expect(page.carrierLabel()?.order_id).toBe('o9');
+    expect(labelCalls).toEqual(['o9']);
+  });
+
+  it('shows the source return of an exchange order', async () => {
+    const exchange: AdminOrderRow = {
+      ...paidOrder,
+      order_id: 'o9',
+      order_kind: 'exchange',
+      status: 'confirmed',
+      allowed_actions: [],
+      parent_order_id: 'o1',
+      source_return_id: 'r1',
+      source_return: { return_id: 'r1', return_code: 'RT-1' },
+    };
+    const fixture = await boot(
+      () => of({ rows: [exchange], count: 1 }),
+      [],
+      { getOrder: () => of(exchange) },
+      { orders: ['read', 'update'], returns: ['read'] },
+    );
+    const page = fixture.componentInstance;
+    page.openDetail('o9');
+    fixture.detectChanges();
+
+    expect(page.sourceReturnLinks()).toEqual([
+      { label: 'Mở phiếu đổi trả', commands: ['/returns'], query: { focus: 'r1' } },
+      { label: 'Đơn hàng gốc', commands: ['/orders'], query: { focus: 'o1' } },
+    ]);
+    expect(document.body.textContent).toContain('Phiếu đổi trả gốc');
+    expect(document.body.textContent).toContain('RT-1');
   });
 
   it('says so when the shipment stored but the handover did not', async () => {

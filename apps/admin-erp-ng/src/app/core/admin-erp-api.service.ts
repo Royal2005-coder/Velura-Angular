@@ -7,7 +7,7 @@ import { AdminAuthMe } from './admin-erp-session.service';
 
 export interface AdminBannerRow {
   banner_id: string;
-  placement: 'home_hero' | 'products_hero' | 'collections_hero';
+  placement: 'products_hero';
   title: string;
   subtitle: string | null;
   tag_label: string | null;
@@ -45,6 +45,14 @@ export interface AdminCollectionRow {
   closing_quote: string;
   quote?: string | null;
   models: string[];
+  /** `cover` hides the 5 cutouts on `/collections` and shows `banner_url` full-bleed. */
+  hero_mode: 'models' | 'cover';
+  /** Separate cutout for the homepage runway (one of five). */
+  home_model_url?: string | null;
+  show_on_home: boolean;
+  home_sort_order: number;
+  /** Ordered combo/set product ids shown on `/collections` (max 10). */
+  product_ids: string[];
   story_paragraphs: string[];
   is_active: boolean;
   sort_order: number;
@@ -584,6 +592,12 @@ export interface AdminOrderRow {
   payment_method?: string;
   /** `exchange` for replacement orders born from an exchange return; `sale` otherwise. */
   order_kind?: string;
+  /** Original order of an exchange order. */
+  parent_order_id?: string | null;
+  source_return_id?: string | null;
+  source_return_item_id?: string | null;
+  /** Return the replacement belongs to; present on exchange order detail only. */
+  source_return?: { return_id: string; return_code: string; tracking_return_code?: string | null } | null;
   payment_status?: string | null;
   payment_status_label?: string | null;
   shipping_name?: string;
@@ -1181,6 +1195,15 @@ export interface AdminReturnExchangeOrder {
     size?: string;
     sku?: string;
   }>;
+}
+
+/** Response of `POST /api/v1/admin/returns/:id/items/:itemId/action` (RPC `velura_return_item_action`). */
+export interface AdminReturnItemActionResult {
+  return_id: string;
+  /** The acted part; after a split this is the part the action applied to, not the remainder. */
+  item: AdminReturnLine;
+  lines: AdminReturnLine[];
+  packing_evidence_missing?: boolean;
 }
 
 /** Customer return request; QA and gateway facts constrain the operations offered. */
@@ -2225,8 +2248,8 @@ export class AdminErpApiService {
   }
 
   /** Applies one versioned decision or operational fact to one quantity part. */
-  actOnReturnItem(returnId: string, returnItemId: string, body: AdminReturnItemActionInput): Observable<AdminReturnRow> {
-    return this.http.post<AdminReturnRow>(
+  actOnReturnItem(returnId: string, returnItemId: string, body: AdminReturnItemActionInput): Observable<AdminReturnItemActionResult> {
+    return this.http.post<AdminReturnItemActionResult>(
       `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/items/${encodeURIComponent(returnItemId)}/action`,
       body,
     );
@@ -2716,7 +2739,7 @@ export class AdminErpApiService {
 
   // --- CMS: BANNERS & COLLECTIONS MANAGEMENT (KAN-108) ---
 
-  /** Lists banners across Home, Product and Collection hero placements. */
+  /** Lists banners; only the `products_hero` placement has a storefront consumer. */
   listBanners(placement?: string): Observable<{ success: boolean; data: AdminBannerRow[] }> {
     const url = placement
       ? `${this.baseUrl}/api/v1/admin/content/banners?placement=${encodeURIComponent(placement)}`
@@ -2777,8 +2800,8 @@ export class AdminErpApiService {
     );
   }
 
-  /** Uploads banner image/video or lookbook model photo. */
-  uploadCmsMedia(file: File, category: 'banner' | 'collection' = 'banner'): Observable<{ success: boolean; url: string; mediaType: 'image' | 'video' }> {
+  /** Uploads a banner image/video, a collection cover, or a background-removed collection model cutout. */
+  uploadCmsMedia(file: File, category: 'banner' | 'collection-cover' | 'collection-model' = 'banner'): Observable<{ success: boolean; url: string; mediaType: 'image' | 'video' }> {
     const formData = new FormData();
     formData.append('file', file, file.name);
     return this.http.post<{ success: boolean; url: string; mediaType: 'image' | 'video' }>(

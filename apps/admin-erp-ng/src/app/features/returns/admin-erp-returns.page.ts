@@ -63,7 +63,7 @@ import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 import { AdminTone, TICKET_STATUS_LABELS } from '../../core/admin-erp-status-labels';
 import { ChatDeskComponent } from './chat-desk.component';
-import { ReturnFlowComponent, ReturnFlowKind, RETURN_ITEM_ACTION_LABELS } from './return-flow.component';
+import { ReturnFlowComponent, ReturnFlowKind, ReturnFlowNext, RETURN_ITEM_ACTION_LABELS } from './return-flow.component';
 
 type DeskTab = 'returns' | 'tickets' | 'chat' | 'logs';
 type TicketAction = 'reply' | 'resolve' | 'close';
@@ -185,6 +185,10 @@ export class AdminErpReturnsPage {
   readonly scanError = signal<string | null>(null);
   /** Demo carrier mode: scan a waiting return and jump straight into pickup proof capture. */
   readonly carrierDemo = signal(false);
+  /** Hand-off reported by the flow modal for the action being saved; consumed by {@link onFlowDone}. */
+  private readonly pendingNext = signal<ReturnFlowNext | null>(null);
+  /** Part that just passed warehouse QA for an exchange; its `prepare_exchange` modal opens after the reload. */
+  private pendingPrepareItemId: string | null = null;
   readonly carrierTracking = signal('');
   /** Ready-to-scan QR for the first waiting return in the carrier demo. */
   readonly carrierSample = computed(() => {
@@ -296,8 +300,8 @@ export class AdminErpReturnsPage {
     {
       key: 'customer',
       label: 'Khách',
-      width: '160px',
-      truncate: '160px',
+      width: '180px',
+      truncate: '180px',
       value: (row) => {
         const record = row as AdminReturnRow;
         return [record.customer_name, record.customer_phone].filter(Boolean).join(' · ') || '—';
@@ -306,7 +310,7 @@ export class AdminErpReturnsPage {
     {
       key: 'type',
       label: 'Yêu cầu',
-      width: '100px',
+      width: '110px',
       value: (row) => typeLabel((row as AdminReturnRow).return_type),
       badge: (row) => {
         const record = row as AdminReturnRow;
@@ -332,8 +336,8 @@ export class AdminErpReturnsPage {
     {
       key: 'status',
       label: 'Trạng thái',
-      width: '230px',
-      truncate: '230px',
+      width: '240px',
+      truncate: '240px',
       value: (row) => returnStatusLabel((row as AdminReturnRow).status),
       badge: (row) => ({
         label: returnStatusLabel((row as AdminReturnRow).status),
@@ -635,9 +639,17 @@ export class AdminErpReturnsPage {
           if (line) this.openFlow('pickup', line);
           else this.scanError.set('Phiếu này không còn phần hàng đang chờ ĐVVC lấy.');
         }
+        const prepareItemId = this.pendingPrepareItemId;
+        this.pendingPrepareItemId = null;
+        if (prepareItemId) {
+          // openFlow re-validates against the reloaded line, so a stale or denied hand-off is ignored.
+          const part = (record.lines || []).find((line) => line.return_item_id === prepareItemId);
+          if (part) this.openFlow('prepare_exchange', part);
+        }
       },
       error: (error: unknown) => {
         if (requestId !== this.detailRequestId) return;
+        this.pendingPrepareItemId = null;
         this.stopDetailWatchdog();
         this.detailLoading.set(false);
         this.selected.set(row as AdminReturnRow);
@@ -827,17 +839,37 @@ export class AdminErpReturnsPage {
   }
 
   /**
-   * Rereads the return after a write and keeps the drawer on the fresh version.
+   * Remembers where the saved action leads; {@link onFlowDone} runs right after and applies it.
+   */
+  onFlowNext(next: ReturnFlowNext): void {
+    this.pendingNext.set(next);
+  }
+
+  /**
+   * Rereads the return after a write and keeps the drawer on the fresh version. A passed exchange
+   * receipt reopens the prepare-exchange confirm on the reloaded part; a created exchange order
+   * opens in Orders when the role may read it.
    */
   onFlowDone(message = ''): void {
-    const id = this.selected()?.return_id;
+    const next = this.pendingNext();
+    this.pendingNext.set(null);
     this.flow.set(null);
+    let note = message;
+    if (next?.kind === 'open_exchange_order') {
+      if (this.canReadOrders()) {
+        void this.router.navigate(['/orders'], { queryParams: { focus: next.exchangeOrderId } });
+        return;
+      }
+      note = 'Đơn đổi đã tạo - mở trong module Đơn hàng.';
+    }
+    const id = this.selected()?.return_id;
+    this.pendingPrepareItemId = next?.kind === 'prepare_exchange' ? next.returnItemId : null;
     if (id) {
       this.openReturn({ return_id: id } as AdminReturnRow);
     }
     // openReturn clears the banner for the reload, so the gateway result is written afterwards.
-    if (message) {
-      this.gatewayNote.set(message);
+    if (note) {
+      this.gatewayNote.set(note);
     }
     this.loadReturns();
   }

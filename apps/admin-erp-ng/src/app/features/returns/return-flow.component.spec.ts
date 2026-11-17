@@ -1,8 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
-import { AdminErpApiService, AdminReturnItemActionInput, AdminReturnLine, AdminReturnRow, AdminManualRefundInput } from '../../core/admin-erp-api.service';
+import { AdminErpApiService, AdminReturnItemActionInput, AdminReturnItemActionResult, AdminReturnLine, AdminReturnRow, AdminManualRefundInput } from '../../core/admin-erp-api.service';
 import { QrConfirmFacts } from '../../shared/ui/admin-qr-confirm';
-import { ReturnFlowComponent, ReturnFlowKind } from './return-flow.component';
+import { ReturnFlowComponent, ReturnFlowKind, ReturnFlowNext } from './return-flow.component';
 
 /** Builds the change event a QA failure checkbox emits. */
 function tick(checked = true): Event {
@@ -36,8 +36,9 @@ describe('ReturnFlowComponent per-item operations', () => {
     const stripe: { expectedVersion: number; returnItemId: string }[] = [];
     const uploads: string[] = [];
     const contacts: Record<string, unknown>[] = [];
+    let actResult: AdminReturnItemActionResult = { return_id: 'return-1', item: part, lines: [part] };
     const api = {
-      actOnReturnItem: (id: string, itemId: string, body: AdminReturnItemActionInput) => { actions.push({ id, itemId, body }); return of(record); },
+      actOnReturnItem: (id: string, itemId: string, body: AdminReturnItemActionInput) => { actions.push({ id, itemId, body }); return of(actResult); },
       uploadReturnEvidence: (_id: string, _file: File, kind: string) => { uploads.push(kind); return of({ storage_ref: `private/${kind}/proof` }); },
       recordManualRefund: (_id: string, body: AdminManualRefundInput) => { manual.push(body); return of(record); },
       triggerStripeRefund: (_id: string, body: { expectedVersion: number; returnItemId: string }) => { stripe.push(body); return of({ success: true, refund: { status: 'requested' } }); },
@@ -58,7 +59,7 @@ describe('ReturnFlowComponent per-item operations', () => {
     fixture.componentRef.setInput('line', part); fixture.componentRef.setInput('canApprove', canApprove);
     fixture.componentRef.setInput('canOperate', true); fixture.componentRef.setInput('canFinance', true);
     fixture.detectChanges();
-    return { fixture, component: fixture.componentInstance, actions, manual, stripe, uploads, contacts, api };
+    return { fixture, component: fixture.componentInstance, actions, manual, stripe, uploads, contacts, api, setResult: (item: AdminReturnLine) => { actResult = { return_id: 'return-1', item, lines: [item] }; } };
   }
 
   it('receives only the selected quantity with tag/condition/proof facts and seal false allowed', () => {
@@ -74,6 +75,50 @@ describe('ReturnFlowComponent per-item operations', () => {
       disposition: 'restock', dispositionNote: '', receiptProofRef: 'private/qa_photo/proof',
     } }]);
     expect(record.return_type).toBe('exchange');
+  });
+
+  describe('hand-off to the next exchange step', () => {
+    /** Fills the receive form with a passing QA and submits it, collecting `next` then `done` in emit order. */
+    function submitReceive(item: AdminReturnLine) {
+      const booted = boot('receive');
+      booted.setResult(item);
+      const events: string[] = []; const nexts: ReturnFlowNext[] = [];
+      booted.component.next.subscribe((value) => { nexts.push(value); events.push('next'); });
+      booted.component.done.subscribe((value) => { events.push(`done:${value}`); });
+      booted.component.proofFile.set(image); booted.component.onQrFacts(qrFacts());
+      booted.component.submit();
+      return { ...booted, events, nexts };
+    }
+
+    it('emits next prepare_exchange after a passed exchange receive, before done', () => {
+      const { events, nexts } = submitReceive({ ...line, return_item_id: 'part-1', item_status: 'RECEIVED', resolution_type: 'exchange', exchange_order_id: null });
+      expect(nexts).toEqual([{ kind: 'prepare_exchange', returnItemId: 'part-1' }]);
+      expect(events).toEqual(['next', 'done:']);
+    });
+
+    it('targets the received part of the response, not the line that was acted on', () => {
+      const { nexts } = submitReceive({ ...line, return_item_id: 'part-2', item_status: 'RECEIVED', resolution_type: 'exchange', exchange_order_id: null });
+      expect(nexts).toEqual([{ kind: 'prepare_exchange', returnItemId: 'part-2' }]);
+    });
+
+    it('does not emit next when QA fails (NEEDS_SUPPORT) or the part is a refund', () => {
+      const failed = submitReceive({ ...line, item_status: 'NEEDS_SUPPORT', resolution_type: 'exchange', exchange_order_id: null });
+      expect(failed.nexts).toEqual([]);
+      expect(failed.events).toEqual(['done:']);
+      const refund = submitReceive({ ...line, item_status: 'RECEIVED', resolution_type: 'refund', exchange_order_id: null });
+      expect(refund.nexts).toEqual([]);
+      expect(refund.events).toEqual(['done:']);
+    });
+
+    it('emits open_exchange_order after prepare_exchange created the order', () => {
+      const { component, setResult } = boot('prepare_exchange', { ...line, item_status: 'RECEIVED' });
+      setResult({ ...line, item_status: 'EXCHANGE_PREPARING', exchange_order_id: 'exc-1' });
+      const nexts: ReturnFlowNext[] = []; const dones: string[] = [];
+      component.next.subscribe((value) => nexts.push(value)); component.done.subscribe((value) => dones.push(value));
+      component.submit();
+      expect(nexts).toEqual([{ kind: 'open_exchange_order', exchangeOrderId: 'exc-1' }]);
+      expect(dones).toEqual(['']);
+    });
   });
 
   it('words a gateway requested outcome as pending and always clears saving', () => {

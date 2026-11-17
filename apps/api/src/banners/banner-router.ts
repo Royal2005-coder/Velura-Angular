@@ -1,4 +1,5 @@
 import { HttpError, readJson, sendJson } from "../http.js";
+import { requireCmsPermission } from "../content/cms-permission.js";
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "../types.js";
 import type { BannerService } from "./banner-service.js";
 import type { CreateBannerInput, UpdateBannerInput } from "./banner-types.js";
@@ -12,7 +13,7 @@ export async function handleBannerRoute(args: {
   headers: HeaderMap;
   service: BannerService;
 }): Promise<boolean> {
-  const { req, res, url, parts, headers, service } = args;
+  const { req, res, url, parts, context, headers, service } = args;
 
   // 1. Public route: GET /api/v1/banners OR /api/content/banners
   const isPublicBanner =
@@ -33,6 +34,7 @@ export async function handleBannerRoute(args: {
   const isAdminNested = parts[1] === "v1" && parts[2] === "admin" && parts[3] === "content" && parts[4] === "banners";
 
   if (isAdminDirect || isAdminNested) {
+    requireCmsPermission(context, req.method);
     const bannerId = isAdminNested ? (parts[5] || null) : (parts[4] || null);
 
     if (req.method === "GET") {

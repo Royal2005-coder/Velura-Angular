@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { Observable, of, throwError } from 'rxjs';
 import {
   AdminAuditRow,
@@ -290,6 +290,58 @@ describe('AdminErpReturnsPage', () => {
     page.onFlowDone('Cổng thanh toán đã hoàn tiền cho phần hàng này. Các phần khác giữ nguyên tiến độ.');
 
     expect(page.gatewayNote()).toContain('Cổng thanh toán đã hoàn tiền');
+  });
+
+  describe('exchange hand-off after a saved part action', () => {
+    const received: AdminReturnRow = {
+      ...detail, return_type: 'exchange', status: 'IN_PROGRESS',
+      lines: [{ ...detail.lines![0], return_item_id: 'part-1', decision_status: 'approved', item_status: 'RECEIVED', resolution_type: 'exchange', exchange_order_id: null }],
+    };
+
+    it('opens prepare_exchange for the received part after reload', () => {
+      const { page } = boot({ returns: ['read', 'update'] }, 'admin_operator_cskh_dt', { getReturn: () => of(received) });
+      page.openReturn(rows[0]);
+      page.onFlowNext({ kind: 'prepare_exchange', returnItemId: 'part-1' });
+      page.onFlowDone('');
+
+      expect(page.flow()).toBe('prepare_exchange');
+      expect(page.flowLine()?.return_item_id).toBe('part-1');
+    });
+
+    it('ignores the hand-off when the reloaded part is no longer ready for an exchange order', () => {
+      const prepared: AdminReturnRow = { ...received, lines: [{ ...received.lines![0], item_status: 'EXCHANGE_PREPARING', exchange_order_id: 'exc-1' }] };
+      const { page } = boot({ returns: ['read', 'update'] }, 'admin_operator_cskh_dt', { getReturn: () => of(prepared) });
+      page.openReturn(rows[0]);
+      page.onFlowNext({ kind: 'prepare_exchange', returnItemId: 'part-1' });
+      page.onFlowDone('');
+
+      expect(page.flow()).toBeNull();
+    });
+
+    it('navigates to the exchange order after prepare_exchange', () => {
+      const { page } = boot({ returns: ['read', 'update'], orders: ['read'] });
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+      page.openReturn(rows[0]);
+      page.onFlowNext({ kind: 'open_exchange_order', exchangeOrderId: 'exc-1' });
+      page.onFlowDone('');
+
+      expect(page.canReadOrders()).toBe(true);
+      expect(navigate).toHaveBeenCalledWith(['/orders'], { queryParams: { focus: 'exc-1' } });
+      expect(page.flow()).toBeNull();
+    });
+
+    it('stays on the return and tells the operator where the exchange order is when orders cannot be read', () => {
+      const { page } = boot({ returns: ['read', 'update'] });
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+      page.openReturn(rows[0]);
+      page.onFlowNext({ kind: 'open_exchange_order', exchangeOrderId: 'exc-1' });
+      page.onFlowDone('');
+
+      expect(page.canReadOrders()).toBe(false);
+      expect(navigate).not.toHaveBeenCalled();
+      expect(page.selected()?.return_id).toBe('r-1');
+      expect(page.gatewayNote()).toContain('module Đơn hàng');
+    });
   });
 
   it('shows mixed decisions, waiting customer, initial video and independently keyed parts', () => {

@@ -175,6 +175,14 @@ export function createOrderRepository() {
       }, authOptions(accessToken)));
     },
 
+    /** Source return of an exchange order, for the "Phiếu đổi trả gốc" block; null when absent. */
+    async findSourceReturn(returnId: string, accessToken: string | null): Promise<JsonObject | null> {
+      return selectOne("return_exchange", {
+        select: "return_id,return_code,tracking_return_code",
+        return_id: `eq.${returnId}`
+      }, authOptions(accessToken)).catch(() => null);
+    },
+
     performAction(orderId: string, input: JsonObject, accessToken: string | null) {
       return rpc("admin_order_action", {
         p_order_id: orderId,

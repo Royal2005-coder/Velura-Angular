@@ -95,68 +95,56 @@
     }
 
     @if (tab() === 'banners') {
-      <div class="banner-mgmt-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding: 12px 16px; background: var(--erp-surface, #FAF8F5); border: 1px solid var(--erp-line, #E5E1DB); border-radius: 12px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-weight: 600; font-size: 0.85rem; color: #352326;">Vị trí hiển thị:</span>
-          <select class="erp-input" style="width: auto; padding: 4px 10px; font-size: 0.85rem;" [value]="bannerPlacementFilter()" (change)="bannerPlacementFilter.set($any($event.target).value)">
-            <option value="all">Tất cả vị trí ({{ banners().length }})</option>
-            <option value="products_hero">Trang sản phẩm — Slider/Video ({{ banners().length }})</option>
-            <option value="home_hero">Trang chủ — Sàn diễn 3D Runway</option>
-            <option value="collections_hero">Trang bộ sưu tập</option>
-          </select>
+      <div class="cms-intro">
+        <div>
+          <h3>Banner trang sản phẩm</h3>
+          <span>Banner hiển thị ở đầu trang <code>/products</code>. Đang bật {{ activeBannerCount() }}/{{ banners().length }} banner.</span>
         </div>
-        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCreateBanner()">
-          <app-erp-icon name="plus" [size]="'14'" />
-          + Thêm banner mới
-        </button>
       </div>
+      @if (bannerError() && !bannerModalOpen()) {
+        <div class="content-banner" role="alert">{{ bannerError() }}</div>
+      }
 
       @if (bannerLoading() && !banners().length) {
-        <div style="padding: 40px; text-align: center; color: var(--erp-muted);">Đang tải danh sách banner từ cơ sở dữ liệu…</div>
-      } @else if (!filteredBanners().length) {
+        <div class="cms-loading">Đang tải danh sách banner…</div>
+      } @else if (!banners().length) {
         <div class="content-empty-state">
-          Chưa có banner nào cho vị trí này. Hãy bấm "Thêm banner mới" để tạo banner video hoặc hình ảnh cho storefront!
+          Chưa có banner nào. Bấm “Tạo banner mới” để thêm ảnh hoặc video cho đầu trang sản phẩm.
         </div>
       } @else {
         <div class="content-cards-grid">
-          @for (b of filteredBanners(); track b.banner_id) {
-            <article class="blog-card" style="border: 1px solid var(--erp-line); border-radius: 16px; overflow: hidden; background: #fff;">
-              <div class="blog-card__media" style="position: relative; height: 160px; background: #1a1416;">
-                @if (b.media_type === 'video') {
-                  <video [src]="b.media_url" muted playsinline [poster]="b.poster_url || ''" style="width: 100%; height: 100%; object-fit: cover;"></video>
-                  <span style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: #fff; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">VIDEO</span>
+          @for (b of banners(); track b.banner_id) {
+            <article class="cms-card">
+              <div class="cms-card__media">
+                @if (bannerThumb(b); as thumb) {
+                  @if (!imageBroken(thumb)) {
+                    <img [src]="asset(thumb)" [alt]="b.title" loading="lazy" (error)="markImageBroken(thumb)" />
+                  } @else {
+                    <span class="cms-card__placeholder">Không tải được ảnh</span>
+                  }
                 } @else {
-                  <img [src]="b.media_url" [alt]="b.title" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;" />
-                  <span style="position: absolute; top: 8px; right: 8px; background: rgba(125,38,61,0.85); color: #fff; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">ẢNH</span>
+                  <span class="cms-card__placeholder">{{ b.media_type === 'video' ? 'Video chưa có ảnh poster' : 'Chưa có ảnh' }}</span>
                 }
-                <span class="blog-card__category" style="background: rgba(255,255,255,0.9); color: #352326; font-size: 0.7rem; font-weight: 700;">
-                  {{ b.placement === 'products_hero' ? 'Trang sản phẩm' : b.placement === 'home_hero' ? 'Trang chủ Runway' : 'Bộ sưu tập' }}
-                </span>
-                <span class="blog-card__status" [class.is-published]="b.is_active" style="position: absolute; bottom: 8px; right: 8px;">
-                  {{ b.is_active ? 'Đang bật' : 'Tắt' }}
-                </span>
+                @if (b.media_type === 'video') {
+                  <span class="cms-card__kind">VIDEO</span>
+                }
               </div>
-              <div class="blog-card__body" style="padding: 14px;">
-                <span style="font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; color: var(--velura-maroon, #7D263D); text-transform: uppercase;">
-                  {{ b.tag_label || 'VELURA ATELIER' }} · Thứ tự: {{ b.sort_order }}
-                </span>
-                <h3 class="blog-card__title" style="margin: 4px 0 6px; font-size: 1.1rem; line-height: 1.3;">{{ b.title }}</h3>
-                <p class="blog-card__excerpt" style="font-size: 0.8rem; color: #666; margin-bottom: 12px;">{{ b.subtitle || 'Không có mô tả phụ' }}</p>
+              <div class="cms-card__body">
+                <div class="cms-card__row">
+                  <span class="cms-card__eyebrow">{{ b.tag_label || 'VELURA ATELIER' }} · Thứ tự {{ b.sort_order }}</span>
+                  <app-erp-status-badge [label]="b.is_active ? 'Đang bật' : 'Tắt'" [tone]="b.is_active ? 'success' : 'neutral'" [dot]="true" />
+                </div>
+                <h3>{{ b.title }}</h3>
+                <p>{{ b.subtitle || 'Không có mô tả phụ' }}</p>
                 @if (b.link_url) {
-                  <div style="font-size: 0.75rem; color: #888; margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    CTA: <strong>{{ b.button_text || 'Khám phá ngay' }}</strong> → {{ b.link_url }}
-                  </div>
+                  <div class="cms-card__link">CTA: <strong>{{ b.button_text || 'Khám phá ngay' }}</strong> → {{ b.link_url }}</div>
                 }
-                <div style="display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; border-top: 1px solid var(--erp-line);">
+                <div class="cms-card__actions">
                   <button class="erp-btn erp-btn--sm" type="button" (click)="toggleBannerActive(b)" [title]="b.is_active ? 'Tạm tắt banner' : 'Bật banner'">
                     {{ b.is_active ? 'Tắt' : 'Bật' }}
                   </button>
-                  <button class="erp-btn erp-btn--sm erp-btn--primary" type="button" (click)="openEditBanner(b)">
-                    Sửa
-                  </button>
-                  <button class="erp-btn erp-btn--sm erp-btn--danger" type="button" (click)="deleteBanner(b)">
-                    Xóa
-                  </button>
+                  <button class="erp-btn erp-btn--sm erp-btn--primary" type="button" (click)="openEditBanner(b)">Sửa</button>
+                  <button class="erp-btn erp-btn--sm erp-btn--danger" type="button" (click)="deleteBanner(b)">Xóa</button>
                 </div>
               </div>
             </article>
@@ -164,68 +152,83 @@
         </div>
       }
     } @else if (tab() === 'collections') {
-      <div class="collection-mgmt-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding: 12px 16px; background: var(--erp-surface, #FAF8F5); border: 1px solid var(--erp-line, #E5E1DB); border-radius: 12px;">
+      <div class="cms-intro">
         <div>
-          <h3 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #352326;">Các kỳ Bộ sưu tập thời trang</h3>
-          <span style="font-size: 0.78rem; color: #777;">Quản lý từng mùa/kỳ ra mắt, câu chuyện cảm hứng và bộ ảnh 5 người mẫu lookbook</span>
+          <h3>Các bộ sưu tập thời trang</h3>
+          <span>Mỗi bộ sưu tập có hero riêng ở <code>/collections</code>; người mẫu trang chủ và combo/set được quản lý riêng bên trong từng bộ.</span>
         </div>
-        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCreateCollection()">
-          <app-erp-icon name="plus" [size]="'14'" />
-          + Thêm bộ sưu tập mới
-        </button>
+        <span class="cms-chip" [class.is-complete]="homeRunway().complete" [class.is-warning]="!homeRunway().complete" data-testid="home-runway-chip">
+          Trang chủ: {{ homeRunway().count }}/{{ homeSlots }} người mẫu
+        </span>
       </div>
+      @if (!homeRunway().complete || homeRunway().missingModel.length || homeRunway().duplicateModel.length) {
+        <div class="content-banner" role="status">
+          <app-erp-icon name="alert" [size]="'16'" />
+          <span>
+            Sàn diễn trang chủ cần đúng {{ homeSlots }} bộ sưu tập đang bật, bật “Hiện trên trang chủ” và có ảnh riêng; hiện mới có {{ homeRunway().count }}.
+            @if (homeRunway().missingModel.length) { Thiếu ảnh: {{ homeRunway().missingModel.join(', ') }}. }
+            @if (homeRunway().duplicateModel.length) { Trùng ảnh: {{ homeRunway().duplicateModel.join(', ') }}. }
+          </span>
+        </div>
+      }
+      @if (collectionError() && !collectionModalOpen()) {
+        <div class="content-banner" role="alert">{{ collectionError() }}</div>
+      }
 
       @if (collectionLoading() && !collectionsList().length) {
-        <div style="padding: 40px; text-align: center; color: var(--erp-muted);">Đang tải danh sách bộ sưu tập từ cơ sở dữ liệu…</div>
+        <div class="cms-loading">Đang tải danh sách bộ sưu tập…</div>
       } @else if (!collectionsList().length) {
         <div class="content-empty-state">
-          Chưa có bộ sưu tập nào. Hãy bấm "Thêm bộ sưu tập mới" để tải lên lookbook người mẫu và câu chuyện thời trang!
+          Chưa có bộ sưu tập nào. Bấm “Thêm bộ sưu tập mới” để tạo hero, người mẫu trang chủ và combo/set.
         </div>
       } @else {
         <div class="content-cards-grid">
           @for (c of collectionsList(); track c.collection_id || c.code) {
-            <article class="blog-card" style="border: 1px solid var(--erp-line); border-radius: 16px; overflow: hidden; background: #fff;">
-              <!-- Panoramic Hero Preview -->
-              <div style="position: relative; height: 140px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between;" [style.background]="c.hero_gradient || 'linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%)'">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                  <span style="font-size: 0.68rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #555;">{{ c.col_number }}</span>
-                  <span style="font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 9999px; background: rgba(255,255,255,0.85); color: #352326;">{{ c.badge }}</span>
-                </div>
-                <div>
-                  <span style="font-family: serif; font-style: italic; font-size: 1.1rem; color: rgba(0,0,0,0.45); display: block; line-height: 1;">{{ c.script }}</span>
-                  <h3 style="margin: 2px 0 0; font-size: 1.3rem; font-weight: 700; color: #222;">{{ c.name }}</h3>
-                </div>
-              </div>
-
-              <!-- Model cutouts gallery preview -->
-              <div style="padding: 12px 14px; background: #fbf9f6; border-bottom: 1px solid var(--erp-line); display: flex; align-items: center; justify-content: space-between;">
-                <span style="font-size: 0.75rem; font-weight: 600; color: #555;">
-                  Bộ ảnh người mẫu ({{ (c.models && c.models.length) || 0 }} ảnh):
-                </span>
-                <div style="display: flex; gap: 4px;">
-                  @for (m of (c.models || []).slice(0, 5); track $index) {
-                    <img [src]="m" (error)="onModelImgError($event, m)" alt="" style="width: 28px; height: 38px; object-fit: contain; background: rgba(0,0,0,0.04); border-radius: 4px; border: 1px solid rgba(0,0,0,0.08);" />
+            <article class="cms-card">
+              <div class="cms-card__media cms-card__media--hero" [style.background]="c.hero_gradient || 'linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%)'">
+                @if (c.hero_mode === 'cover') {
+                  @if (c.banner_url && !imageBroken(c.banner_url)) {
+                    <img [src]="asset(c.banner_url)" [alt]="c.name" loading="lazy" (error)="markImageBroken(c.banner_url)" />
+                  } @else {
+                    <span class="cms-card__placeholder">{{ c.banner_url ? 'Không tải được ảnh bìa' : 'Chưa có ảnh bìa' }}</span>
                   }
-                </div>
+                } @else {
+                  <div class="cms-card__models">
+                    @for (m of (c.models || []).slice(0, 5); track $index) {
+                      @if (!imageBroken(m)) {
+                        <img [src]="asset(m)" alt="" loading="lazy" (error)="markImageBroken(m)" />
+                      }
+                    } @empty {
+                      <span class="cms-card__placeholder">Chưa có ảnh người mẫu</span>
+                    }
+                  </div>
+                }
+                <span class="cms-card__kind">{{ c.hero_mode === 'cover' ? 'ẢNH BÌA' : '5 NGƯỜI MẪU' }}</span>
               </div>
-
-              <div class="blog-card__body" style="padding: 14px;">
-                <span style="font-size: 0.75rem; font-weight: 600; color: var(--velura-maroon, #7D263D);">{{ c.kicker || 'THE ART OF SOFTNESS' }}</span>
-                <h4 style="margin: 4px 0; font-size: 0.95rem; font-weight: 700; color: #352326;">{{ c.story_headline || c.name }}</h4>
-                <p class="blog-card__excerpt" style="font-size: 0.8rem; color: #666; margin-bottom: 12px;">{{ c.story_desc }}</p>
-                <div style="font-size: 0.75rem; color: #888; margin-bottom: 10px;">
-                  Mã: <code>{{ c.code }}</code> · Liên kết: <code>{{ c.category_link }}</code>
+              <div class="cms-card__body">
+                <div class="cms-card__row">
+                  <span class="cms-card__eyebrow">{{ c.col_number }}</span>
+                  <app-erp-status-badge [label]="c.is_active ? 'Đang bật' : 'Tắt'" [tone]="c.is_active ? 'success' : 'neutral'" [dot]="true" />
                 </div>
-                <div style="display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; border-top: 1px solid var(--erp-line);">
+                <h3>{{ c.name }}</h3>
+                <p>{{ c.home_story || c.story_desc }}</p>
+                <div class="cms-card__chips">
+                  @if (c.show_on_home) {
+                    <span class="cms-chip" [class.is-complete]="!!c.home_model_url" [class.is-warning]="!c.home_model_url">
+                      Trang chủ · vị trí {{ c.home_sort_order + 1 }}{{ c.home_model_url ? '' : ' · thiếu ảnh' }}
+                    </span>
+                  } @else {
+                    <span class="cms-chip">Không hiện trang chủ</span>
+                  }
+                  <span class="cms-chip">{{ (c.product_ids || []).length }} combo/set</span>
+                  <span class="cms-chip">Mã: {{ c.code }}</span>
+                </div>
+                <div class="cms-card__actions">
                   <button class="erp-btn erp-btn--sm" type="button" (click)="toggleCollectionActive(c)" [title]="c.is_active ? 'Tạm tắt' : 'Bật'">
                     {{ c.is_active ? 'Tắt' : 'Bật' }}
                   </button>
-                  <button class="erp-btn erp-btn--sm erp-btn--primary" type="button" (click)="openEditCollection(c)">
-                    Sửa
-                  </button>
-                  <button class="erp-btn erp-btn--sm erp-btn--danger" type="button" (click)="deleteCollection(c)">
-                    Xóa
-                  </button>
+                  <button class="erp-btn erp-btn--sm erp-btn--primary" type="button" (click)="openEditCollection(c)">Sửa</button>
+                  <button class="erp-btn erp-btn--sm erp-btn--danger" type="button" (click)="deleteCollection(c)">Xóa</button>
                 </div>
               </div>
             </article>
@@ -296,7 +299,9 @@
         (retry)="reload()"
       />
     }
-    <app-erp-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
+    @if (showPagination()) {
+      <app-erp-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
+    }
   </section>
 }
 
@@ -757,10 +762,10 @@
   </div>
 </app-erp-modal>
 
-<!-- MODAL QUẢN LÝ BANNER (KAN-108) -->
+<!-- MODAL BANNER (KAN-116): chỉ còn vị trí `products_hero` -->
 <app-erp-modal
   [open]="bannerModalOpen()"
-  [title]="bannerEditing() ? 'Cập nhật Banner quảng bá' : 'Tạo mới Banner quảng bá'"
+  [title]="bannerEditing() ? 'Cập nhật banner trang sản phẩm' : 'Tạo banner trang sản phẩm'"
   size="lg"
   (closed)="closeBannerModal()"
 >
@@ -768,158 +773,145 @@
     <form class="content-form" (submit)="$event.preventDefault(); saveBanner()">
       <div class="content-form__hero">
         <label class="erp-field">
-          <span>Tiêu đề Banner <span class="erp-required" aria-hidden="true">*</span></span>
+          <span>Tiêu đề banner <span class="erp-required" aria-hidden="true">*</span></span>
           <input
             class="erp-input erp-input--title"
             type="text"
+            [attr.maxlength]="bannerLimits.title"
             [value]="bDraft.title || ''"
             (input)="onBannerField('title', $event)"
+            (blur)="touchBanner('title')"
             placeholder="Ví dụ: Timeless Elegance · Sắc màu mùa thu"
           />
+          @if (bannerFieldError('title'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
         </label>
+        <p class="erp-hint">Banner hiển thị ở đầu trang sản phẩm (<code>/products</code>).</p>
       </div>
 
       <div class="content-form__grid">
         <label class="erp-field">
-          <span>Vị trí hiển thị <span class="erp-required" aria-hidden="true">*</span></span>
-          <select class="erp-select" [value]="bDraft.placement || 'products_hero'" (change)="onBannerField('placement', $event)">
-            <option value="products_hero">Trang sản phẩm (Products Hero Carousel)</option>
-            <option value="home_hero">Trang chủ (Home Hero)</option>
-            <option value="collections_hero">Trang bộ sưu tập (Collections Hero)</option>
-          </select>
-        </label>
-
-        <label class="erp-field">
-          <span>Định dạng Media <span class="erp-required" aria-hidden="true">*</span></span>
+          <span>Định dạng media <span class="erp-required" aria-hidden="true">*</span></span>
           <select class="erp-select" [value]="bDraft.media_type || 'image'" (change)="onBannerField('media_type', $event)">
             <option value="image">Hình ảnh tĩnh (JPG, PNG, WebP)</option>
             <option value="video">Video quảng bá (MP4, WebM)</option>
           </select>
         </label>
+        <label class="erp-field">
+          <span>Thứ tự sắp xếp</span>
+          <input class="erp-input" type="number" min="0" [max]="9999" [value]="bDraft.sort_order || 0" (input)="onBannerField('sort_order', $event)" (blur)="touchBanner('sort_order')" />
+          @if (bannerFieldError('sort_order'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
+        </label>
       </div>
 
       <div class="erp-field">
-        <span>Tệp Media (Hình ảnh hoặc Video) <span class="erp-required" aria-hidden="true">*</span></span>
+        <span>Tệp media (hình ảnh hoặc video) <span class="erp-required" aria-hidden="true">*</span></span>
         <div class="custom-file-row">
           <label class="erp-btn erp-btn--sm custom-file-trigger">
             <input
               type="file"
               [accept]="bDraft.media_type === 'video' ? 'video/mp4,video/webm' : 'image/*'"
               class="erp-sr-only"
+              data-testid="banner-media-input"
               (change)="onBannerMediaUploaded($event)"
               [disabled]="bannerUploading()"
             />
-            <span>{{ bannerUploading() ? 'Đang tải lên server…' : (bDraft.media_url ? 'Đổi tệp Media' : 'Tải tệp từ máy tính') }}</span>
+            <span>{{ bannerUploading() ? 'Đang tải lên máy chủ…' : (bDraft.media_url ? 'Đổi tệp media' : 'Tải tệp từ máy tính') }}</span>
           </label>
           <span class="custom-file-status" [class.has-file]="!!bDraft.media_url">
             {{ bDraft.media_url ? 'Đã có media' : 'Chưa có media' }}
           </span>
         </div>
-        <span class="erp-hint">hoặc nhập đường dẫn trực tiếp (CDN URL):</span>
-        <input
-          class="erp-input"
-          type="url"
-          [value]="bDraft.media_url || ''"
-          (input)="onBannerField('media_url', $event)"
-          placeholder="https://cdn.velura.vn/... hoặc /assets/..."
-        />
+        <span class="erp-hint">hoặc nhập đường dẫn trực tiếp (https://… hoặc /assets/…):</span>
+        <input class="erp-input" type="url" [value]="bDraft.media_url || ''" (input)="onBannerField('media_url', $event)" (blur)="touchBanner('media_url')" placeholder="https://cdn.velura.vn/... hoặc /assets/..." />
+        @if (bannerFieldError('media_url'); as err) {
+          <span class="erp-error" role="alert">{{ err }}</span>
+        }
 
         @if (bDraft.media_url) {
-          <div style="margin-top: 10px; border-radius: 8px; overflow: hidden; border: 1px solid var(--erp-line); max-height: 220px; background: #000; display: flex; align-items: center; justify-content: center;">
+          <div class="cms-banner-preview">
             @if (bDraft.media_type === 'video') {
-              <video [src]="bDraft.media_url" controls muted style="max-height: 220px; max-width: 100%;"></video>
+              <video [src]="asset(bDraft.media_url)" controls muted></video>
+            } @else if (!imageBroken(bDraft.media_url)) {
+              <img [src]="asset(bDraft.media_url)" alt="Xem trước banner" (error)="markImageBroken(bDraft.media_url)" />
             } @else {
-              <img [src]="bDraft.media_url" alt="Banner preview" style="max-height: 220px; width: 100%; object-fit: cover;" />
+              <span>Không tải được ảnh</span>
             }
           </div>
         }
       </div>
 
-      <div class="content-form__grid">
-        <label class="erp-field">
-          <span>Nhãn Tag Kicker</span>
-          <input
-            class="erp-input"
-            type="text"
-            [value]="bDraft.tag_label || ''"
-            (input)="onBannerField('tag_label', $event)"
-            placeholder="Ví dụ: VELURA EDIT, BESTSELLER"
-          />
-        </label>
-
-        <label class="erp-field">
-          <span>Nút bấm kêu gọi (CTA Text)</span>
-          <input
-            class="erp-input"
-            type="text"
-            [value]="bDraft.button_text || ''"
-            (input)="onBannerField('button_text', $event)"
-            placeholder="Ví dụ: Khám phá ngay"
-          />
-        </label>
-      </div>
+      @if (bDraft.media_type === 'video') {
+        <div class="erp-field">
+          <span>Ảnh poster (hiện trong danh sách admin và trước khi video phát)</span>
+          <div class="custom-file-row">
+            <label class="erp-btn erp-btn--sm custom-file-trigger">
+              <input type="file" accept="image/*" class="erp-sr-only" (change)="onBannerPosterUploaded($event)" [disabled]="bannerUploading()" />
+              <span>{{ bDraft.poster_url ? 'Đổi poster' : 'Tải poster' }}</span>
+            </label>
+            <span class="custom-file-status" [class.has-file]="!!bDraft.poster_url">{{ bDraft.poster_url ? 'Đã có poster' : 'Chưa có poster' }}</span>
+          </div>
+          @if (bannerFieldError('poster_url'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
+        </div>
+      }
 
       <div class="content-form__grid">
         <label class="erp-field">
-          <span>Đường dẫn liên kết (Link URL)</span>
-          <input
-            class="erp-input"
-            type="text"
-            [value]="bDraft.link_url || ''"
-            (input)="onBannerField('link_url', $event)"
-            placeholder="Ví dụ: /products?category=dam-vay"
-          />
+          <span>Nhãn tag kicker</span>
+          <input class="erp-input" type="text" [value]="bDraft.tag_label || ''" (input)="onBannerField('tag_label', $event)" placeholder="Ví dụ: VELURA EDIT, BESTSELLER" />
         </label>
-
         <label class="erp-field">
-          <span>Thứ tự sắp xếp</span>
-          <input
-            class="erp-input"
-            type="number"
-            min="0"
-            [value]="bDraft.sort_order || 0"
-            (input)="onBannerField('sort_order', $event)"
-          />
+          <span>Chữ nút bấm (CTA)</span>
+          <input class="erp-input" type="text" [attr.maxlength]="bannerLimits.button_text" [value]="bDraft.button_text || ''" (input)="onBannerField('button_text', $event)" (blur)="touchBanner('button_text')" placeholder="Ví dụ: Khám phá ngay" />
+          @if (bannerFieldError('button_text'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
         </label>
       </div>
 
       <label class="erp-field">
-        <span>Phụ đề / Mô tả ngắn</span>
-        <textarea
-          class="erp-input"
-          rows="2"
-          [value]="bDraft.subtitle || ''"
-          (input)="onBannerField('subtitle', $event)"
-          placeholder="Ví dụ: Những lựa chọn tinh tế dành cho nhịp sống và phong cách riêng của bạn."
-        ></textarea>
+        <span>Đường dẫn liên kết</span>
+        <input class="erp-input" type="text" [value]="bDraft.link_url || ''" (input)="onBannerField('link_url', $event)" (blur)="touchBanner('link_url')" placeholder="Ví dụ: /products?category=dam-vay" />
+        @if (bannerFieldError('link_url'); as err) {
+          <span class="erp-error" role="alert">{{ err }}</span>
+        }
       </label>
 
-      <label class="content-check" style="margin-top: 10px;">
-        <input
-          type="checkbox"
-          [checked]="bDraft.is_active"
-          (change)="onBannerField('is_active', $event)"
-        />
+      <label class="erp-field">
+        <span>Phụ đề / mô tả ngắn</span>
+        <textarea class="erp-input" rows="2" [attr.maxlength]="bannerLimits.subtitle" [value]="bDraft.subtitle || ''" (input)="onBannerField('subtitle', $event)" (blur)="touchBanner('subtitle')" placeholder="Ví dụ: Những lựa chọn tinh tế dành cho nhịp sống và phong cách riêng của bạn."></textarea>
+        @if (bannerFieldError('subtitle'); as err) {
+          <span class="erp-error" role="alert">{{ err }}</span>
+        }
+      </label>
+
+      <label class="content-check">
+        <input type="checkbox" [checked]="bDraft.is_active" (change)="onBannerField('is_active', $event)" />
         <span>Kích hoạt hiển thị công khai trên website</span>
       </label>
 
       @if (bannerError()) {
-        <p class="erp-error" role="alert" style="margin-top: 12px;">{{ bannerError() }}</p>
+        <p class="erp-error" role="alert">{{ bannerError() }}</p>
       }
     </form>
   }
   <div footer>
     <button class="erp-btn" type="button" (click)="closeBannerModal()">Đóng</button>
-    <button class="erp-btn erp-btn--primary" type="button" [disabled]="bannerSaving()" (click)="saveBanner()">
-      {{ bannerSaving() ? 'Đang lưu…' : (bannerEditing() ? 'Cập nhật Banner' : 'Tạo Banner') }}
+    <button class="erp-btn erp-btn--primary" type="button" data-testid="banner-save" [disabled]="bannerSaving() || bannerUploading() || bannerInvalid()" (click)="saveBanner()">
+      {{ bannerSaving() ? 'Đang lưu…' : (bannerEditing() ? 'Cập nhật banner' : 'Tạo banner') }}
     </button>
   </div>
 </app-erp-modal>
 
-<!-- MODAL QUẢN LÝ BỘ SƯU TẬP & LOOKBOOK (KAN-108) -->
+<!-- MODAL BỘ SƯU TẬP (KAN-116): hero /collections, người mẫu trang chủ và combo là ba nhóm dữ liệu riêng -->
 <app-erp-modal
   [open]="collectionModalOpen()"
-  [title]="collectionEditing() ? 'Cập nhật Bộ sưu tập & Lookbook' : 'Thêm mới Bộ sưu tập mùa thời trang'"
+  [title]="collectionEditing() ? 'Cập nhật bộ sưu tập' : 'Thêm bộ sưu tập mới'"
   size="xl"
   (closed)="closeCollectionModal()"
 >
@@ -927,260 +919,382 @@
     <form class="content-form" (submit)="$event.preventDefault(); saveCollection()">
       <div class="content-form__hero">
         <label class="erp-field">
-          <span>Tên Bộ Sưu Tập <span class="erp-required" aria-hidden="true">*</span></span>
+          <span>Tên bộ sưu tập <span class="erp-required" aria-hidden="true">*</span></span>
           <input
             class="erp-input erp-input--title"
             type="text"
+            data-testid="collection-name"
+            [attr.maxlength]="collectionLimits.name"
             [value]="cDraft.name || ''"
             (input)="onCollectionField('name', $event)"
-            placeholder="Ví dụ: Soft Ceremony, The Urban Rhythm..."
+            (blur)="touchCollection('name')"
+            placeholder="Ví dụ: Soft Ceremony, The Urban Rhythm…"
           />
+          <span class="erp-hint">Tên hiển thị trên hero, bộ lọc và thẻ bộ sưu tập ở trang /collections.</span>
+          @if (collectionFieldError('name'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
         </label>
-        <div class="content-form__row">
-          <label class="erp-field">
-            <span>Mã Slug định danh <span class="erp-required" aria-hidden="true">*</span></span>
-            <input
-              class="erp-input"
-              type="text"
-              [value]="cDraft.code || ''"
-              (input)="onCollectionField('code', $event)"
-              placeholder="ví-dụ: soft-ceremony"
-            />
-          </label>
-        </div>
-      </div>
-
-      <div class="content-form__grid content-form__grid--meta">
         <label class="erp-field">
-          <span>Kỳ / Phiên bản Bộ sưu tập</span>
+          <span>Mã định danh (slug) <span class="erp-required" aria-hidden="true">*</span></span>
           <input
             class="erp-input"
             type="text"
-            [value]="cDraft.col_number || ''"
-            (input)="onCollectionField('col_number', $event)"
-            placeholder="COLLECTION 01 · SPECIAL EDITION"
+            data-testid="collection-code"
+            [attr.maxlength]="collectionLimits.code"
+            [disabled]="collectionEditing() !== null"
+            [value]="cDraft.code || ''"
+            (input)="onCollectionField('code', $event)"
+            (blur)="touchCollection('code')"
+            placeholder="ví dụ: soft-ceremony"
           />
-        </label>
-        <label class="erp-field">
-          <span>Nhãn chủ đề (Label)</span>
-          <input
-            class="erp-input"
-            type="text"
-            [value]="cDraft.label || ''"
-            (input)="onCollectionField('label', $event)"
-            placeholder="Thanh lịch & Kiêu sa"
-          />
-        </label>
-        <label class="erp-field">
-          <span>Chữ ký nghệ thuật (Script)</span>
-          <input
-            class="erp-input"
-            type="text"
-            [value]="cDraft.script || ''"
-            (input)="onCollectionField('script', $event)"
-            placeholder="golden muse, city muse..."
-          />
-        </label>
-        <label class="erp-field">
-          <span>Badge nhãn</span>
-          <input
-            class="erp-input"
-            type="text"
-            [value]="cDraft.badge || 'ELEGANT'"
-            (input)="onCollectionField('badge', $event)"
-          />
+          @if (collectionEditing()) {
+            <span class="erp-hint">Mã không thể đổi sau khi tạo vì đường dẫn công khai đang dùng mã này.</span>
+          }
+          @if (collectionFieldError('code'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
         </label>
       </div>
 
-      <!-- GRADIENT NỀN SÀN DIỄN (RUNWAY PALETTE) -->
-      <div class="erp-field" style="margin-top: 14px;">
-        <span>Màu sắc Gradient nền Runway</span>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
-          <button
-            type="button"
-            class="erp-btn erp-btn--sm"
-            style="background: linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%); color: #333;"
-            (click)="setCollectionGradient('linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%)')"
-          >Pastel Soft</button>
-          <button
-            type="button"
-            class="erp-btn erp-btn--sm"
-            style="background: linear-gradient(115deg, #4A4E53 0%, #5C6268 45%, #7D8388 100%); color: #fff;"
-            (click)="setCollectionGradient('linear-gradient(115deg, #4A4E53 0%, #5C6268 45%, #7D8388 100%)')"
-          >Urban Slate</button>
-          <button
-            type="button"
-            class="erp-btn erp-btn--sm"
-            style="background: linear-gradient(115deg, #B5C4B1 0%, #C8D5C4 50%, #DCE5D8 100%); color: #333;"
-            (click)="setCollectionGradient('linear-gradient(115deg, #B5C4B1 0%, #C8D5C4 50%, #DCE5D8 100%)')"
-          >Sage Green</button>
-          <button
-            type="button"
-            class="erp-btn erp-btn--sm"
-            style="background: linear-gradient(115deg, #2D2F36 0%, #3D414B 50%, #525866 100%); color: #fff;"
-            (click)="setCollectionGradient('linear-gradient(115deg, #2D2F36 0%, #3D414B 50%, #525866 100%)')"
-          >Midnight</button>
-          <button
-            type="button"
-            class="erp-btn erp-btn--sm"
-            style="background: linear-gradient(115deg, #C9A998 0%, #DCBDB0 50%, #E8D3C9 100%); color: #333;"
-            (click)="setCollectionGradient('linear-gradient(115deg, #C9A998 0%, #DCBDB0 50%, #E8D3C9 100%)')"
-          >Afterglow</button>
+      <!-- 1. HERO TRANG /collections -->
+      <section class="cms-section" aria-labelledby="cms-hero-title">
+        <h4 id="cms-hero-title">1. Hero trang Bộ sưu tập (<code>/collections</code>)</h4>
+        <div class="cms-mode" role="radiogroup" aria-label="Kiểu hero">
+          <label class="cms-mode__option" [class.is-selected]="cDraft.hero_mode !== 'cover'">
+            <input type="radio" name="hero-mode" value="models" data-testid="hero-mode-models" [checked]="cDraft.hero_mode !== 'cover'" (change)="setCollectionHeroMode('models')" />
+            <span><strong>5 người mẫu</strong><small>Hiện 5 ảnh người mẫu tách nền trên nền gradient.</small></span>
+          </label>
+          <label class="cms-mode__option" [class.is-selected]="cDraft.hero_mode === 'cover'">
+            <input type="radio" name="hero-mode" value="cover" data-testid="hero-mode-cover" [checked]="cDraft.hero_mode === 'cover'" (change)="setCollectionHeroMode('cover')" />
+            <span><strong>Ảnh bìa</strong><small>Một ảnh ngang 16:9 phủ kín hero, thay thế 5 người mẫu.</small></span>
+          </label>
         </div>
-        <input
-          class="erp-input"
-          type="text"
-          [value]="cDraft.hero_gradient || ''"
-          (input)="onCollectionField('hero_gradient', $event)"
-          placeholder="linear-gradient(...)"
-        />
-      </div>
 
-      <!-- CÂU CHUYỆN CẢM HỨNG (STORYTELLING) -->
-      <div style="padding: 14px; background: #faf8f5; border-radius: 8px; border: 1px solid var(--erp-line); margin-top: 14px;">
-        <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #352326;">Câu chuyện cảm hứng &amp; Triết lý thiết kế</h4>
-        <div class="content-form__grid">
-          <label class="erp-field">
-            <span>Kicker (Dòng tiêu đề phụ)</span>
-            <input
-              class="erp-input"
-              type="text"
-              [value]="cDraft.kicker || ''"
-              (input)="onCollectionField('kicker', $event)"
-              placeholder="THE ART OF SOFTNESS"
-            />
-          </label>
-          <label class="erp-field">
-            <span>Tiêu đề câu chuyện</span>
-            <input
-              class="erp-input"
-              type="text"
-              [value]="cDraft.story_headline || ''"
-              (input)="onCollectionField('story_headline', $event)"
-              placeholder="Dịu dàng, có chủ ý."
-            />
-          </label>
-        </div>
-        <label class="erp-field" style="margin-top: 8px;">
-          <span>Mô tả chi tiết câu chuyện <span class="erp-required" aria-hidden="true">*</span></span>
-          <textarea
-            class="erp-input"
-            rows="3"
-            [value]="cDraft.story_desc || ''"
-            (input)="onCollectionField('story_desc', $event)"
-            placeholder="Chia sẻ nguồn cảm hứng chất liệu, form dáng và tinh thần của bộ sưu tập..."
-          ></textarea>
-        </label>
-        <div class="content-form__grid" style="margin-top: 8px;">
-          <label class="erp-field">
-            <span>Trích dẫn lắng đọng (Quote)</span>
-            <input
-              class="erp-input"
-              type="text"
-              [value]="cDraft.closing_quote || cDraft.quote || ''"
-              (input)="onCollectionField('closing_quote', $event)"
-              placeholder="Một chút lãng mạn, vừa đủ cho riêng bạn."
-            />
-          </label>
-          <label class="erp-field">
-            <span>Đường dẫn xem trọn bộ</span>
-            <input
-              class="erp-input"
-              type="text"
-              [value]="cDraft.category_link || ''"
-              (input)="onCollectionField('category_link', $event)"
-              placeholder="/products?category=dam-vay"
-            />
-          </label>
-        </div>
-      </div>
-
-      <!-- QUẢN LÝ BỘ ẢNH NGƯỜI MẪU LOOKBOOK (CUTOUT RUNWAY MODELS) -->
-      <div style="padding: 14px; background: #fff; border-radius: 8px; border: 1px solid var(--erp-line); margin-top: 14px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-          <div>
-            <h4 style="margin: 0; font-size: 0.9rem; color: #352326;">
-              Bộ ảnh người mẫu Lookbook Runway ({{ (cDraft.models && cDraft.models.length) || 0 }} người mẫu)
-            </h4>
-            <small style="color: #666;">Tải lên ảnh người mẫu đã tách nền trong suốt PNG hoặc ảnh đứng dọc để hiển thị trên bục sàn diễn.</small>
+        <div class="erp-field">
+          <span>Ảnh bìa (16:9, JPG/PNG/WebP, ≤ 10 MB) @if (cDraft.hero_mode === 'cover') { <span class="erp-required" aria-hidden="true">*</span> }</span>
+          <div class="cms-upload">
+            <div class="cms-upload__preview cms-upload__preview--wide">
+              @if (cDraft.banner_url && !imageBroken(cDraft.banner_url)) {
+                <img [src]="asset(cDraft.banner_url)" alt="Ảnh bìa bộ sưu tập" (error)="markImageBroken(cDraft.banner_url)" />
+              } @else {
+                <span>{{ cDraft.banner_url ? 'Không tải được ảnh' : 'Chưa có ảnh bìa' }}</span>
+              }
+            </div>
+            <div class="cms-upload__actions">
+              <label class="erp-btn erp-btn--sm custom-file-trigger">
+                <input type="file" accept="image/jpeg,image/png,image/webp" class="erp-sr-only" data-testid="cover-input" [disabled]="isSlotUploading('cover')" (change)="onCollectionImageSelected('cover', $event)" />
+                <span>{{ isSlotUploading('cover') ? 'Đang tải lên…' : (cDraft.banner_url ? 'Đổi ảnh bìa' : 'Tải ảnh bìa') }}</span>
+              </label>
+              @if (cDraft.banner_url) {
+                <button class="erp-btn erp-btn--sm" type="button" data-testid="cover-clear" (click)="clearCollectionImage('cover')">Xóa ảnh bìa</button>
+              }
+            </div>
           </div>
-          <label class="erp-btn erp-btn--sm erp-btn--primary custom-file-trigger">
-            <input
-              type="file"
-              accept="image/*"
-              class="erp-sr-only"
-              (change)="onCollectionModelUploaded($event)"
-              [disabled]="collectionUploading()"
-            />
-            <span>{{ collectionUploading() ? 'Đang tải…' : '+ Tải thêm người mẫu' }}</span>
-          </label>
-        </div>
-
-        <!-- DANH SÁCH ẢNH NGƯỜI MẪU -->
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
-          @for (modelImg of cDraft.models || []; track $index; let idx = $index) {
-            <div style="position: relative; width: 68px; height: 95px; border-radius: 6px; border: 1px solid var(--erp-line); background: #faf8f5; overflow: hidden; display: flex; align-items: flex-end; justify-content: center;">
-              <img [src]="modelImg" (error)="onModelImgError($event, modelImg)" alt="Model {{ idx + 1 }}" style="max-height: 90px; max-width: 100%; object-fit: contain;" />
-              <button
-                type="button"
-                (click)="removeCollectionModel(idx)"
-                style="position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.6); color: #fff; border: none; font-size: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer;"
-                title="Xóa người mẫu này"
-              >×</button>
-              <span style="position: absolute; bottom: 2px; left: 4px; font-size: 9px; font-weight: 700; color: #555;">#{{ idx + 1 }}</span>
-            </div>
-          } @empty {
-            <div style="padding: 16px; width: 100%; text-align: center; color: #888; background: #fbf9f6; border-radius: 6px; border: 1px dashed var(--erp-line); font-size: 0.85rem;">
-              Chưa có ảnh người mẫu nào. Hãy bấm "+ Tải thêm người mẫu" để thêm các pose dáng sàn diễn.
-            </div>
+          @if (collectionSlotErrors()['cover']) {
+            <span class="erp-error" role="alert">{{ collectionSlotErrors()['cover'] }}</span>
+          }
+          @if (collectionFieldError('banner_url'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
           }
         </div>
 
-        <!-- MÔ PHỎNG RUNWAY SÀN DIỄN TRỰC TIẾP (LIVE RUNWAY PREVIEW) -->
-        @if ((cDraft.models && cDraft.models.length)) {
-          <div style="border-radius: 8px; overflow: hidden; padding: 20px 10px 10px; position: relative;" [style.background]="cDraft.hero_gradient || 'linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%)'">
-            <span style="position: absolute; top: 6px; right: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.4); letter-spacing: 0.05em;">Mô phỏng Runway Trực Tiếp</span>
-            <div style="display: flex; justify-content: space-around; align-items: flex-end; height: 130px; position: relative;">
-              @for (m of (cDraft.models || []).slice(0, 5); track $index) {
-                <img [src]="m" (error)="onModelImgError($event, m)" alt="" style="max-height: 120px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15));" />
-              }
-            </div>
-            <!-- Bục oval -->
-            <div style="height: 14px; background: radial-gradient(ellipse at center, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 75%); border-radius: 50%; margin-top: -6px;"></div>
+        <div class="erp-field">
+          <span>5 ảnh người mẫu tách nền (<code>/collections</code>) @if (cDraft.hero_mode !== 'cover') { <span class="erp-required" aria-hidden="true">*</span> }</span>
+          <div class="cms-slots">
+            @for (index of modelSlotIndexes; track index) {
+              <div class="cms-slot" [attr.data-testid]="'model-slot-' + index">
+                <div class="cms-slot__preview">
+                  @if (modelSlots()[index] && !imageBroken(modelSlots()[index])) {
+                    <img [src]="asset(modelSlots()[index])" [alt]="'Người mẫu ' + (index + 1)" (error)="markImageBroken(modelSlots()[index])" />
+                  } @else {
+                    <span>{{ modelSlots()[index] ? 'Lỗi ảnh' : '#' + (index + 1) }}</span>
+                  }
+                </div>
+                <label class="erp-btn erp-btn--sm custom-file-trigger">
+                  <input type="file" accept="image/png,image/webp" class="erp-sr-only" [attr.data-testid]="'model-input-' + index" [disabled]="isSlotUploading(modelSlot(index))" (change)="onCollectionImageSelected(modelSlot(index), $event)" />
+                  <span>{{ isSlotUploading(modelSlot(index)) ? 'Đang tải…' : (modelSlots()[index] ? 'Đổi' : 'Tải ảnh') }}</span>
+                </label>
+                @if (modelSlots()[index]) {
+                  <button class="erp-btn erp-btn--sm" type="button" (click)="clearCollectionImage(modelSlot(index))" [attr.aria-label]="'Xóa người mẫu ' + (index + 1)">Xóa</button>
+                }
+                @if (collectionSlotErrors()[modelSlot(index)]) {
+                  <span class="erp-error" role="alert">{{ collectionSlotErrors()[modelSlot(index)] }}</span>
+                }
+              </div>
+            }
           </div>
-        }
-      </div>
+          <span class="erp-hint">PNG/WebP nền trong suốt, hình đứng. Kích hoạt ở chế độ “5 người mẫu” cần đủ 5 ảnh.</span>
+          @if (collectionFieldError('models'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
+        </div>
 
-      <div class="content-form__grid" style="margin-top: 14px;">
-        <label class="erp-field">
-          <span>Thứ tự sắp xếp</span>
-          <input
-            class="erp-input"
-            type="number"
-            min="0"
-            [value]="cDraft.sort_order || 0"
-            (input)="onCollectionField('sort_order', $event)"
-          />
+        <div class="erp-field">
+          <span>Màu gradient nền hero</span>
+          <div class="cms-gradients">
+            <button type="button" class="erp-btn erp-btn--sm" style="background: linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%); color: #333;" (click)="setCollectionGradient('linear-gradient(115deg, #D9D7C8 0%, #EEE6D9 48%, #E9D4CE 100%)')">Pastel Soft</button>
+            <button type="button" class="erp-btn erp-btn--sm" style="background: linear-gradient(115deg, #4A4E53 0%, #5C6268 45%, #7D8388 100%); color: #fff;" (click)="setCollectionGradient('linear-gradient(115deg, #4A4E53 0%, #5C6268 45%, #7D8388 100%)')">Urban Slate</button>
+            <button type="button" class="erp-btn erp-btn--sm" style="background: linear-gradient(115deg, #B5C4B1 0%, #C8D5C4 50%, #DCE5D8 100%); color: #333;" (click)="setCollectionGradient('linear-gradient(115deg, #B5C4B1 0%, #C8D5C4 50%, #DCE5D8 100%)')">Sage Green</button>
+            <button type="button" class="erp-btn erp-btn--sm" style="background: linear-gradient(115deg, #2D2F36 0%, #3D414B 50%, #525866 100%); color: #fff;" (click)="setCollectionGradient('linear-gradient(115deg, #2D2F36 0%, #3D414B 50%, #525866 100%)')">Midnight</button>
+            <button type="button" class="erp-btn erp-btn--sm" style="background: linear-gradient(115deg, #C9A998 0%, #DCBDB0 50%, #E8D3C9 100%); color: #333;" (click)="setCollectionGradient('linear-gradient(115deg, #C9A998 0%, #DCBDB0 50%, #E8D3C9 100%)')">Afterglow</button>
+          </div>
+          <input class="erp-input" type="text" [value]="cDraft.hero_gradient || ''" (input)="onCollectionField('hero_gradient', $event)" (blur)="touchCollection('hero_gradient')" placeholder="linear-gradient(...)" />
+          @if (collectionFieldError('hero_gradient'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
+        </div>
+
+        <div class="content-form__grid content-form__grid--meta">
+          <label class="erp-field">
+            <span>Kỳ / phiên bản</span>
+            <input class="erp-input" type="text" [attr.maxlength]="collectionLimits.col_number" [value]="cDraft.col_number || ''" (input)="onCollectionField('col_number', $event)" (blur)="touchCollection('col_number')" placeholder="COLLECTION 01 · SPECIAL EDITION" />
+            @if (collectionFieldError('col_number'); as err) {
+              <span class="erp-error" role="alert">{{ err }}</span>
+            }
+          </label>
+          <label class="erp-field">
+            <span>Chữ ký nghệ thuật (script)</span>
+            <input class="erp-input" type="text" [attr.maxlength]="collectionLimits.script" [value]="cDraft.script || ''" (input)="onCollectionField('script', $event)" (blur)="touchCollection('script')" placeholder="golden muse" />
+            @if (collectionFieldError('script'); as err) {
+              <span class="erp-error" role="alert">{{ err }}</span>
+            }
+          </label>
+          <label class="erp-field">
+            <span>Nhãn badge</span>
+            <input class="erp-input" type="text" [attr.maxlength]="collectionLimits.badge" [value]="cDraft.badge || ''" (input)="onCollectionField('badge', $event)" (blur)="touchCollection('badge')" />
+            @if (collectionFieldError('badge'); as err) {
+              <span class="erp-error" role="alert">{{ err }}</span>
+            }
+          </label>
+        </div>
+      </section>
+
+      <!-- 2. NGƯỜI MẪU TRANG CHỦ -->
+      <section class="cms-section" aria-labelledby="cms-home-title">
+        <h4 id="cms-home-title">2. Người mẫu trang chủ (sàn diễn 5 người)</h4>
+        <p class="erp-hint">Ảnh này độc lập với 5 ảnh ở mục 1. Trang chủ chỉ hiện đủ 5 người mẫu khi có đúng 5 bộ sưu tập đang bật, bật “Hiện trên trang chủ” và có ảnh.</p>
+        <label class="content-check">
+          <input type="checkbox" data-testid="show-on-home" [checked]="cDraft.show_on_home" (change)="onCollectionField('show_on_home', $event)" />
+          <span>Hiện người mẫu của bộ sưu tập này trên trang chủ</span>
         </label>
-        <label class="content-check" style="align-self: center; margin-top: 16px;">
-          <input
-            type="checkbox"
-            [checked]="cDraft.is_active"
-            (change)="onCollectionField('is_active', $event)"
-          />
-          <span>Kích hoạt công khai trên trang Bộ Sưu Tập</span>
+        @if (collectionFieldError('show_on_home'); as err) {
+          <span class="erp-error" role="alert">{{ err }}</span>
+        }
+        <div class="cms-upload">
+          <div class="cms-upload__preview cms-upload__preview--tall">
+            @if (cDraft.home_model_url && !imageBroken(cDraft.home_model_url)) {
+              <img [src]="asset(cDraft.home_model_url)" alt="Người mẫu trang chủ" (error)="markImageBroken(cDraft.home_model_url)" />
+            } @else {
+              <span>{{ cDraft.home_model_url ? 'Lỗi ảnh' : 'Chưa có ảnh' }}</span>
+            }
+          </div>
+          <div class="cms-upload__actions">
+            <label class="erp-btn erp-btn--sm custom-file-trigger">
+              <input type="file" accept="image/png,image/webp" class="erp-sr-only" data-testid="home-input" [disabled]="isSlotUploading('home')" (change)="onCollectionImageSelected('home', $event)" />
+              <span>{{ isSlotUploading('home') ? 'Đang tải lên…' : (cDraft.home_model_url ? 'Đổi ảnh trang chủ' : 'Tải ảnh trang chủ') }}</span>
+            </label>
+            @if (cDraft.home_model_url) {
+              <button class="erp-btn erp-btn--sm" type="button" (click)="clearCollectionImage('home')">Xóa ảnh</button>
+            }
+            <label class="erp-field cms-upload__order">
+              <span>Vị trí trên sàn diễn</span>
+              <input class="erp-input" type="number" min="0" [max]="9999" [value]="cDraft.home_sort_order ?? 0" (input)="onCollectionField('home_sort_order', $event)" (blur)="touchCollection('home_sort_order')" />
+              @if (collectionFieldError('home_sort_order'); as err) {
+                <span class="erp-error" role="alert">{{ err }}</span>
+              }
+            </label>
+          </div>
+        </div>
+        @if (collectionSlotErrors()['home']) {
+          <span class="erp-error" role="alert">{{ collectionSlotErrors()['home'] }}</span>
+        }
+        @if (collectionFieldError('home_model_url'); as err) {
+          <span class="erp-error" role="alert">{{ err }}</span>
+        }
+        <div class="cms-runway" data-testid="runway-preview">
+          <span class="cms-runway__count" [class.is-complete]="modalHomeRunway().complete">Sàn diễn trang chủ: {{ modalHomeRunway().count }}/{{ homeSlots }} người mẫu</span>
+          <div class="cms-runway__strip">
+            @for (look of modalRunwayLooks(); track $index) {
+              <figure class="cms-runway__look" [class.is-current]="look.current">
+                <img [src]="asset(look.url)" [alt]="look.name" (error)="markImageBroken(look.url)" />
+                <figcaption>{{ look.name }}</figcaption>
+              </figure>
+            } @empty {
+              <span class="erp-hint">Chưa có người mẫu nào sẵn sàng cho trang chủ.</span>
+            }
+          </div>
+          @if (modalHomeRunway().missingModel.length) {
+            <span class="erp-hint cms-warn">Thiếu ảnh trang chủ: {{ modalHomeRunway().missingModel.join(', ') }}.</span>
+          }
+          @if (modalHomeRunway().duplicateModel.length) {
+            <span class="erp-hint cms-warn">Trùng ảnh giữa: {{ modalHomeRunway().duplicateModel.join(', ') }}.</span>
+          }
+        </div>
+      </section>
+
+      <!-- 3. CÂU CHUYỆN / MÔ TẢ -->
+      <section class="cms-section" aria-labelledby="cms-story-title">
+        <h4 id="cms-story-title">3. Mô tả &amp; câu chuyện</h4>
+        <label class="erp-field">
+          <span>Mô tả ngắn (dưới tên bộ sưu tập trên hero)</span>
+          <textarea class="erp-input" rows="2" [attr.maxlength]="collectionLimits.home_story" [value]="cDraft.home_story || ''" (input)="onCollectionField('home_story', $event)" (blur)="touchCollection('home_story')" placeholder="Một câu giới thiệu tối đa 160 ký tự."></textarea>
+          <span class="erp-hint">{{ (cDraft.home_story || '').length }}/{{ collectionLimits.home_story }}</span>
+          @if (collectionFieldError('home_story'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
+        </label>
+        <label class="erp-field">
+          <span>Mô tả bên hông chi tiết <span class="erp-required" aria-hidden="true">*</span></span>
+          <textarea class="erp-input" rows="3" data-testid="collection-story-desc" [attr.maxlength]="collectionLimits.story_desc" [value]="cDraft.story_desc || ''" (input)="onCollectionField('story_desc', $event)" (blur)="touchCollection('story_desc')" placeholder="Nguồn cảm hứng, chất liệu, form dáng…"></textarea>
+          <span class="erp-hint">{{ (cDraft.story_desc || '').length }}/{{ collectionLimits.story_desc }}</span>
+          @if (collectionFieldError('story_desc'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
+        </label>
+        <div class="content-form__grid">
+          <label class="erp-field">
+            <span>Kicker</span>
+            <input class="erp-input" type="text" [attr.maxlength]="collectionLimits.kicker" [value]="cDraft.kicker || ''" (input)="onCollectionField('kicker', $event)" (blur)="touchCollection('kicker')" placeholder="THE ART OF SOFTNESS" />
+            @if (collectionFieldError('kicker'); as err) {
+              <span class="erp-error" role="alert">{{ err }}</span>
+            }
+          </label>
+          <label class="erp-field">
+            <span>Tiêu đề câu chuyện</span>
+            <input class="erp-input" type="text" [attr.maxlength]="collectionLimits.story_headline" [value]="cDraft.story_headline || ''" (input)="onCollectionField('story_headline', $event)" (blur)="touchCollection('story_headline')" placeholder="Dịu dàng, có chủ ý." />
+            @if (collectionFieldError('story_headline'); as err) {
+              <span class="erp-error" role="alert">{{ err }}</span>
+            }
+          </label>
+          <label class="erp-field">
+            <span>Trích dẫn kết</span>
+            <input class="erp-input" type="text" [attr.maxlength]="collectionLimits.closing_quote" [value]="cDraft.closing_quote || ''" (input)="onCollectionField('closing_quote', $event)" (blur)="touchCollection('closing_quote')" placeholder="Một chút lãng mạn, vừa đủ cho riêng bạn." />
+            @if (collectionFieldError('closing_quote'); as err) {
+              <span class="erp-error" role="alert">{{ err }}</span>
+            }
+          </label>
+          <label class="erp-field">
+            <span>Chữ nút khám phá</span>
+            <input class="erp-input" type="text" [attr.maxlength]="collectionLimits.explore_cta" [value]="cDraft.explore_cta || ''" (input)="onCollectionField('explore_cta', $event)" (blur)="touchCollection('explore_cta')" placeholder="Khám phá bộ sưu tập" />
+            @if (collectionFieldError('explore_cta'); as err) {
+              <span class="erp-error" role="alert">{{ err }}</span>
+            }
+          </label>
+          <label class="erp-field">
+            <span>Dòng phụ cụm sản phẩm</span>
+            <input class="erp-input" type="text" [attr.maxlength]="collectionLimits.products_sub" [value]="cDraft.products_sub || ''" (input)="onCollectionField('products_sub', $event)" (blur)="touchCollection('products_sub')" placeholder="SELECTED FOR YOU" />
+            @if (collectionFieldError('products_sub'); as err) {
+              <span class="erp-error" role="alert">{{ err }}</span>
+            }
+          </label>
+          <label class="erp-field">
+            <span>Tiêu đề cụm sản phẩm</span>
+            <input class="erp-input" type="text" [attr.maxlength]="collectionLimits.products_title" [value]="cDraft.products_title || ''" (input)="onCollectionField('products_title', $event)" (blur)="touchCollection('products_title')" placeholder="Những thiết kế nổi bật" />
+            @if (collectionFieldError('products_title'); as err) {
+              <span class="erp-error" role="alert">{{ err }}</span>
+            }
+          </label>
+        </div>
+        <label class="erp-field">
+          <span>Đường dẫn xem trọn bộ</span>
+          <input class="erp-input" type="text" [value]="cDraft.category_link || ''" (input)="onCollectionField('category_link', $event)" (blur)="touchCollection('category_link')" placeholder="/products?category=dam-vay" />
+          @if (collectionFieldError('category_link'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
+        </label>
+      </section>
+
+      <!-- 4. COMBO / SET -->
+      <section class="cms-section" aria-labelledby="cms-combo-title">
+        <h4 id="cms-combo-title">4. Combo / set của bộ sưu tập ({{ comboSelected().length }}/{{ comboMax }})</h4>
+        <p class="erp-hint">Chỉ chọn sản phẩm combo/set đang bán. Thứ tự ở đây là thứ tự hiển thị trên storefront.</p>
+        <ol class="cms-combo-list" data-testid="combo-selected">
+          @for (item of comboSelected(); track item.id; let i = $index; let first = $first; let last = $last) {
+            <li class="cms-combo" [class.is-unavailable]="item.unavailable">
+              <div class="cms-combo__thumb">
+                @if (item.product && productImage(item.product) && !imageBroken(productImage(item.product))) {
+                  <img [src]="asset(productImage(item.product))" alt="" (error)="markImageBroken(productImage(item.product))" />
+                }
+              </div>
+              <div class="cms-combo__text">
+                <strong>{{ item.product?.name || item.id }}</strong>
+                @if (item.unavailable) {
+                  <span class="cms-warn">Không còn bán hoặc không phải combo — storefront sẽ bỏ qua.</span>
+                } @else if (item.product) {
+                  <span>{{ productPrice(item.product) }} · {{ productStatus(item.product) }}</span>
+                }
+              </div>
+              <div class="cms-combo__actions">
+                <button class="erp-btn erp-btn--sm" type="button" [disabled]="first" (click)="moveCombo(i, -1)" aria-label="Chuyển lên">↑</button>
+                <button class="erp-btn erp-btn--sm" type="button" [disabled]="last" (click)="moveCombo(i, 1)" aria-label="Chuyển xuống">↓</button>
+                <button class="erp-btn erp-btn--sm erp-btn--danger" type="button" (click)="removeCombo(item.id)" aria-label="Gỡ combo">×</button>
+              </div>
+            </li>
+          } @empty {
+            <li class="cms-combo-empty">Chưa gắn combo/set nào.</li>
+          }
+        </ol>
+        @if (collectionFieldError('product_ids'); as err) {
+          <span class="erp-error" role="alert">{{ err }}</span>
+        }
+        <label class="erp-field">
+          <span>Tìm combo/set để thêm</span>
+          <input class="erp-input" type="search" data-testid="combo-search" [value]="comboQuery()" (input)="onComboQueryInput($event)" placeholder="Tên combo hoặc SKU" />
+        </label>
+        @if (comboError()) {
+          <span class="erp-error" role="alert">{{ comboError() }}</span>
+        }
+        <ul class="cms-combo-results" data-testid="combo-results">
+          @for (product of comboResults(); track product.product_id) {
+            <li class="cms-combo">
+              <div class="cms-combo__thumb">
+                @if (productImage(product) && !imageBroken(productImage(product))) {
+                  <img [src]="asset(productImage(product))" alt="" (error)="markImageBroken(productImage(product))" />
+                }
+              </div>
+              <div class="cms-combo__text">
+                <strong>{{ product.name }}</strong>
+                <span>{{ productPrice(product) }} · {{ productStatus(product) }}</span>
+              </div>
+              <button class="erp-btn erp-btn--sm erp-btn--primary" type="button" [attr.data-testid]="'combo-add-' + product.product_id" [disabled]="comboSelected().length >= comboMax || (cDraft.product_ids || []).includes(product.product_id)" (click)="addCombo(product)">
+                {{ (cDraft.product_ids || []).includes(product.product_id) ? 'Đã thêm' : 'Thêm' }}
+              </button>
+            </li>
+          } @empty {
+            @if (!comboSearching()) {
+              <li class="cms-combo-empty">Không có combo/set phù hợp.</li>
+            }
+          }
+        </ul>
+        @if (comboSearching()) {
+          <span class="erp-hint">Đang tìm…</span>
+        }
+      </section>
+
+      <div class="content-form__grid">
+        <label class="erp-field">
+          <span>Thứ tự bộ sưu tập</span>
+          <input class="erp-input" type="number" min="0" [max]="9999" [value]="cDraft.sort_order ?? 0" (input)="onCollectionField('sort_order', $event)" (blur)="touchCollection('sort_order')" />
+          @if (collectionFieldError('sort_order'); as err) {
+            <span class="erp-error" role="alert">{{ err }}</span>
+          }
+        </label>
+        <label class="content-check cms-check-aligned">
+          <input type="checkbox" [checked]="cDraft.is_active" (change)="onCollectionField('is_active', $event)" />
+          <span>Kích hoạt công khai trên trang Bộ sưu tập</span>
         </label>
       </div>
 
       @if (collectionError()) {
-        <p class="erp-error" role="alert" style="margin-top: 12px;">{{ collectionError() }}</p>
+        <p class="erp-error" role="alert">{{ collectionError() }}</p>
       }
     </form>
   }
   <div footer>
     <button class="erp-btn" type="button" (click)="closeCollectionModal()">Đóng</button>
-    <button class="erp-btn erp-btn--primary" type="button" [disabled]="collectionSaving()" (click)="saveCollection()">
-      {{ collectionSaving() ? 'Đang lưu…' : (collectionEditing() ? 'Cập nhật Bộ sưu tập' : 'Tạo Bộ sưu tập') }}
+    <button class="erp-btn erp-btn--primary" type="button" data-testid="collection-save" [disabled]="collectionSaving() || collectionUploading() || collectionInvalid()" (click)="saveCollection()">
+      {{ collectionSaving() ? 'Đang lưu…' : (collectionEditing() ? 'Cập nhật bộ sưu tập' : 'Tạo bộ sưu tập') }}
     </button>
   </div>
 </app-erp-modal>

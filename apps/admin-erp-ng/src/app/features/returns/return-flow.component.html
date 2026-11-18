@@ -176,8 +176,73 @@
           <span class="custom-file-status" [class.has-file]="!!proofFile()">
             {{ proofFile()?.name || 'Chưa chọn ảnh' }}
           </span>
+          @if (flow() === 'receive') {
+            <button
+              class="erp-btn erp-btn--sm erp-btn--outline flow-forensics-btn"
+              type="button"
+              [disabled]="forensicsLoading()"
+              (click)="runAiBoxForensics()"
+            >
+              {{ forensicsLoading() ? '✦ AI đang giám định…' : '✦ AI Giám định Thùng hàng & Đối chiếu ĐVVC' }}
+            </button>
+          }
         </div>
       </div>
+
+      @if (flow() === 'receive' && forensicsError()) {
+        <p class="flow-warning" role="alert">{{ forensicsError() }}</p>
+      }
+
+      @if (flow() === 'receive' && boxForensics(); as fx) {
+        <section class="flow-forensics-card" [class.is-danger]="fx.tampering_risk_score > 75" [class.is-warn]="isGreyZoneRisk()" aria-label="Kết quả giám định thùng hàng AI">
+          <div class="flow-forensics-card__head">
+            <div>
+              <span class="flow-payout-badge">✦ GEMINI DECISION 1 · VISUAL FORENSICS QA</span>
+              <strong>Ngoại quan: {{ boxConditionLabel(fx.box_condition) }} · {{ matchVerdictLabel(fx.match_verdict) }}</strong>
+            </div>
+            <div class="flow-forensics-card__scores">
+              <span class="flow-risk-pill" [class.is-high]="fx.tampering_risk_score > 75" [class.is-grey]="isGreyZoneRisk()">
+                Điểm rủi ro tráo/hư kiện: {{ fx.tampering_risk_score }}/100
+              </span>
+              <span class="flow-conf-pill">Độ tin cậy: {{ (fx.confidence_score * 100).toFixed(0) }}%</span>
+            </div>
+          </div>
+
+          @if (isGreyZoneRisk() || fx.requires_human_review) {
+            <p class="flow-warning">
+              ⚠ Điểm rủi ro nằm vùng xám (40–75) hoặc độ tin cậy cần rà soát: Yêu cầu nhân viên kho kiểm tra trực tiếp tem vận đơn và niêm phong trước khi xác nhận (Human-in-the-Loop).
+            </p>
+          }
+
+          @if (fx.diff_factors.length) {
+            <div class="flow-forensics-card__tags">
+              <span>Yếu tố bất thường phát hiện:</span>
+              @for (tag of fx.diff_factors; track tag) {
+                <code>{{ tag }}</code>
+              }
+            </div>
+          }
+
+          @if (fx.discrepancy_evidence.length) {
+            <ul class="flow-forensics-card__list">
+              @for (item of fx.discrepancy_evidence; track item) {
+                <li>{{ item }}</li>
+              }
+            </ul>
+          }
+
+          <div class="flow-forensics-card__actions">
+            <button type="button" class="erp-btn erp-btn--sm erp-btn--primary" (click)="applyForensicsSuggestions()">
+              ✓ Áp dụng gợi ý QA &amp; Hướng xử lý kho ({{ fx.suggested_disposition }})
+            </button>
+            @if (fx.carrier_claim_report; as report) {
+              <button type="button" class="erp-btn erp-btn--sm" (click)="copyCarrierClaimReport()">
+                {{ copiedClaimReport() ? '✓ Đã sao chép biên bản ĐVVC' : '📋 Sao chép Biên bản khiếu nại ĐVVC (' + report.report_code + ')' }}
+              </button>
+            }
+          </div>
+        </section>
+      }
     }
     @if (isMoney()) {
       <p class="flow-warning">Số tiền cho riêng phần này: <strong>{{ money(refundable()) }}</strong>. Không dùng tổng giá trị phiếu.</p>

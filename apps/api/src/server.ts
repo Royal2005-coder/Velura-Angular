@@ -15,6 +15,8 @@ import { handleAccountRoute } from "./accounts/account-router.js";
 import { startAccountMaintenance } from "./accounts/account-maintenance.js";
 import { startEmailOutboxWorker } from "./email/outbox-worker.js";
 import { startPromotionScheduler } from "./pricing/promotion-scheduler.js";
+import { startBlogScheduler } from "./content/blog-scheduler.js";
+import { handleDecisionAdminRoute } from "./decision/decision-router.js";
 import { createProductRepository } from "./products/product-repository.js";
 import { createProductService } from "./products/product-service.js";
 import { handleProductRoute } from "./products/product-router.js";
@@ -427,6 +429,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         }
       }
       if (await handleEnhancementApprovalRoute({ req, res, url, parts, context, headers: corsHeaders, service: enhancementApprovalService })) return;
+      if (await handleDecisionAdminRoute({ req, res, url, parts, context, headers: corsHeaders, service: undefined as never })) return;
       if (await handleCatalogContentRoute({ req, res, url, parts, context, headers: corsHeaders, service: catalogContentService })) return;
       if (await handleContentAdminRoute({ req, res, url, parts, context, headers: corsHeaders, service: contentAdminService })) return;
       if (await handleAdminMediaUpload({ req, res, url, parts, context, headers: corsHeaders })) return;
@@ -576,7 +579,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 export const server = createServer(handleApiRequest);
 
 if (process.env.VERCEL !== "1") {
-  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startStripeReconciliation(), startLocalGatewayReconciliation(), startLoyaltyExpiry(), startChatReportWorker(), startMvRefreshJob()];
+  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startBlogScheduler(), startOrderAutomation(), startStripeReconciliation(), startLocalGatewayReconciliation(), startLoyaltyExpiry(), startChatReportWorker(), startMvRefreshJob()];
   catalogContentService.start();
   void startAiRuntime().catch(() => console.error("AI_RUNTIME_RECOVERY_FAILED"));
   const shutdown = () => {

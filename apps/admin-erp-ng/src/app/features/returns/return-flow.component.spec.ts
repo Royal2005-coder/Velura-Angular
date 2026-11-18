@@ -44,6 +44,33 @@ describe('ReturnFlowComponent per-item operations', () => {
       triggerStripeRefund: (_id: string, body: { expectedVersion: number; returnItemId: string }) => { stripe.push(body); return of({ success: true, refund: { status: 'requested' } }); },
       recordReturnContact: (_id: string, body: Record<string, unknown>) => { contacts.push(body); return of(record); },
       requestRefundInfo: () => of({}),
+      analyzeReturnBoxForensics: () => of({
+        box_condition: 'TORN_WET' as const,
+        seal_intact: false,
+        carrier_claim_recommended: true,
+        match_verdict: 'SUSPICIOUS_DIFF' as const,
+        diff_factors: ['SEAL_BROKEN' as const, 'TAPE_COLOR' as const],
+        tampering_risk_score: 62,
+        confidence_score: 0.87,
+        requires_human_review: true,
+        freeze_auto_refund: true,
+        suggested_qa_failed_codes: ['condition_bad', 'seal_broken'],
+        suggested_disposition: 'scrap' as const,
+        discrepancy_evidence: ['Băng keo niêm phong rách và thùng ướt góc đáy.'],
+        carrier_claim_report: {
+          report_code: 'DSP-20261118-A1B2C3',
+          generated_at: '2026-11-18T00:00:00Z',
+          return_code: 'RMA-001',
+          tracking_code: 'GHNVL777',
+          carrier_name: 'GHN',
+          box_condition: 'TORN_WET',
+          match_verdict: 'SUSPICIOUS_DIFF',
+          tampering_risk_score: 62,
+          discrepancy_factors: ['SEAL_BROKEN', 'TAPE_COLOR'],
+          recommended_claim_action: 'Lập biên bản bồi hoàn ĐVVC',
+          summary_vi: '[DSP-20261118-A1B2C3] Thùng hàng rách ướt, niêm phong đổi màu băng keo.',
+        },
+      }),
       listVariants: (_pid: string) => of({
         rows: [
           { variant_id: 'var-s', color: 'Xanh', size: 'S', stock_quantity: 5, reserved_quantity: 0 },
@@ -330,5 +357,21 @@ describe('ReturnFlowComponent per-item operations', () => {
     // A new flow starts from the camera again; facts are never carried across parts.
     component.onQrFacts(null);
     expect(component.qrFacts()).toBeNull();
+  });
+
+  it('runs Gemini Decision 1 box forensics, flags grey-zone HITL, and applies 1-click QA & carrier claim summary', () => {
+    const { component, fixture } = boot('receive');
+    fixture.componentRef.setInput('record', { ...record, warehouse_proof: 'private/qa_photo/existing' });
+    fixture.detectChanges();
+
+    component.runAiBoxForensics();
+    expect(component.boxForensics()?.box_condition).toBe('TORN_WET');
+    expect(component.isGreyZoneRisk()).toBe(true);
+
+    component.applyForensicsSuggestions();
+    expect(component.conditionAcceptable()).toBe(false);
+    expect(component.sealIntact()).toBe(false);
+    expect(component.disposition()).toBe('scrap');
+    expect(component.note()).toContain('DSP-20261118-A1B2C3');
   });
 });

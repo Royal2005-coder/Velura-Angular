@@ -117,6 +117,33 @@
         </li>
       }
     </ul>
+    @if (report.decisionTaxonomy; as tax) {
+      <div class="gallery-taxonomy">
+        <div class="gallery-taxonomy__head">
+          <strong>✦ Gemini Decision 1 Taxonomy: {{ taxonomyVerdictLabel(tax.final_verdict) }}</strong>
+          <div class="gallery-taxonomy__badges">
+            <span class="gallery-tax-pill" [class.is-hero]="tax.blog_auto_eligible">
+              {{ tax.blog_auto_eligible ? '✓ Đủ chuẩn AI Blog tự động' : 'Chỉ dùng nội bộ / Cần chỉnh sửa' }}
+            </span>
+            <span class="gallery-tax-pill">Độ tin cậy {{ (tax.confidence_score * 100).toFixed(0) }}%</span>
+          </div>
+        </div>
+        <div class="gallery-taxonomy__axes">
+          <span>Độ nét (Sharpness): <strong>{{ tax.axes.sharpness_focus.toFixed(1) }}/5</strong></span>
+          <span>Ánh sáng (Exposure): <strong>{{ tax.axes.lighting_exposure.toFixed(1) }}/5</strong></span>
+          <span>Bố cục (Framing): <strong>{{ tax.axes.composition_framing.toFixed(1) }}/5</strong></span>
+          <span>Nền sạch (Background): <strong>{{ tax.axes.background_cleanliness.toFixed(1) }}/5</strong></span>
+        </div>
+        @if (tax.defect_tags.length) {
+          <div class="gallery-taxonomy__defects">
+            <span>Lỗi cụ thể theo Taxonomy:</span>
+            @for (tag of tax.defect_tags; track tag) {
+              <code>{{ tag }}</code>
+            }
+          </div>
+        }
+      </div>
+    }
     @if (report.recommendations.length) {
       <ul class="gallery-tips">
         @for (tip of report.recommendations; track tip) {

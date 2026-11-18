@@ -47,6 +47,54 @@ export function createContentAdminRepository(): ContentAdminRepository {
     },
 
     async upsertBlog(input, accessToken) {
+      const hasV3Fields =
+        input.scheduledAt !== undefined ||
+        input.promoId !== undefined ||
+        input.voucherCode !== undefined ||
+        input.socialCaptions !== undefined ||
+        input.scheduleIdempotencyKey !== undefined ||
+        input.aiWorkflowMetadata !== undefined;
+
+      if (hasV3Fields) {
+        try {
+          return (await callRpc(
+            "admin_upsert_blog_v3",
+            {
+              p_blog_id: input.blogId ?? null,
+              p_category_slug: input.categorySlug ?? null,
+              p_slug: input.slug ?? null,
+              p_title: input.title ?? null,
+              p_excerpt: input.excerpt ?? null,
+              p_content: input.content ?? null,
+              p_content_html: input.contentHtml ?? null,
+              p_image_url: input.imageUrl ?? null,
+              p_author: input.author ?? null,
+              p_read_minutes: input.readMinutes ?? null,
+              p_is_featured: input.isFeatured ?? null,
+              p_status: input.status ?? null,
+              p_meta_title: input.metaTitle ?? null,
+              p_meta_description: input.metaDescription ?? null,
+              p_canonical_url: input.canonicalUrl ?? null,
+              p_og_image_url: input.ogImageUrl ?? null,
+              p_tags: input.tags ?? [],
+              p_product_ids: input.productIds ?? [],
+              p_expected_version: input.expectedVersion ?? null,
+              p_ip_address: input.ipAddress ?? null,
+              p_scheduled_at: input.scheduledAt ?? null,
+              p_promo_id: input.promoId ?? null,
+              p_voucher_code: input.voucherCode ?? null,
+              p_social_captions: input.socialCaptions ?? null,
+              p_schedule_idempotency_key: input.scheduleIdempotencyKey ?? null,
+              p_ai_workflow_metadata: input.aiWorkflowMetadata ?? null,
+            },
+            authOptions(accessToken),
+          )) as JsonObject;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!/admin_upsert_blog_v3|PGRST202/i.test(msg)) throw err;
+        }
+      }
+
       return (await callRpc(
         "admin_upsert_blog_v2",
         {

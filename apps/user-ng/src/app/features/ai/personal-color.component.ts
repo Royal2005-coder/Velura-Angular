@@ -161,6 +161,39 @@ export class PersonalColorComponent {
     return tones[season] || 'Tone da Tự nhiên';
   }
 
+  baseSkinDepthLabel(depth: 'LIGHT_TONE' | 'DARK_TONE'): string {
+    return depth === 'LIGHT_TONE' ? 'Nền da Sáng (Light Tone)' : 'Nền da Trầm / Bánh mật (Dark Tone)';
+  }
+
+  skinTierLabel(tier: string): string {
+    const labels: Record<string, string> = {
+      FAIR: 'Sáng hồng (Fair)',
+      LIGHT: 'Sáng tự nhiên (Light)',
+      MEDIUM: 'Trung bình (Medium)',
+      TAN: 'Ngăm khỏe (Tan)',
+      DEEP: 'Trầm sâu (Deep)',
+    };
+    return labels[tier] || tier;
+  }
+
+  undertoneDiagnosticLabel(undertone: string): string {
+    const labels: Record<string, string> = {
+      WARM: 'Sắc ẩn Ấm (Warm)',
+      COOL: 'Sắc ẩn Lạnh (Cool)',
+      NEUTRAL_OLIVE: 'Trung tính / Olive',
+    };
+    return labels[undertone] || undertone;
+  }
+
+  contrastLabel(level: string): string {
+    const labels: Record<string, string> = {
+      HIGH: 'Tương phản Cao',
+      MEDIUM: 'Tương phản Vừa',
+      LOW: 'Tương phản Dịu nhẹ',
+    };
+    return labels[level] || level;
+  }
+
   constructor() {
     effect(() => {
       const tab = this.initialTab();

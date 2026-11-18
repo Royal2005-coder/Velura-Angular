@@ -3,8 +3,11 @@ import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject } from "../types.js";
 import { asNumber, asString, errorMessage, isJsonObject } from "../types.js";
 import { generateGeminiText, isGeminiConfigured } from "../gemini-client.js";
+import { generateFallbackAwareJson, isDecisionEngineConfigured } from "../decision/gemini-decision-client.js";
+import { unifiedDecisionService } from "../decision/decision-service.js";
+import type { CskhSentimentDecision } from "../decision/decision-types.js";
 import { REVIEW_OPERATOR_ROLES, REVIEW_READER_ROLES } from "./review-constants.js";
-import { groundedReviewReplies, groundedReviewReply, readReplySuggestions, reviewReplyPrompt } from "./review-reply-ai.js";
+import { groundedReviewReplies, readReplySuggestions, reviewReplyPrompt } from "./review-reply-ai.js";
 import type { ReviewRepository } from "./review-repository.js";
 
 /**
@@ -16,7 +19,7 @@ export interface ReviewService {
   approve(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
   hide(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
   reply(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
-  suggestReply(context: AuthContext | undefined, reviewId: string): Promise<{ replies: string[]; source: "gemini" | "review" }>;
+  suggestReply(context: AuthContext | undefined, reviewId: string): Promise<{ replies: string[]; source: "gemini" | "review"; decision?: CskhSentimentDecision }>;
   escalate(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
   listAuditLogs(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<{ rows: JsonObject[]; count: number | undefined }>;
 }
@@ -87,22 +90,55 @@ export function createReviewService({ repository }: { repository: ReviewReposito
         comment: asString(review.comment),
         productName: asString(product.name)
       };
-      if (!isGeminiConfigured()) {
+      if (!isGeminiConfigured() && !isDecisionEngineConfigured()) {
         return { replies: groundedReviewReplies(source), source: "review" as const };
       }
+      let sentimentDecision: CskhSentimentDecision | undefined;
       try {
-        const text = await generateGeminiText(
-          `${reviewReplyPrompt(source)}\nChỉ trả một JSON {"replies":["câu 1"]}.`,
-          { temperature: 0.2, maxOutputTokens: 400, timeoutMs: 5000 }
-        );
-        const replies = readReplySuggestions(text);
-        if (replies.length) {
-          return { replies, source: "gemini" as const };
+        sentimentDecision = await unifiedDecisionService.decideCskhSentiment({
+          message: source.comment || `Đánh giá ${source.rating} sao`,
+          rating: source.rating,
+          contextKind: "review",
+          entityId: reviewId,
+          actorId: context.profile?.user_id || context.authUser.id,
+        });
+      } catch {
+        sentimentDecision = undefined;
+      }
+
+      const branchPrompt = sentimentDecision
+        ? `\nNhánh quyết định CSKH bắt buộc (${sentimentDecision.routing_branch}):\n- ${sentimentDecision.response_guidelines.join("\n- ")}`
+        : "";
+      try {
+        if (isGeminiConfigured()) {
+          const text = await generateGeminiText(
+            `${reviewReplyPrompt(source)}${branchPrompt}\nChỉ trả một JSON {"replies":["câu 1","câu 2"]}.`,
+            { temperature: 0.2, maxOutputTokens: 450, timeoutMs: 6000 }
+          );
+          const replies = readReplySuggestions(text);
+          if (replies.length) {
+            return { replies, source: "gemini" as const, ...(sentimentDecision ? { decision: sentimentDecision } : {}) };
+          }
+        } else {
+          const gen = await generateFallbackAwareJson(
+            `${reviewReplyPrompt(source)}${branchPrompt}`,
+            {
+              type: "object",
+              required: ["replies"],
+              additionalProperties: false,
+              properties: { replies: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 2 } },
+            },
+            { temperature: 0.2, maxOutputTokens: 450, timeoutMs: 7000 }
+          );
+          const replies = readReplySuggestions(gen.data);
+          if (replies.length) {
+            return { replies, source: "gemini" as const, ...(sentimentDecision ? { decision: sentimentDecision } : {}) };
+          }
         }
       } catch (error: unknown) {
         console.error("[REVIEW AI]", errorMessage(error));
       }
-      return { replies: groundedReviewReplies(source), source: "review" as const };
+      return { replies: groundedReviewReplies(source), source: "review" as const, ...(sentimentDecision ? { decision: sentimentDecision } : {}) };
     },
 
     async reply(context, reviewId, body) {

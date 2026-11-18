@@ -88,6 +88,65 @@ describe('AdminErpContentPage', () => {
         harness.seoSuggestions += 1;
         return of({ metaTitle: 'Áo lụa Hà Nội', metaDescription: 'Chọn áo lụa đúng size.', tags: ['áo lụa', 'hà nội'], summary: 'Tóm tắt SEO.' });
       },
+      discoverBlogTopics: () => of({
+        topics: [
+          {
+            topicId: 't-1',
+            title: 'Flash Sale Ngày Đôi: 5 Đầm Lụa Tôn Dáng',
+            slugSuggestion: 'flash-sale-ngay-doi-5-dam-lua',
+            angle: 'Ưu đãi giới hạn gắn trực tiếp tồn kho thực tế.',
+            campaignType: 'double_day_sale' as const,
+            primaryKeyword: 'đầm lụa khuyến mãi',
+            secondaryKeywords: ['áo lụa hà nội', 'quiet luxury'],
+            estimatedSearchIntent: 'transactional' as const,
+            recommendedCategorySlug: 'cham-soc',
+            matchedPromoId: 'promo-1',
+            matchedPromotionName: 'Sale 11.11',
+            matchedVoucherCode: 'VELURA15',
+            heroProductIds: ['30000000-0000-4000-8000-000000000001'],
+          },
+        ],
+        activePromotions: [
+          { promo_id: 'promo-1', name: 'Sale 11.11', type: 'percentage', discount_value: 15, start_date: '2027-11-11T02:00:00Z', end_date: '2027-11-12T02:00:00Z', is_active: true },
+        ],
+        activeVouchers: [
+          { voucher_id: 'v-1', code: 'VELURA15', name: 'Giảm 15%', discount_type: 'percentage', discount_value: 15, start_date: '2027-11-11T02:00:00Z', end_date: '2027-11-12T02:00:00Z' },
+        ],
+      }),
+      generateBlogWorkflow: () => of({
+        title: 'Flash Sale Ngày Đôi: 5 Đầm Lụa Tôn Dáng',
+        slug: 'flash-sale-ngay-doi-5-dam-lua',
+        categorySlug: 'cham-soc',
+        excerpt: 'Tổng hợp 5 thiết kế đầm lụa đang ưu đãi kèm mã VELURA15.',
+        contentHtml: '<h2>Bản phối Quiet Luxury</h2><p>Nội dung bài viết chiến dịch khuyến mãi đủ dài vượt qua ngưỡng kiểm tra CMS.</p>',
+        contentPlain: 'Bản phối Quiet Luxury Nội dung bài viết chiến dịch khuyến mãi đủ dài vượt qua ngưỡng kiểm tra CMS.',
+        metaTitle: 'Flash Sale Đầm Lụa Velura',
+        metaDescription: 'Khám phá 5 thiết kế đầm lụa ưu đãi cùng voucher VELURA15.',
+        tags: ['đầm lụa', 'flash sale', 'quiet luxury'],
+        readMinutes: 5,
+        recommendedStatus: 'ai_reviewed' as const,
+        promoId: 'promo-1',
+        promoStartAt: '2027-11-11T02:00:00Z',
+        voucherCode: 'VELURA15',
+        matchedProducts: [
+          { product_id: '30000000-0000-4000-8000-000000000001', name: 'Đầm Lụa Đỏ', status: 'on_sale', base_price: 1500000, match_reason: 'Khớp 94% · APPROVED_HERO' },
+        ],
+        productIds: ['30000000-0000-4000-8000-000000000001'],
+        socialCaptions: {
+          facebookPage: 'Flash Sale Đầm Lụa Velura giảm 15% nhập mã VELURA15!',
+          zaloOa: '[Velura] Ưu đãi 15% BST Đầm Lụa hôm nay.',
+          instagram: 'Timeless silk elegance ✨ #Velura #QuietLuxury',
+        },
+        editorialGate: {
+          passed: true,
+          confidence: 0.93,
+          seoReadyProb: 0.94,
+          brandToneProb: 0.92,
+          zeroHallucinationProb: 0.99,
+          requiresHumanReview: false,
+        },
+      }),
+      triggerBlogScheduler: () => of({ publishedCount: 1, publishedIds: ['b-sched'], broadcastErrors: 0 }),
       listSubscribers: (params: Record<string, string> = {}) => of({
         rows: [
           {
@@ -362,6 +421,36 @@ describe('AdminErpContentPage', () => {
     // Attach all suggestions
     page.attachAllSuggested();
     expect(page.draft()?.productIds).toContain('p-1');
+  });
+
+  it('runs the End-to-End AI Blog & Promotion Wizard, populates scheduled draft + social captions, and validates scheduledAt', () => {
+    const { page, created } = boot();
+    page.openAiWizard();
+    expect(page.aiWizardOpen()).toBe(true);
+    expect(page.aiTopics().length).toBe(1);
+    expect(page.aiSelectedTopic()?.matchedVoucherCode).toBe('VELURA15');
+
+    page.runEndToEndBlogWorkflow();
+    expect(page.aiWizardOpen()).toBe(false);
+    expect(page.draft()?.status).toBe('scheduled');
+    expect(page.draft()?.voucherCode).toBe('VELURA15');
+    expect(page.draft()?.productIds).toEqual(['30000000-0000-4000-8000-000000000001']);
+    expect(page.draft()?.socialCaptions?.facebookPage).toContain('VELURA15');
+    expect(page.aiWorkflowGate()?.passed).toBe(true);
+
+    // Clearing scheduledAt while status === 'scheduled' blocks save locally
+    page.draft.update((d) => (d ? { ...d, scheduledAt: '' } : d));
+    page.save();
+    expect(created.length).toBe(0);
+    expect(page.errors()['scheduledAt']).toBeTruthy();
+
+    // Syncing schedule back with promo start_date passes validation and saves
+    page.syncScheduleWithPromo();
+    page.save();
+    expect(created.length).toBe(1);
+    expect(created[0]['status']).toBe('scheduled');
+    expect(created[0]['voucherCode']).toBe('VELURA15');
+    expect(typeof created[0]['scheduledAt']).toBe('string');
   });
 });
 

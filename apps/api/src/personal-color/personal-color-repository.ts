@@ -71,7 +71,7 @@ export class PersonalColorRepository implements ColorRepository {
     return { ...row.value };
   }
 
-  async finish(principal: ColorPrincipal, id: string, patch: Pick<ColorAnalysis, "status" | "result" | "error">): Promise<ColorAnalysis> {
+  async finish(principal: ColorPrincipal, id: string, patch: Pick<ColorAnalysis, "status" | "result" | "diagnostics" | "error">): Promise<ColorAnalysis> {
     if (principal.userId && !this.rpcDisabled) {
       try {
         return await this.rpc(principal, "finish", { id, patch }) as unknown as ColorAnalysis;

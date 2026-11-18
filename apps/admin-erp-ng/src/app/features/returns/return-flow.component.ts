@@ -1,7 +1,7 @@
 import { Observable, finalize, forkJoin, map, of, switchMap } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
-import { AdminErpApiService, AdminOrderRow, AdminReturnDisposition, AdminReturnItemAction, AdminReturnItemActionInput, AdminReturnItemActionResult, AdminReturnLine, AdminReturnReplacementChoice, AdminReturnRow } from '../../core/admin-erp-api.service';
+import { AdminErpApiService, AdminOrderRow, AdminReturnBoxForensicsResult, AdminReturnDisposition, AdminReturnItemAction, AdminReturnItemActionInput, AdminReturnItemActionResult, AdminReturnLine, AdminReturnReplacementChoice, AdminReturnRow } from '../../core/admin-erp-api.service';
 import { CONTACT_RESULTS, MIN_NOTE_LENGTH, MIN_TRANSFER_REFERENCE_LENGTH, gatewayNote, gatewayRefundRefused, isGatewayRefundChannel, itemRefundAllowed, refundReceiverBlocked, returnItemActions } from '../../core/admin-erp-service-desk';
 import { adminErrorMessage } from '../../core/admin-erp-http';
 import { adminMoney } from '../../core/admin-erp-format';
@@ -115,6 +115,15 @@ export class ReturnFlowComponent {
   readonly transferredAt = signal('');
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
+  /** Gemini Decision 1 Return Parcel Visual Forensics & Carrier Dispute state. */
+  readonly forensicsLoading = signal(false);
+  readonly forensicsError = signal<string | null>(null);
+  readonly boxForensics = signal<AdminReturnBoxForensicsResult | null>(null);
+  readonly copiedClaimReport = signal(false);
+  readonly isGreyZoneRisk = computed(() => {
+    const score = this.boxForensics()?.tampering_risk_score ?? 0;
+    return score >= 40 && score <= 75;
+  });
   /**
    * Facts taken from the QR of this parcel. Every confirm step needs one, so a step can never be
    * saved for a parcel that was not in the operator's hands (xác nhận qua QR, không nhập tay).
@@ -199,6 +208,8 @@ export class ReturnFlowComponent {
         this.variantChoices.set([]);
       }
       this.qaFailed.set([]); this.disposition.set('restock');
+      this.forensicsLoading.set(false); this.forensicsError.set(null);
+      this.boxForensics.set(null); this.copiedClaimReport.set(false);
       const isManual = flow === 'manual';
       const autoRef = isManual ? this.newTransferRef() : '';
       if (isManual) { this.createDigitalReceiptFile(autoRef).then((f) => this.proofFile.set(f)); } else { this.proofFile.set(null); }
@@ -540,7 +551,112 @@ export class ReturnFlowComponent {
     picker.value = '';
     if (kind === 'photos') this.pickupPhotos.set(files.filter((file) => file.type.startsWith('image/')).slice(0, 8));
     else if (kind === 'video') this.pickupVideo.set(files.find((file) => ['video/mp4', 'video/webm'].includes(file.type) && file.size <= 50 * 1024 * 1024) || null);
-    else this.proofFile.set(files.find((file) => file.type.startsWith('image/')) || null);
+    else {
+      this.proofFile.set(files.find((file) => file.type.startsWith('image/')) || null);
+      this.boxForensics.set(null);
+      this.forensicsError.set(null);
+    }
+  }
+
+  /**
+   * Invokes `gemini-decision-1` 2-axis visual forensics comparing the warehouse QA photo against
+   * stored shipper pickup / customer handover photos to detect box damage and anti-swap discrepancies.
+   */
+  runAiBoxForensics(): void {
+    const record = this.record();
+    if (!record?.return_id || this.forensicsLoading()) return;
+    const file = this.proofFile();
+    const hasStoredQa = Boolean(record.warehouse_proof || record.evidence?.some((e) => e.kind === 'qa_photo'));
+    if (!file && !hasStoredQa) {
+      this.forensicsError.set('Chọn ảnh kiểm hàng tại kho trước khi chạy AI giám định thùng hàng & đối chiếu ĐVVC.');
+      return;
+    }
+
+    const executeCall = (warehouseImageBase64?: string) => {
+      this.forensicsLoading.set(true);
+      this.forensicsError.set(null);
+      this.api
+        .analyzeReturnBoxForensics(record.return_id, {
+          ...(warehouseImageBase64 ? { warehouseImageBase64 } : {}),
+          returnItemId: this.line()?.return_item_id,
+          trackingCode: this.tracking().trim() || record.tracking_return_code || undefined,
+          carrier: this.carrier().trim() || undefined,
+        })
+        .pipe(finalize(() => this.forensicsLoading.set(false)))
+        .subscribe({
+          next: (res) => {
+            this.boxForensics.set(res);
+          },
+          error: (err: unknown) => {
+            this.forensicsError.set(adminErrorMessage(err, 'Chưa thể giám định ảnh thùng hàng lúc này. Vui lòng thử lại.'));
+          },
+        });
+    };
+
+    if (!file) {
+      executeCall(undefined);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      if (!dataUrl) {
+        this.forensicsError.set('Không đọc được tệp ảnh kiểm hàng vừa chọn.');
+        return;
+      }
+      executeCall(dataUrl);
+    };
+    reader.onerror = () => {
+      this.forensicsError.set('Không đọc được tệp ảnh kiểm hàng vừa chọn.');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  /**
+   * Applies the AI-recommended QA failure checkboxes, warehouse disposition, and forensic audit summary in 1 click.
+   */
+  applyForensicsSuggestions(): void {
+    const res = this.boxForensics();
+    if (!res) return;
+    const validCodes = new Set(RETURN_QA_CRITERIA.map((c) => c.code));
+    const suggested = res.suggested_qa_failed_codes.filter((code) => validCodes.has(code));
+    this.qaFailed.set(suggested);
+    this.disposition.set(res.suggested_disposition);
+    const summary = res.carrier_claim_report?.summary_vi
+      || `[AI QA Gemini Decision] Ngoại quan: ${this.boxConditionLabel(res.box_condition)} · Đối chiếu kiện hàng: ${this.matchVerdictLabel(res.match_verdict)} (Rủi ro ${res.tampering_risk_score}/100).`;
+    const currentNote = this.note().trim();
+    if (!currentNote.includes(summary)) {
+      this.note.set(currentNote ? `${currentNote}\n${summary}` : summary);
+    }
+  }
+
+  copyCarrierClaimReport(): void {
+    const summary = this.boxForensics()?.carrier_claim_report?.summary_vi;
+    if (!summary) return;
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(summary);
+    }
+    this.copiedClaimReport.set(true);
+    setTimeout(() => this.copiedClaimReport.set(false), 2000);
+  }
+
+  boxConditionLabel(verdict: AdminReturnBoxForensicsResult['box_condition']): string {
+    const labels: Readonly<Record<AdminReturnBoxForensicsResult['box_condition'], string>> = {
+      INTACT: 'Nguyên vẹn đạt chuẩn',
+      MINOR_DENT: 'Móp góc nhẹ (chấp nhận)',
+      SEVERE_CRUSH: 'Bẹp nát nặng — Khiếu nại ĐVVC',
+      TORN_WET: 'Rách thủng / Ướt — Lập biên bản ĐVVC',
+    };
+    return labels[verdict] || verdict;
+  }
+
+  matchVerdictLabel(verdict: AdminReturnBoxForensicsResult['match_verdict']): string {
+    const labels: Readonly<Record<AdminReturnBoxForensicsResult['match_verdict'], string>> = {
+      MATCHED: 'Khớp ảnh Shipper lấy hàng',
+      SUSPICIOUS_DIFF: 'Có điểm khác biệt nghi vấn',
+      MISMATCHED: 'Sai khác thùng hàng — Nghi tráo kiện',
+    };
+    return labels[verdict] || verdict;
   }
 
   /** Uploads evidence then submits one item version; success forces the parent to reread all parts. */

@@ -25,17 +25,37 @@
   </div>
 </app-erp-page-header>
 
-<section class="promotions-kpis" aria-label="Tóm tắt khuyến mãi">
-  <app-erp-kpi-card label="Chiến dịch đang chạy" [value]="activeCampaigns().toLocaleString('vi-VN')" hint="API lifecycle" tone="success" icon="tag" [loading]="loading() && !campaigns().length" />
-  <app-erp-kpi-card label="Voucher đang bật" [value]="activeVouchers().toLocaleString('vi-VN')" hint="Toàn bộ voucher" tone="accent" icon="tag" [loading]="loading() && !campaigns().length" />
-  <app-erp-kpi-card label="Tổng ngân sách" [value]="money(totalBudget())" hint="Chiến dịch có trần" tone="info" icon="credit-card" [loading]="loading() && !campaigns().length" />
-  <app-erp-kpi-card label="Đã giảm" [value]="money(issuedDiscount())" hint="Tổng phát ra" tone="warning" icon="alert" [loading]="loading() && !campaigns().length" />
+<section class="erp-kpi-grid promotions-kpis" aria-label="Tóm tắt khuyến mãi">
+  <app-erp-kpi-card
+    label="Chiến dịch đang chạy"
+    [value]="activeCampaigns().toLocaleString('vi-VN')"
+    hint="Chu kỳ đang hoạt động"
+    tone="success"
+    icon="megaphone"
+    [interactive]="true"
+    [active]="view() === 'campaigns'"
+    [loading]="loading() && !campaigns().length"
+    (selected)="setView('campaigns')"
+  />
+  <app-erp-kpi-card
+    label="Voucher đang bật"
+    [value]="activeVouchers().toLocaleString('vi-VN')"
+    hint="Bấm để mở danh sách mã"
+    tone="accent"
+    icon="ticket"
+    [interactive]="true"
+    [active]="view() === 'vouchers'"
+    [loading]="loading() && !campaigns().length"
+    (selected)="setView('vouchers')"
+  />
+  <app-erp-kpi-card label="Tổng ngân sách" [value]="money(totalBudget())" hint="Chiến dịch có trần ngân sách" tone="info" icon="wallet" [loading]="loading() && !campaigns().length" />
+  <app-erp-kpi-card label="Đã giảm" [value]="money(issuedDiscount())" hint="Tổng giá trị ưu đãi đã phát" tone="warning" icon="percent" [loading]="loading() && !campaigns().length" />
 </section>
 
 <section class="erp-card promotions-panel" aria-labelledby="promotions-title">
-  <div class="promotions-tabs">
-    <div>
-      <span class="promotions-eyebrow">Campaigns</span>
+  <div class="erp-panel-head promotions-tabs">
+    <div class="erp-panel-head__title">
+      <span class="erp-panel-head__icon" aria-hidden="true"><app-erp-icon name="ticket" [size]="'16'" /></span>
       <h2 id="promotions-title">Trung tâm khuyến mãi</h2>
     </div>
     <app-erp-tabs [tabs]="tabs()" [active]="view()" [busy]="loading()" (changed)="setView($event)" />

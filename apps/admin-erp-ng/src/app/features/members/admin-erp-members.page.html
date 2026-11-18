@@ -5,7 +5,7 @@
 >
   <div actions class="member-header-actions">
     <button class="erp-btn erp-btn--sm" type="button" (click)="openPolicyModal()">
-      <app-erp-icon name="tag" [size]="'14'" />
+      <app-erp-icon name="coins" [size]="'14'" />
       Dùng điểm
     </button>
     <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
@@ -15,21 +15,24 @@
   </div>
 </app-erp-page-header>
 
-<section class="member-kpis" aria-label="Tóm tắt ví điểm">
+<section class="erp-kpi-grid member-kpis" aria-label="Tóm tắt ví điểm">
   <app-erp-kpi-card
     label="Thành viên"
     [value]="overview().members ?? 0"
-    hint="Số thành viên"
+    hint="Tổng số thành viên"
     tone="neutral"
     icon="users"
+    [interactive]="true"
+    [active]="wallet() === 'all'"
     [loading]="loading() && !hasLoadedOnce()"
+    (selected)="setWallet('all')"
   />
   <app-erp-kpi-card
     label="Tổng điểm"
     [value]="overview().total_points_milli === undefined ? null : pointsLabelOf(overview().total_points_milli)"
     [hint]="overview().total_points_milli ? ('Tương đương ' + walletValue(overview().total_points_milli, 0)) : 'Điểm còn lại'"
     tone="success"
-    icon="star"
+    icon="award"
     [loading]="loading() && !hasLoadedOnce()"
   />
   <app-erp-kpi-card
@@ -37,7 +40,7 @@
     [value]="overview().negative_accounts ?? 0"
     hint="Đang âm điểm"
     tone="warning"
-    icon="alert"
+    icon="trending-down"
     [loading]="loading() && !hasLoadedOnce()"
   />
   <app-erp-kpi-card
@@ -45,7 +48,7 @@
     [value]="overview().locked_accounts ?? 0"
     hint="Không được cộng điểm"
     tone="danger"
-    icon="log"
+    icon="ban"
     [loading]="loading() && !hasLoadedOnce()"
   />
   <app-erp-kpi-card
@@ -53,7 +56,7 @@
     [value]="overview().referrals_pending ?? 0"
     hint="Chờ đơn đầu tiên"
     tone="accent"
-    icon="tag"
+    icon="gift"
     [loading]="loading() && !hasLoadedOnce()"
   />
 </section>
@@ -71,8 +74,9 @@
   </section>
 } @else {
   <section class="erp-card member-panel" aria-labelledby="members-title">
-    <div class="member-panel__head">
-      <div>
+    <div class="erp-panel-head member-panel__head">
+      <div class="erp-panel-head__title">
+        <span class="erp-panel-head__icon" aria-hidden="true"><app-erp-icon name="award" [size]="'16'" /></span>
         <h2 id="members-title">Danh sách thành viên</h2>
       </div>
       <app-erp-tabs [tabs]="tabs()" [active]="wallet()" [busy]="loading()" (changed)="setWallet($event)" />

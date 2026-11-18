@@ -15,17 +15,47 @@
   </div>
 </app-erp-page-header>
 
-<section class="orders-kpis" aria-label="Tóm tắt đơn hàng">
-  <app-erp-kpi-card label="Tổng đơn" [value]="count().toLocaleString('vi-VN')" hint="Theo bộ lọc" tone="accent" icon="cart" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Cần xử lý" [value]="attentionCount().toLocaleString('vi-VN')" hint="Hàng đợi vận hành" tone="warning" icon="alert" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Đã hủy" [value]="cancelledCount().toLocaleString('vi-VN')" hint="Toàn bộ đơn" tone="danger" icon="log" [loading]="loading() && !hasLoadedOnce()" />
+<section class="erp-kpi-grid orders-kpis" aria-label="Tóm tắt đơn hàng">
+  <app-erp-kpi-card
+    label="Tổng đơn"
+    [value]="count().toLocaleString('vi-VN')"
+    hint="Theo bộ lọc hiện tại"
+    tone="accent"
+    icon="shopping-bag"
+    [interactive]="true"
+    [active]="tab() === 'all'"
+    [loading]="loading() && !hasLoadedOnce()"
+    (selected)="setTab('all')"
+  />
+  <app-erp-kpi-card
+    label="Cần xử lý"
+    [value]="attentionCount().toLocaleString('vi-VN')"
+    hint="Hàng đợi xác nhận & đóng gói"
+    tone="warning"
+    icon="clock"
+    [interactive]="true"
+    [active]="tab() === 'attention'"
+    [loading]="loading() && !hasLoadedOnce()"
+    (selected)="setTab('attention')"
+  />
+  <app-erp-kpi-card
+    label="Đã hủy"
+    [value]="cancelledCount().toLocaleString('vi-VN')"
+    hint="Đơn khách hoặc hệ thống hủy"
+    tone="danger"
+    icon="x-circle"
+    [interactive]="true"
+    [active]="tab() === 'cancelled'"
+    [loading]="loading() && !hasLoadedOnce()"
+    (selected)="setTab('cancelled')"
+  />
   <app-erp-kpi-card label="Trang này" [value]="rows().length.toLocaleString('vi-VN')" hint="Số dòng đang hiển thị" icon="eye" [loading]="loading()" />
 </section>
 
 <section class="erp-card orders-panel" aria-labelledby="orders-title">
-  <div class="orders-tabs">
-    <div>
-      <span class="orders-eyebrow">Sales</span>
+  <div class="erp-panel-head orders-tabs">
+    <div class="erp-panel-head__title">
+      <span class="erp-panel-head__icon" aria-hidden="true"><app-erp-icon name="shopping-bag" [size]="'16'" /></span>
       <h2 id="orders-title">Hàng đợi đơn hàng</h2>
     </div>
     <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />
@@ -72,13 +102,25 @@
       caption="Danh sách đơn hàng"
       [columns]="orderColumns"
       [rows]="rows()"
+      [rowId]="orderRowId"
+      [rowActions]="orderRowActions"
       [loading]="loading()"
       emptyTitle="Không có đơn hàng phù hợp"
       emptyMessage="Điều chỉnh bộ lọc hoặc chọn tab khác."
+      [emptyActionLabel]="hasFilters() ? 'Xoá bộ lọc' : ''"
       [clickable]="true"
+      (emptyAction)="resetFilters()"
       (rowSelected)="openRow($event)"
     />
-    <app-erp-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
+    <app-erp-pagination
+      [page]="page()"
+      [pageCount]="totalPages()"
+      [label]="rangeLabel()"
+      [pageSizes]="pageSizes"
+      [pageSize]="pageSize()"
+      (changed)="goPage($event)"
+      (pageSizeChanged)="setPageSize($event)"
+    />
   } @else {
     <app-erp-data-table
       caption="Nhật ký đơn hàng"
@@ -88,11 +130,29 @@
       emptyTitle="Chưa có nhật ký đơn hàng"
       emptyMessage="Audit xuất hiện sau thao tác vận hành."
     />
-    <app-erp-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
+    <app-erp-pagination
+      [page]="logsPage()"
+      [pageCount]="logPageCount()"
+      [label]="logRangeLabel()"
+      [pageSizes]="pageSizes"
+      [pageSize]="pageSize()"
+      (changed)="goLogsPage($event)"
+      (pageSizeChanged)="setPageSize($event)"
+    />
   }
 </section>
 
-<app-erp-drawer [open]="selected() !== null" title="Chi tiết đơn hàng" size="lg" (closed)="closeDetail()">
+<app-erp-drawer
+  [open]="selected() !== null"
+  title="Chi tiết đơn hàng"
+  size="lg"
+  [navigable]="true"
+  [hasPrev]="hasPrevOrder()"
+  [hasNext]="hasNextOrder()"
+  (prev)="openSibling(-1)"
+  (next)="openSibling(1)"
+  (closed)="closeDetail()"
+>
   @if (selected(); as order) {
     <div class="order-detail">
       @if (notice()) {

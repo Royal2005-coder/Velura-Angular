@@ -38,11 +38,41 @@
   </div>
 </app-erp-page-header>
 
-<section class="content-kpis" aria-label="Tóm tắt nội dung">
-  <app-erp-kpi-card label="Đã công bố" [value]="counts().published" hint="Khách thấy trên website" tone="success" icon="eye" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Bản nháp" [value]="counts().draft" hint="Chưa phát hành" tone="neutral" icon="box" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Người đăng ký nhận tin" [value]="counts().subscribers" hint="Đăng ký nhận ưu đãi 10%" tone="accent" icon="user" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Danh mục blog" [value]="counts().categories" hint="Nguồn từ content_category" tone="neutral" icon="tag" [loading]="loading() && !hasLoadedOnce()" />
+<section class="erp-kpi-grid content-kpis" aria-label="Tóm tắt nội dung">
+  <app-erp-kpi-card
+    label="Đã công bố"
+    [value]="counts().published"
+    hint="Khách thấy trên website"
+    tone="success"
+    icon="eye"
+    [interactive]="true"
+    [active]="tab() === 'published'"
+    [loading]="loading() && !hasLoadedOnce()"
+    (selected)="setTab('published')"
+  />
+  <app-erp-kpi-card
+    label="Bản nháp"
+    [value]="counts().draft"
+    hint="Chưa phát hành"
+    tone="neutral"
+    icon="edit"
+    [interactive]="true"
+    [active]="tab() === 'draft'"
+    [loading]="loading() && !hasLoadedOnce()"
+    (selected)="setTab('draft')"
+  />
+  <app-erp-kpi-card
+    label="Người đăng ký nhận tin"
+    [value]="counts().subscribers"
+    hint="Đăng ký nhận ưu đãi 10%"
+    tone="accent"
+    icon="mail"
+    [interactive]="true"
+    [active]="tab() === 'subscribers'"
+    [loading]="loading() && !hasLoadedOnce()"
+    (selected)="setTab('subscribers')"
+  />
+  <app-erp-kpi-card label="Danh mục blog" [value]="counts().categories" hint="Nguồn từ content_category" tone="info" icon="layers" [loading]="loading() && !hasLoadedOnce()" />
 </section>
 
 @if (!canRead()) {
@@ -51,8 +81,11 @@
   </section>
 } @else {
   <section class="erp-card content-panel" aria-labelledby="content-title">
-    <div class="content-panel__head">
-      <div>
+    <div class="erp-panel-head content-panel__head">
+      <div class="erp-panel-head__title">
+        <span class="erp-panel-head__icon" aria-hidden="true">
+          <app-erp-icon [name]="tab() === 'banners' ? 'image' : tab() === 'collections' ? 'sparkles' : tab() === 'subscribers' ? 'mail' : 'layers'" [size]="'16'" />
+        </span>
         <h2 id="content-title">{{ tab() === 'banners' ? 'Banner trang sản phẩm' : tab() === 'collections' ? 'Bộ sưu tập & Lookbook' : tab() === 'subscribers' ? 'Danh sách nhận bản tin' : 'Bài viết & Bản tin' }}</h2>
       </div>
       <div class="content-head-right">

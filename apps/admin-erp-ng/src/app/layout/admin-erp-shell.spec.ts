@@ -111,4 +111,22 @@ describe('AdminErpShell sidebar collapse', () => {
     expect(fixture.componentInstance.sidebarCollapsed()).toBe(false);
     expect(localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY)).toBeNull();
   });
+
+  it('supports ArrowDown/ArrowUp selection in the command palette and exposes rail tooltips when collapsed', async () => {
+    const fixture = await boot();
+    clickToggle(fixture);
+    const firstLink = fixture.nativeElement.querySelector('a.nav-link') as HTMLAnchorElement;
+    expect(firstLink.getAttribute('title')).toBeTruthy();
+
+    fixture.componentInstance.openSearch();
+    fixture.detectChanges();
+    const palette = fixture.nativeElement.querySelector('.cmd-palette') as HTMLElement;
+    expect(fixture.componentInstance.searchResults().some((r) => r.kind === 'quick')).toBe(true);
+    expect(fixture.componentInstance.searchActiveIndex()).toBe(0);
+
+    palette.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(fixture.componentInstance.searchActiveIndex()).toBe(1);
+    palette.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(fixture.componentInstance.searchActiveIndex()).toBe(0);
+  });
 });

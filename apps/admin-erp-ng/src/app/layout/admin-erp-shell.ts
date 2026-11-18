@@ -8,11 +8,13 @@ import { AdminErpSessionService } from '../core/admin-erp-session.service';
 import {
   ADMIN_ERP_NAV_GROUPS,
   ADMIN_ERP_NAV_ITEMS,
+  ADMIN_ERP_QUICK_ACTIONS,
   AdminErpNavGroup,
   AdminErpNavItem,
   adminErpNavItemForNavKey,
   adminErpNavLink,
   adminErpNavMatchesSearch,
+  adminErpQuickActionMatchesSearch,
 } from '../core/admin-erp-navigation';
 import { useBodyClass } from '../core/body-class';
 import { AdminErpConfirmHost } from '../shared/ui/admin-confirm';
@@ -23,6 +25,16 @@ import { AdminErpToastHost } from '../shared/ui/admin-toast';
 type ShellNavGroup = Omit<AdminErpNavGroup, 'items'> & {
   items: AdminErpNavItem[];
 };
+
+export interface ShellPaletteEntry {
+  readonly id: string;
+  readonly kind: 'module' | 'quick';
+  readonly label: string;
+  readonly subtitle: string;
+  readonly icon: string;
+  readonly path: string;
+  readonly queryParams?: Record<string, string>;
+}
 
 /** localStorage key holding the desktop sidebar rail state (`'true'` = collapsed). */
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = 'velura-erp-sidebar-collapsed';
@@ -44,7 +56,8 @@ function writeSidebarCollapsed(collapsed: boolean): void {
 }
 
 /**
- * ERPNext-inspired workspace shell: grouped sidebar, compact topbar and routable workspaces.
+ * SaaS workspace shell: grouped sidebar with unique topic icons, responsive zero-overflow topbar,
+ * keyboard-driven `⌘K` Command Palette with deep sub-queues, and routable workspaces.
  */
 @Component({
   selector: 'app-admin-erp-shell',
@@ -71,6 +84,7 @@ export class AdminErpShell {
   readonly signingOut = signal(false);
   readonly searchOpen = signal(false);
   readonly searchQuery = signal('');
+  readonly searchActiveIndex = signal(0);
   readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
   /** A guard waiting on a slow API must not leave the blocking navigation layer up forever. */
   private navigationWatchdog: ReturnType<typeof setTimeout> | null = null;
@@ -91,19 +105,46 @@ export class AdminErpShell {
     })).filter((group) => group.items.length > 0);
   });
 
-  readonly searchResults = computed(() => {
+  readonly searchResults = computed<readonly ShellPaletteEntry[]>(() => {
     const query = this.searchQuery();
-    const allItems: { item: AdminErpNavItem; groupLabel: string }[] = [];
+    const entries: ShellPaletteEntry[] = [];
+    const allowedNavKeys = new Set<string>();
+
     for (const group of this.groups()) {
       for (const item of group.items) {
-        allItems.push({ item, groupLabel: group.label });
+        allowedNavKeys.add(item.key);
+        if (!query.trim() || adminErpNavMatchesSearch(item, group.label, query)) {
+          entries.push({
+            id: `mod:${item.key}`,
+            kind: 'module',
+            label: item.label,
+            subtitle: `${group.label} · ${item.title}`,
+            icon: item.icon,
+            path: item.path,
+            queryParams: item.queryParams,
+          });
+        }
       }
     }
-    if (!query.trim()) {
-      return allItems;
+
+    for (const action of ADMIN_ERP_QUICK_ACTIONS) {
+      if (!allowedNavKeys.has(action.navKey)) continue;
+      if (!query.trim() || adminErpQuickActionMatchesSearch(action, query)) {
+        entries.push({
+          id: `quick:${action.id}`,
+          kind: 'quick',
+          label: action.label,
+          subtitle: action.subtitle,
+          icon: action.icon,
+          path: action.path,
+          queryParams: action.queryParams,
+        });
+      }
     }
-    return allItems.filter(({ item, groupLabel }) => adminErpNavMatchesSearch(item, groupLabel, query));
+
+    return entries;
   });
+
   readonly currentNav = computed(() => {
     this.navigationTick();
     let current = this.router.routerState.snapshot.root;
@@ -151,7 +192,6 @@ export class AdminErpShell {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((event) => {
         if (event instanceof NavigationStart) {
-          // Block a second click immediately; the overlay fades in instead of flashing.
           this.navigating.set(true);
           if (this.navigationWatchdog) clearTimeout(this.navigationWatchdog);
           this.navigationWatchdog = setTimeout(() => {
@@ -202,6 +242,7 @@ export class AdminErpShell {
 
   openSearch(): void {
     this.searchQuery.set('');
+    this.searchActiveIndex.set(0);
     this.searchOpen.set(true);
     queueMicrotask(() => this.searchInput()?.nativeElement.focus());
   }
@@ -209,34 +250,66 @@ export class AdminErpShell {
   closeSearch(): void {
     this.searchOpen.set(false);
     this.searchQuery.set('');
+    this.searchActiveIndex.set(0);
   }
 
   onSearchInput(event: Event): void {
     const target = event.target as HTMLInputElement | null;
     this.searchQuery.set(target?.value ?? '');
+    this.searchActiveIndex.set(0);
   }
 
-  navigateFromSearch(item: AdminErpNavItem): void {
-    this.closeSearch();
-    void this.router.navigateByUrl(this.navLink(item));
+  /** Handles ArrowDown/ArrowUp/Home/End/Enter inside the `⌘K` Command Palette. */
+  onSearchKeydown(event: KeyboardEvent): void {
+    const list = this.searchResults();
+    if (!list.length) return;
+    const current = Math.min(this.searchActiveIndex(), list.length - 1);
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.searchActiveIndex.set((current + 1) % list.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.searchActiveIndex.set((current - 1 + list.length) % list.length);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      this.searchActiveIndex.set(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      this.searchActiveIndex.set(list.length - 1);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      const chosen = list[Math.max(0, current)];
+      if (chosen) {
+        this.selectPaletteEntry(chosen);
+      }
+    }
   }
-  /**
-   * Builds the router link for a nav item, including deep-link query params.
-   */
-  navLink(item: AdminErpNavItem): string {
+
+  setSearchActive(index: number): void {
+    this.searchActiveIndex.set(index);
+  }
+
+  selectPaletteEntry(entry: ShellPaletteEntry): void {
+    this.closeSearch();
+    void this.router.navigateByUrl(this.navLink(entry));
+  }
+
+  /** Builds the router link for a nav item or palette entry, including deep-link query params. */
+  navLink(item: { path: string; queryParams?: Record<string, string> }): string {
     return adminErpNavLink(item);
   }
 
-  /**
-   * Whether an item is the current workspace.
-   */
+  /** Returns a tooltip label only when the desktop rail is collapsed. */
+  railTooltip(label: string): string | null {
+    return this.sidebarCollapsed() && !this.isMobile() ? label : null;
+  }
+
+  /** Whether an item is the current workspace. */
   isActive(item: AdminErpNavItem): boolean {
     return this.currentNav()?.key === item.key;
   }
 
-  /**
-   * Toggles the off-canvas nav on mobile and the rail on desktop; the rail state persists.
-   */
+  /** Toggles the off-canvas nav on mobile and the rail on desktop; the rail state persists. */
   toggleSidebar(): void {
     if (this.isMobile()) {
       const open = !this.mobileNavOpen();
@@ -251,37 +324,27 @@ export class AdminErpShell {
     writeSidebarCollapsed(collapsed);
   }
 
-  /**
-   * Closes the mobile off-canvas nav.
-   */
+  /** Closes the mobile off-canvas nav. */
   closeMobileNav(): void {
     this.mobileNavOpen.set(false);
   }
 
-  /**
-   * Reloads the active workspace data without a full-page reload.
-   */
+  /** Reloads the active workspace data without a full-page reload. */
   refresh(): void {
     this.refreshBus.request();
   }
 
-  /**
-   * Opens the sign-out confirmation.
-   */
+  /** Opens the sign-out confirmation. */
   askLogout(): void {
     this.logoutConfirmOpen.set(true);
   }
 
-  /**
-   * Cancels sign-out.
-   */
+  /** Cancels sign-out. */
   cancelLogout(): void {
     this.logoutConfirmOpen.set(false);
   }
 
-  /**
-   * Records sign-out, clears the ERP session and returns to login.
-   */
+  /** Records sign-out, clears the ERP session and returns to login. */
   confirmLogout(): void {
     if (this.signingOut()) {
       return;

@@ -11,18 +11,18 @@
   </div>
 </app-erp-page-header>
 
-<section class="pricing-kpis" aria-label="Tóm tắt giá">
-  <app-erp-kpi-card label="Sản phẩm" [value]="total().toLocaleString('vi-VN')" hint="Theo bộ lọc" tone="accent" icon="tag" [loading]="loading() && !products().length" />
+<section class="erp-kpi-grid pricing-kpis" aria-label="Tóm tắt giá">
+  <app-erp-kpi-card label="Sản phẩm" [value]="total().toLocaleString('vi-VN')" hint="Theo bộ lọc" tone="accent" icon="box" [loading]="loading() && !products().length" />
   <app-erp-kpi-card label="Chưa có giá bán" [value]="missingSale().toLocaleString('vi-VN')" hint="Trong trang hiện tại" tone="warning" icon="alert" [loading]="loading()" />
-  <app-erp-kpi-card label="Đang giảm giá" [value]="discounted().toLocaleString('vi-VN')" hint="Trong trang hiện tại" tone="success" icon="tag" [loading]="loading()" />
-  <app-erp-kpi-card label="Giá bất thường" [value]="invalid().toLocaleString('vi-VN')" hint="Trong trang hiện tại" tone="danger" icon="alert" [loading]="loading()" />
-  <app-erp-kpi-card label="Đổi giá hôm nay" [value]="historyToday().toLocaleString('vi-VN')" hint="50 lần gần nhất" tone="info" icon="log" [loading]="loading()" />
+  <app-erp-kpi-card label="Đang giảm giá" [value]="discounted().toLocaleString('vi-VN')" hint="Trong trang hiện tại" tone="success" icon="percent" [loading]="loading()" />
+  <app-erp-kpi-card label="Giá bất thường" [value]="invalid().toLocaleString('vi-VN')" hint="Giá bán > giá gốc" tone="danger" icon="x-circle" [loading]="loading()" />
+  <app-erp-kpi-card label="Đổi giá hôm nay" [value]="historyToday().toLocaleString('vi-VN')" hint="50 lần gần nhất" tone="info" icon="activity" [loading]="loading()" />
 </section>
 
 <section class="erp-card pricing-panel" aria-labelledby="pricing-title">
-  <div class="pricing-tabs">
-    <div>
-      <span class="pricing-eyebrow">Pricing</span>
+  <div class="erp-panel-head pricing-tabs">
+    <div class="erp-panel-head__title">
+      <span class="erp-panel-head__icon" aria-hidden="true"><app-erp-icon name="coins" [size]="'16'" /></span>
       <h2 id="pricing-title">Bảng giá cửa hàng</h2>
     </div>
     <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />
@@ -64,13 +64,25 @@
       caption="Bảng giá sản phẩm"
       [columns]="priceColumns"
       [rows]="filtered()"
+      [rowId]="productRowId"
+      [rowActions]="priceRowActions"
       [loading]="loading()"
       emptyTitle="Không có sản phẩm phù hợp"
       emptyMessage="Điều chỉnh bộ lọc hoặc tải lại."
+      [emptyActionLabel]="hasFilters() ? 'Xoá bộ lọc' : ''"
       [clickable]="true"
+      (emptyAction)="resetFilters()"
       (rowSelected)="openDetail($event)"
     />
-    <app-erp-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+    <app-erp-pagination
+      [page]="page()"
+      [pageCount]="pageCount()"
+      [label]="rangeLabel()"
+      [pageSizes]="pageSizes"
+      [pageSize]="pageSize()"
+      (changed)="goPage($event)"
+      (pageSizeChanged)="setPageSize($event)"
+    />
   } @else if (tab() === 'history') {
     <app-erp-data-table
       caption="Lịch sử thay đổi giá"
@@ -90,11 +102,29 @@
       emptyTitle="Chưa có nhật ký giá"
       emptyMessage="Audit giá xuất hiện sau thao tác của người vận hành."
     />
-    <app-erp-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
+    <app-erp-pagination
+      [page]="logsPage()"
+      [pageCount]="logPageCount()"
+      [label]="logRangeLabel()"
+      [pageSizes]="pageSizes"
+      [pageSize]="pageSize()"
+      (changed)="goLogsPage($event)"
+      (pageSizeChanged)="setPageSize($event)"
+    />
   }
 </section>
 
-<app-erp-drawer [open]="selected() !== null" title="Chi tiết giá sản phẩm" size="md" [hasPrev]="hasPrev()" [hasNext]="hasNext()" (prev)="showPrev()" (next)="showNext()" (closed)="closeDetail()">
+<app-erp-drawer
+  [open]="selected() !== null"
+  title="Chi tiết giá sản phẩm"
+  size="md"
+  [navigable]="true"
+  [hasPrev]="hasPrev()"
+  [hasNext]="hasNext()"
+  (prev)="showPrev()"
+  (next)="showNext()"
+  (closed)="closeDetail()"
+>
   @if (selected(); as product) {
     <div class="price-detail">
       <div class="price-detail__head">

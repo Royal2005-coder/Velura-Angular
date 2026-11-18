@@ -1,6 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 /**
+ * Versioned sprite path so CDN/browser caches immediately fetch new `<symbol>` glyphs
+ * instead of serving a stale unhashed `/admin-assets/icons/admin-icons.svg` entry.
+ */
+export const ADMIN_ERP_ICON_SPRITE = '/admin-assets/icons/admin-icons.svg?v=58';
+
+/**
  * Renders an icon from the shared admin sprite.
  */
 @Component({
@@ -24,5 +30,5 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 export class AdminErpIcon {
   readonly name = input.required<string>();
   readonly size = input('18');
-  readonly href = computed(() => `/admin-assets/icons/admin-icons.svg#${this.name()}`);
+  readonly href = computed(() => `${ADMIN_ERP_ICON_SPRITE}#${this.name()}`);
 }

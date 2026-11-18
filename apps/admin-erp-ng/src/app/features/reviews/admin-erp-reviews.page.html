@@ -232,7 +232,20 @@
       @if (detectedRestrictedWords().length) {
         <p class="review-form__warning">Từ nhạy cảm / spam: {{ detectedRestrictedWords().join(', ') }}</p>
       }
-      @if (sentiment(); as mood) {
+      @if (aiDecision(); as dec) {
+        <div class="review-form__mood" style="display: flex; flex-direction: column; gap: 4px;">
+          <div>
+            <strong>✦ Gemini Decision 1:</strong>
+            Cảm xúc <strong>{{ sentiment()?.label }}</strong>
+            · {{ routingBranchLabel(dec.routing_branch) }}
+            · Khẩn cấp: <strong>{{ dec.urgency }}</strong>
+            ({{ (dec.confidence_score * 100).toFixed(0) }}%)
+          </div>
+          @if (dec.escalate_to_human) {
+            <span style="color: #b42318; font-weight: 600;">⚠ Khuyến nghị chuyển tiếp ưu tiên CSKH L3 xử lý trực tiếp hồ sơ này.</span>
+          }
+        </div>
+      } @else if (sentiment(); as mood) {
         <p class="review-form__mood">Cảm xúc ước lượng: {{ mood.label }}</p>
       }
 

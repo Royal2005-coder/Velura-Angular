@@ -3,13 +3,13 @@ import { selectOne, selectRows } from "../supabase.js";
 import { asNumber, asString, isJsonObject, type JsonObject } from "../types.js";
 import { sanitizeBlogHtml } from "./blog-html.js";
 
-const BLOG_COLUMNS = "blog_id,category_slug,slug,title,excerpt,content,content_html,meta_title,meta_description,canonical_url,og_image_url,tags,image_url,author,read_minutes,is_featured,status,published_at,updated_at";
+const BLOG_COLUMNS = "blog_id,category_slug,slug,title,excerpt,content,content_html,meta_title,meta_description,canonical_url,og_image_url,tags,image_url,author,read_minutes,is_featured,status,voucher_code,promo_id,published_at,updated_at";
 const LEGACY_BLOG_COLUMNS = "blog_id,category_slug,slug,title,excerpt,content,image_url,author,read_minutes,is_featured,status,published_at,updated_at";
 
-/** During a rolling deploy the API can briefly run before migration 093 has added the columns. */
+/** During a rolling deploy the API can briefly run before migration 093/134 has added the columns. */
 function isBlogColumnMissing(error: unknown): boolean {
   return error instanceof HttpError && error.status === 400
-    && /content_html|meta_title|meta_description|canonical_url|og_image_url|tags|does not exist/i.test(error.message);
+    && /content_html|meta_title|meta_description|canonical_url|og_image_url|tags|voucher_code|promo_id|does not exist/i.test(error.message);
 }
 
 async function selectBlogRows(query: Record<string, unknown>) {
@@ -187,6 +187,8 @@ function toBlogDto(row: JsonObject): JsonObject {
     read_minutes: asNumber(row.read_minutes) || 5,
     is_featured: Boolean(row.is_featured),
     status: row.status,
+    voucher_code: asString(row.voucher_code).trim() || null,
+    promo_id: asString(row.promo_id).trim() || null,
     published_at: row.published_at,
     updated_at: row.updated_at
   };

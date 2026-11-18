@@ -28,6 +28,8 @@ interface ContentBlogRow {
   read_minutes?: number;
   is_featured?: boolean;
   category_slug?: string;
+  voucher_code?: string | null;
+  promo_id?: string | null;
   published_at?: string;
   products?: ContentBlogProductRow[];
 }
@@ -101,6 +103,8 @@ export class BlogCatalogService {
       image: this.assetUrl(row.image_url) || '/assets/images/placeholder.jpg',
       author: String(row.author || 'Velura Editorial'),
       date: this.formatDate(row.published_at),
+      voucherCode: row.voucher_code ? String(row.voucher_code).trim() : null,
+      promoId: row.promo_id ? String(row.promo_id).trim() : null,
       publishedAt: row.published_at,
       readMinutes: Number(row.read_minutes) || 5,
       featured: Boolean(row.is_featured),

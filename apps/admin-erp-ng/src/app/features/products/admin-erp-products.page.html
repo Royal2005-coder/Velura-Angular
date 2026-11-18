@@ -18,22 +18,22 @@
 </app-erp-page-header>
 
 @if (tab() === 'catalog') {
-  <section class="products-kpis" aria-label="Tóm tắt catalog">
+  <section class="erp-kpi-grid products-kpis" aria-label="Tóm tắt catalog">
     <app-erp-kpi-card label="Sản phẩm" [value]="total().toLocaleString('vi-VN')" hint="Theo bộ lọc hiện tại" tone="accent" icon="box" [loading]="showSkeleton()" />
     <app-erp-kpi-card label="Đang bán" [value]="onSale().toLocaleString('vi-VN')" hint="Toàn catalog" tone="success" icon="check" [loading]="loading()" />
-    <app-erp-kpi-card label="Tạm ẩn" [value]="hidden().toLocaleString('vi-VN')" hint="Bản nháp hoặc ngừng bán tạm thời" tone="warning" icon="eye" [loading]="loading()" />
+    <app-erp-kpi-card label="Tạm ẩn" [value]="hidden().toLocaleString('vi-VN')" hint="Bản nháp hoặc ngừng bán tạm thời" tone="warning" icon="eye-off" [loading]="loading()" />
     <app-erp-kpi-card label="Hết hàng" [value]="outOfStock().toLocaleString('vi-VN')" hint="Cần nhập kho" tone="danger" icon="alert" [loading]="loading()" />
     <button class="products-kpi-link" type="button" [class.is-active]="lowStockOnly()" (click)="toggleLowStockFilter()">
-      <app-erp-kpi-card label="Biến thể sắp hết" [value]="lowStockCount().toLocaleString('vi-VN')" hint="Lọc theo ngưỡng từng biến thể" tone="info" icon="log" [loading]="loading()" />
+      <app-erp-kpi-card label="Biến thể sắp hết" [value]="lowStockCount().toLocaleString('vi-VN')" hint="Bấm để lọc nhanh theo ngưỡng" tone="info" icon="trending-down" [loading]="loading()" />
     </button>
-    <app-erp-kpi-card label="Tồn trang này" [value]="pageStock().toLocaleString('vi-VN')" hint="Tổng theo biến thể đang hiển thị" tone="neutral" icon="cart" [loading]="loading()" />
+    <app-erp-kpi-card label="Tồn trang này" [value]="pageStock().toLocaleString('vi-VN')" hint="Tổng theo biến thể đang hiển thị" tone="neutral" icon="layers" [loading]="loading()" />
   </section>
 }
 
 <section class="erp-card products-panel" aria-labelledby="products-title">
-  <div class="products-tabs">
-    <div>
-      <span class="products-eyebrow">Catalog</span>
+  <div class="erp-panel-head products-tabs">
+    <div class="erp-panel-head__title">
+      <span class="erp-panel-head__icon" aria-hidden="true"><app-erp-icon name="box" [size]="'16'" /></span>
       <h2 id="products-title">{{ tab() === 'stock' ? 'Hàng đợi tồn kho' : tab() === 'import' ? 'Nhập CSV' : tab() === 'logs' ? 'Nhật ký sản phẩm' : 'Danh mục sản phẩm' }}</h2>
     </div>
     <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />

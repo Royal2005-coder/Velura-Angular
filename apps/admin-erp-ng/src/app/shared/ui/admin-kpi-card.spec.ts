@@ -28,4 +28,22 @@ describe('AdminErpKpiCard', () => {
     expect(fixture.nativeElement.querySelector('.erp-skeleton')).not.toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain('999');
   });
+
+  it('emits selected on click and Enter when interactive mode is enabled', async () => {
+    const fixture = await boot();
+    const selected = vi.fn();
+    fixture.componentInstance.selected.subscribe(selected);
+    fixture.componentRef.setInput('label', 'Cần xử lý');
+    fixture.componentRef.setInput('value', '5');
+    fixture.componentRef.setInput('interactive', true);
+    fixture.componentRef.setInput('active', true);
+    fixture.detectChanges();
+
+    const card = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('.kpi')!;
+    expect(card.getAttribute('role')).toBe('button');
+    expect(card.classList).toContain('is-active');
+    card.click();
+    card.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(selected).toHaveBeenCalledTimes(2);
+  });
 });

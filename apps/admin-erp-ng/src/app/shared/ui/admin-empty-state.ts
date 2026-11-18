@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { AdminErpIcon } from './admin-erp-icon';
 
 /**
- * Empty/error state with an optional projected action.
+ * Empty/error state with semantic iconography (`inbox` for neutral empty queues, `alert` for errors) and projected action.
  */
 @Component({
   selector: 'app-erp-empty-state',
@@ -10,12 +10,12 @@ import { AdminErpIcon } from './admin-erp-icon';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="empty" [class.empty--error]="tone() === 'error'" [attr.role]="tone() === 'error' ? 'alert' : 'status'">
-      <span class="empty__icon"><app-erp-icon [name]="icon()" [size]="'22'" /></span>
+      <span class="empty__icon"><app-erp-icon [name]="resolvedIcon()" [size]="'22'" /></span>
       <strong>{{ title() }}</strong>
       @if (message()) {
         <p>{{ message() }}</p>
       }
-      <ng-content />
+      <div class="empty__actions"><ng-content /></div>
     </div>
   `,
   styles: [
@@ -24,7 +24,7 @@ import { AdminErpIcon } from './admin-erp-icon';
         display: grid;
         justify-items: center;
         gap: 8px;
-        padding: 40px 20px;
+        padding: 44px 20px;
         text-align: center;
         color: var(--erp-muted);
       }
@@ -32,13 +32,15 @@ import { AdminErpIcon } from './admin-erp-icon';
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 46px;
-        height: 46px;
-        border-radius: 50%;
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        border: 1px solid var(--erp-line);
         background: var(--erp-surface-muted);
         color: var(--erp-muted);
       }
       .empty--error .empty__icon {
+        border-color: var(--erp-danger-line);
         background: var(--erp-danger-soft);
         color: var(--erp-danger);
       }
@@ -50,6 +52,13 @@ import { AdminErpIcon } from './admin-erp-icon';
       p {
         max-width: 48ch;
         font-size: 13px;
+        line-height: 1.5;
+      }
+      .empty__actions:empty {
+        display: none;
+      }
+      .empty__actions {
+        margin-top: 4px;
       }
     `,
   ],
@@ -57,6 +66,7 @@ import { AdminErpIcon } from './admin-erp-icon';
 export class AdminErpEmptyState {
   readonly title = input.required<string>();
   readonly message = input('');
-  readonly icon = input('alert');
+  readonly icon = input('inbox');
   readonly tone = input<'neutral' | 'error'>('neutral');
+  readonly resolvedIcon = computed(() => (this.tone() === 'error' && this.icon() === 'inbox' ? 'alert' : this.icon()));
 }

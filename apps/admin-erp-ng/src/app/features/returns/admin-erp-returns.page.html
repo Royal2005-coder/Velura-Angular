@@ -16,19 +16,28 @@
 }
 
 @if (tab() === 'returns') {
-  <section class="desk-kpis" aria-label="Tóm tắt hàng đợi đổi trả">
+  <section class="erp-kpi-grid desk-kpis" aria-label="Tóm tắt hàng đợi đổi trả">
     <app-erp-kpi-card label="Phiếu đang mở" [value]="openReturns().toLocaleString('vi-VN')" hint="Giữ hạn mức trả hàng, trong trang này" tone="accent" icon="return" [loading]="loading()" />
     <app-erp-kpi-card label="Chờ duyệt" [value]="pendingReturns().toLocaleString('vi-VN')" hint="Trạng thái Mới yêu cầu" tone="warning" icon="clock" [loading]="loading()" />
-    <app-erp-kpi-card label="Hàng đang gửi về" [value]="awaitingReceipt().toLocaleString('vi-VN')" hint="Chờ kho nhận & kiểm" tone="info" icon="cart" [loading]="loading()" />
-    <app-erp-kpi-card label="Phiếu CSKH mới" [value]="openTickets().toLocaleString('vi-VN')" hint="Ngoài hàng đợi hỗ trợ" tone="neutral" icon="support" [loading]="loading()" />
-    <app-erp-kpi-card label="Đang xử lý" [value]="processingTickets().toLocaleString('vi-VN')" hint="Phiếu hỗ trợ có nhân viên" tone="success" icon="log" [loading]="loading()" />
+    <app-erp-kpi-card label="Hàng đang gửi về" [value]="awaitingReceipt().toLocaleString('vi-VN')" hint="Chờ kho nhận & kiểm" tone="info" icon="truck" [loading]="loading()" />
+    <app-erp-kpi-card
+      label="Phiếu CSKH mới"
+      [value]="openTickets().toLocaleString('vi-VN')"
+      hint="Bấm để mở hàng đợi hỗ trợ"
+      tone="neutral"
+      icon="support"
+      [interactive]="true"
+      [loading]="loading()"
+      (selected)="setTab('tickets')"
+    />
+    <app-erp-kpi-card label="Đang xử lý" [value]="processingTickets().toLocaleString('vi-VN')" hint="Phiếu hỗ trợ có nhân viên" tone="success" icon="activity" [loading]="loading()" />
   </section>
 }
 
 <section class="erp-card desk-panel" aria-labelledby="desk-title">
-  <div class="desk-tabs">
-    <div>
-      <span class="desk-eyebrow">CSKH</span>
+  <div class="erp-panel-head desk-tabs">
+    <div class="erp-panel-head__title">
+      <span class="erp-panel-head__icon" aria-hidden="true"><app-erp-icon name="return" [size]="'16'" /></span>
       <h2 id="desk-title">
         {{ tab() === 'returns' ? 'Hàng đợi đổi trả' : tab() === 'tickets' ? 'Phiếu hỗ trợ' : tab() === 'chat' ? 'Hội thoại trực tiếp' : 'Nhật ký đổi trả' }}
       </h2>

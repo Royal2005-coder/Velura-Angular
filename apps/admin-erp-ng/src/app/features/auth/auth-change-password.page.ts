@@ -5,6 +5,7 @@ import { AdminErpApiService } from '../../core/admin-erp-api.service';
 import { adminErrorMessage } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { useBodyClass } from '../../core/body-class';
+import { AdminErpIcon } from '../../shared/ui/admin-erp-icon';
 import { AuthFrame } from './auth-frame';
 
 /**
@@ -12,7 +13,7 @@ import { AuthFrame } from './auth-frame';
  */
 @Component({
   selector: 'app-auth-change-password-page',
-  imports: [ReactiveFormsModule, RouterLink, AuthFrame],
+  imports: [ReactiveFormsModule, RouterLink, AuthFrame, AdminErpIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-auth-frame>
@@ -27,18 +28,27 @@ import { AuthFrame } from './auth-frame';
       }
 
       <form class="cp-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
-        <label class="erp-field">
-          <span>Mật khẩu hiện tại</span>
-          <input class="erp-input" type="password" formControlName="current" autocomplete="current-password" />
-        </label>
-        <label class="erp-field">
-          <span>Mật khẩu mới</span>
-          <input class="erp-input" type="password" formControlName="next" placeholder="Ít nhất 12 ký tự" autocomplete="new-password" />
-        </label>
-        <label class="erp-field">
-          <span>Xác nhận mật khẩu mới</span>
-          <input class="erp-input" type="password" formControlName="confirm" autocomplete="new-password" />
-        </label>
+        <div class="erp-field">
+          <label for="cp-current">Mật khẩu hiện tại</label>
+          <div class="erp-secret-wrap">
+            <input id="cp-current" class="erp-input" [type]="showPasswords() ? 'text' : 'password'" formControlName="current" autocomplete="current-password" />
+            <button type="button" class="erp-secret-toggle" [attr.aria-label]="showPasswords() ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'" (click)="togglePasswords()">
+              <app-erp-icon [name]="showPasswords() ? 'eye-off' : 'eye'" [size]="'16'" />
+            </button>
+          </div>
+        </div>
+        <div class="erp-field">
+          <label for="cp-next">Mật khẩu mới</label>
+          <div class="erp-secret-wrap">
+            <input id="cp-next" class="erp-input" [type]="showPasswords() ? 'text' : 'password'" formControlName="next" placeholder="Ít nhất 12 ký tự" autocomplete="new-password" />
+          </div>
+        </div>
+        <div class="erp-field">
+          <label for="cp-confirm">Xác nhận mật khẩu mới</label>
+          <div class="erp-secret-wrap">
+            <input id="cp-confirm" class="erp-input" [type]="showPasswords() ? 'text' : 'password'" formControlName="confirm" autocomplete="new-password" />
+          </div>
+        </div>
         <button class="erp-btn erp-btn--primary cp-submit" type="submit" [disabled]="saving()">
           {{ saving() ? 'Đang cập nhật…' : 'Đổi mật khẩu' }}
         </button>
@@ -107,6 +117,12 @@ export class AuthChangePasswordPage {
 
   readonly errorMessage = signal<string | null>(null);
   readonly saving = signal(false);
+  readonly showPasswords = signal(false);
+
+  /** Toggles password visibility across current/new/confirm inputs. */
+  togglePasswords(): void {
+    this.showPasswords.update((v) => !v);
+  }
 
   readonly form = new FormGroup({
     current: new FormControl('', { nonNullable: true, validators: [Validators.required] }),

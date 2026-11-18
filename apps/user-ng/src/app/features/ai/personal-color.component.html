@@ -269,7 +269,9 @@
       @if (currentAnalysis.result; as result) {
         <div class="pc-result-card pc-result-card--preview" aria-label="Bản xem trước kết quả AI">
           <div class="pc-result-top-row">
-            <span class="pc-result-badge pc-result-badge--preview">BẢN XEM TRƯỚC AI (CHƯA LƯU)</span>
+            <span class="pc-result-badge pc-result-badge--preview">
+              {{ currentAnalysis.status === 'CONFIRMED' ? '✓ ĐÃ LƯU VÀO STYLE PROFILE' : 'BẢN XEM TRƯỚC AI (CHƯA LƯU)' }}
+            </span>
             <span class="pc-confidence-chip">Độ tin cậy: {{ (result.confidence * 100).toFixed(0) }}%</span>
           </div>
           <div class="pc-result-head">
@@ -295,6 +297,24 @@
                 <strong class="pc-diag-value">{{ contrastLabel(diag.contrast_level) }}</strong>
               </div>
             </div>
+            @if (diag.recommended_hex_palette.length) {
+              <div class="pc-palette-section" style="margin-top: 10px;">
+                <span class="pc-palette-label">Dải mã màu HEX chuẩn quang học cho sắc độ {{ baseSkinDepthLabel(diag.base_skin_depth) }}:</span>
+                <div class="pc-swatches">
+                  @for (hex of diag.recommended_hex_palette; track hex) {
+                    <div class="pc-swatch" [title]="hex">
+                      <span class="pc-swatch-circle" [style.background-color]="hex"></span>
+                      <span class="pc-swatch-name">{{ hex }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            @if (diag.requires_human_review) {
+              <p class="pc-result-desc" style="font-style: italic; opacity: 0.85;">
+                Lưu ý: Ánh sáng môi trường ở ngưỡng trung gian — bạn có thể chụp lại dưới ánh sáng tự nhiên ban ngày hoặc tinh chỉnh thủ công nếu muốn.
+              </p>
+            }
           }
           <p class="pc-result-desc">
             Xác nhận để lưu kết quả này vào Style Profile của bạn và nhận gợi ý trang phục theo đúng bảng màu tự nhiên.

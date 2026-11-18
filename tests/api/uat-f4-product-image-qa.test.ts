@@ -185,5 +185,35 @@ test("F4.2: analyzeProductImageQuality blocks path-traversal & SSRF URLs and res
     assert.ok(activeRes.overallScore >= 90);
     assert.equal(activeRes.grade, "A");
     assert.deepEqual(persistedIds, [productId]);
+
+    // When decisionTaxonomy returns REJECTED (e.g. watermark/cropped garment on bright studio bg),
+    // passed MUST be false, grade = 'D', and actionable_fix MUST be surfaced in recommendations!
+    const rejectedRes = await analyzeProductImageQuality(
+      { imageBase64: base64 },
+      {
+        ...mockDeps,
+        decisionService: {
+          decideProductImageQa: async () => ({
+            final_verdict: "REJECTED" as const,
+            average_taxonomy_score: 2.1,
+            axes: {
+              sharpness_focus: 4.1,
+              lighting_exposure: 4.0,
+              composition_framing: 1.5,
+              background_cleanliness: 4.2,
+            },
+            defect_tags: ["CROP_CUTOFF", "WATERMARK"],
+            failed_taxonomy_codes: ["COMPOSITION_CROP_DEFECT", "WATERMARK_OR_TEXT_OVERLAY"],
+            actionable_fix: ["Gỡ bỏ hoàn toàn watermark, logo bên thứ ba hoặc chữ đè lên sản phẩm."],
+            blog_auto_eligible: false,
+            confidence_score: 0.91,
+            requires_human_review: false,
+          }),
+        },
+      },
+    );
+    assert.equal(rejectedRes.passed, false);
+    assert.equal(rejectedRes.grade, "D");
+    assert.ok(rejectedRes.recommendations[0]?.includes("watermark"));
   });
 });

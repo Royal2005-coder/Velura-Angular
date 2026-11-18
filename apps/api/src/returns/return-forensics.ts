@@ -13,6 +13,7 @@ import { unifiedDecisionService } from "../decision/decision-service.js";
 import type { ReturnBoxForensicsDecision } from "../decision/decision-types.js";
 import { HttpError } from "../http.js";
 import { assertReturnEvidenceOwnership, fetchSafeMediaBytes } from "../security/safe-media-fetch.js";
+import { downloadStorageObject } from "../storage.js";
 import { insertRow, selectRows } from "../supabase.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { listReturnEvidence, resolveEvidenceRef } from "./return-evidence.js";
@@ -52,6 +53,23 @@ export async function executeReturnBoxForensics(
   const carrierName = asString(input.body.carrier || inbound.carrier) || null;
   const returnItemId = asString(input.body.returnItemId).trim() || null;
 
+  const hasCustomMediaLoader = Boolean(deps.resolveRef || deps.fetchBytes);
+  const loadOwnedStorageRef = async (ref: string, fallbackUrl?: string): Promise<Buffer> => {
+    const match = ref.match(/^storage:\/\/([^/]+)\/(.+)$/);
+    if (!hasCustomMediaLoader && match && config.supabaseUrl && config.supabaseServiceRoleKey) {
+      try {
+        return await downloadStorageObject(match[1], match[2], 10 * 1024 * 1024);
+      } catch {
+        // Fall through to signed URL fetch if direct object endpoint is unavailable
+      }
+    }
+    const targetUrl = fallbackUrl || (await resolveRef(ref));
+    if (!targetUrl) {
+      throw new HttpError(422, "INVALID_EVIDENCE_URL", "Không đọc được đường dẫn bằng chứng riêng tư.");
+    }
+    return fetchBytes(targetUrl, { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 });
+  };
+
   const evidenceRows = await listEvidence(returnId).catch(() => [] as JsonObject[]);
 
   // 1. Resolve Warehouse QA Photo (operator upload base64, explicit owned storage:// ref, or latest stored qa_photo)
@@ -64,17 +82,13 @@ export async function executeReturnBoxForensics(
     warehouseImage = decodeImageBase64(warehouseB64);
   } else if (warehouseRef) {
     assertReturnEvidenceOwnership(warehouseRef, returnId);
-    const signed = await resolveRef(warehouseRef);
-    if (!signed) {
-      throw new HttpError(422, "INVALID_EVIDENCE_URL", "Không đọc được đường dẫn bằng chứng riêng tư.");
-    }
-    warehouseImage = toImagePayload(await fetchBytes(signed, { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 }));
+    warehouseImage = toImagePayload(await loadOwnedStorageRef(warehouseRef));
   } else {
     const latestQa = [...evidenceRows].reverse().find((r) => asString(r.kind) === "qa_photo" && asString(r.url));
     if (latestQa) {
       storedWarehouseRef = `storage://${asString(latestQa.storage_bucket)}/${asString(latestQa.storage_path)}`;
       assertReturnEvidenceOwnership(storedWarehouseRef, returnId);
-      warehouseImage = toImagePayload(await fetchBytes(asString(latestQa.url), { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 }));
+      warehouseImage = toImagePayload(await loadOwnedStorageRef(storedWarehouseRef, asString(latestQa.url)));
     }
   }
 
@@ -96,11 +110,8 @@ export async function executeReturnBoxForensics(
     pickupImage = decodeImageBase64(pickupB64);
   } else if (pickupRef) {
     assertReturnEvidenceOwnership(pickupRef, returnId);
-    const signed = await resolveRef(pickupRef);
-    if (signed) {
-      const loaded = await fetchBytes(signed, { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 }).catch(() => null);
-      pickupImage = loaded ? toImagePayload(loaded) : null;
-    }
+    const loaded = await loadOwnedStorageRef(pickupRef).catch(() => null);
+    pickupImage = loaded ? toImagePayload(loaded) : null;
   } else {
     const pickupEvidence =
       [...evidenceRows].reverse().find((r) => asString(r.kind) === "pickup_photo" && asString(r.url)) ||
@@ -110,19 +121,16 @@ export async function executeReturnBoxForensics(
       if (/^storage:\/\/return-evidence(?:-private)?\/returns\//.test(candidateRef)) {
         assertReturnEvidenceOwnership(candidateRef, returnId);
         storedPickupRef = candidateRef;
-        const loaded = await fetchBytes(asString(pickupEvidence.url), { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 }).catch(() => null);
+        const loaded = await loadOwnedStorageRef(candidateRef, asString(pickupEvidence.url)).catch(() => null);
         pickupImage = loaded ? toImagePayload(loaded) : null;
       }
     } else if (Array.isArray(inbound.pickup_photo_urls) && inbound.pickup_photo_urls.length) {
       const firstRef = asString(inbound.pickup_photo_urls[0]);
       if (firstRef.startsWith("storage://")) {
         assertReturnEvidenceOwnership(firstRef, returnId);
-        const signed = await resolveRef(firstRef);
-        if (signed) {
-          storedPickupRef = firstRef;
-          const loaded = await fetchBytes(signed, { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 }).catch(() => null);
-          pickupImage = loaded ? toImagePayload(loaded) : null;
-        }
+        storedPickupRef = firstRef;
+        const loaded = await loadOwnedStorageRef(firstRef).catch(() => null);
+        pickupImage = loaded ? toImagePayload(loaded) : null;
       }
     }
   }

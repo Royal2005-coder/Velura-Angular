@@ -36,6 +36,7 @@ import type {
   DecisionChoiceAnswer,
   DecisionInputBlock,
   DecisionNoulAnswer,
+  DecisionQuestion,
   DecisionScoreAnswer,
   DetailedSkinDepth,
   FourSeason,
@@ -761,10 +762,10 @@ export class UnifiedDecisionService {
     }
 
     const confidences = [
-      (decision.answers.sharpness_focus as DecisionScoreAnswer).confidence,
-      (decision.answers.lighting_exposure as DecisionScoreAnswer).confidence,
-      (decision.answers.composition_framing as DecisionScoreAnswer).confidence,
-      (decision.answers.background_cleanliness as DecisionScoreAnswer).confidence,
+      ordinalScoreConfidence(decision.answers.sharpness_focus as DecisionScoreAnswer),
+      ordinalScoreConfidence(decision.answers.lighting_exposure as DecisionScoreAnswer),
+      ordinalScoreConfidence(decision.answers.composition_framing as DecisionScoreAnswer),
+      ordinalScoreConfidence(decision.answers.background_cleanliness as DecisionScoreAnswer),
     ];
     const confidenceScore = Number((confidences.reduce((s, c) => s + c, 0) / confidences.length).toFixed(4));
     const blogAutoEligible = finalVerdict === "APPROVED_HERO";
@@ -1242,6 +1243,196 @@ export class UnifiedDecisionService {
       },
     };
   }
+
+  /**
+   * 5B. Single-Pass Batch Auto-Blog SKU Curation (`1..30` SKUs in ONE `/v1beta/decisions` call):
+   * Exploits `gemini-decision-1`'s native multi-question zero-output-token architecture (`p0_mode`, `p0_fit`, ...)
+   * to avoid N+1 sequential roundtrips, preventing 524 gateway timeouts and Free-Tier 429 burst exhaustion.
+   */
+  async decideAutoBlogProductCurationBatch(
+    inputs: ReadonlyArray<{
+      productId: string;
+      name: string;
+      availableStock: number;
+      basePrice: number;
+      salePrice: number | null;
+      imageQaVerdict: ImageQaVerdict;
+      imageQaScore: number;
+      ratingAvg?: number;
+      reviewCount?: number;
+      campaignGoal?: string;
+      actorId?: string | null;
+    }>,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<AutoBlogCurationDecision[]> {
+    if (!inputs.length) return [];
+    if (inputs.length === 1) {
+      return [await this.decideAutoBlogProductCuration({ ...inputs[0], signal: options.signal })];
+    }
+
+    const out: Array<AutoBlogCurationDecision | null> = new Array(inputs.length).fill(null);
+    const activeIndices: number[] = [];
+    const batchItemsPayload: Record<string, unknown>[] = [];
+    const questions: Record<string, DecisionQuestion> = {};
+
+    inputs.forEach((item, idx) => {
+      if (item.availableStock <= 0 || item.imageQaVerdict === "REJECTED") {
+        out[idx] = {
+          product_id: item.productId,
+          publish_mode: "EXCLUDE",
+          campaign_fit: "BUNDLE_ADDON",
+          curation_score: 0,
+          confidence_score: 0.99,
+          requires_human_review: false,
+          rationale_vi:
+            item.availableStock <= 0
+              ? "Loại tự động vì sản phẩm hiện hết tồn kho khả dụng."
+              : "Loại tự động vì chất lượng hình ảnh chưa đạt chuẩn kiểm định Visual QA.",
+          telemetry: {
+            model_used: "deterministic-guardrail",
+            transport: "deterministic_fallback",
+            used_fallback_key: false,
+            latency_ms: 0,
+          },
+        };
+        return;
+      }
+
+      const slot = activeIndices.length;
+      activeIndices.push(idx);
+      const discountPct =
+        item.salePrice && item.salePrice < item.basePrice && item.basePrice > 0
+          ? Math.round(((item.basePrice - item.salePrice) / item.basePrice) * 100)
+          : 0;
+
+      batchItemsPayload.push({
+        slot: `sku_${slot}`,
+        product_id: item.productId,
+        name: item.name,
+        available_stock: item.availableStock,
+        base_price_vnd: item.basePrice,
+        sale_price_vnd: item.salePrice,
+        discount_percent: discountPct,
+        image_qa_verdict: item.imageQaVerdict,
+        image_qa_score_5: item.imageQaScore,
+        customer_rating_avg: item.ratingAvg ?? 4.6,
+        customer_review_count: item.reviewCount ?? 0,
+      });
+
+      questions[`sku_${slot}_mode`] = {
+        type: "choice",
+        instructions: `For sku_${slot} ("${item.name.slice(0, 60)}"), select the editorial blog automation tier.`,
+        criteria: {
+          AUTO_BLOG_PUBLISH: "APPROVED_HERO image (>=4.3/5), healthy stock (>=5), strong rating (>=4.2).",
+          SEMI_AUTO_REVIEW: "APPROVED_STANDARD/NEEDS_EDIT image or moderate stock (1..4); marketer 1-click review.",
+          EXCLUDE: "Poor rating (<3.2) or weak commercial fit.",
+        },
+      };
+      questions[`sku_${slot}_fit`] = {
+        type: "choice",
+        instructions: `For sku_${slot} ("${item.name.slice(0, 60)}"), classify its merchandising role in the campaign.`,
+        criteria: {
+          HERO_PRODUCT: "Flagship statement garment anchoring the article.",
+          BUNDLE_ADDON: "Versatile styling piece or accessory for outfit cross-sell.",
+          CLEARANCE: "Discounted (>=15% off) or high-stock item for seasonal promo.",
+        },
+      };
+      questions[`sku_${slot}_score`] = {
+        type: "score",
+        instructions: `For sku_${slot} ("${item.name.slice(0, 60)}"), rate commercial readiness for AI promo storytelling.`,
+        criteria: [
+          "Low commercial appeal or constrained inventory.",
+          "Moderate appeal suitable for secondary mention.",
+          "Strong merchandising candidate with good stock and visual quality.",
+          "Top-tier flagship SKU with hero photography, strong stock, and compelling offer.",
+        ],
+      };
+    });
+
+    if (!activeIndices.length) {
+      return out as AutoBlogCurationDecision[];
+    }
+
+    const decision = await this.evaluate({
+      useCase: "blog_product_curation",
+      entityType: "product_batch",
+      entityId: inputs[activeIndices[0]]?.productId,
+      actorId: inputs[activeIndices[0]]?.actorId,
+      signal: options.signal,
+      input: JSON.stringify({
+        campaign_goal: inputs[activeIndices[0]]?.campaignGoal || "Editorial & Seasonal Promotion",
+        candidates: batchItemsPayload,
+      }),
+      questions,
+    });
+
+    activeIndices.forEach((origIdx, slot) => {
+      const item = inputs[origIdx];
+      const discountPct =
+        item.salePrice && item.salePrice < item.basePrice && item.basePrice > 0
+          ? Math.round(((item.basePrice - item.salePrice) / item.basePrice) * 100)
+          : 0;
+      const modeAns = decision.answers[`sku_${slot}_mode`] as DecisionChoiceAnswer;
+      const fitAns = decision.answers[`sku_${slot}_fit`] as DecisionChoiceAnswer;
+      const scoreAns = decision.answers[`sku_${slot}_score`] as DecisionScoreAnswer;
+
+      let publishMode = modeAns.choice as AutoBlogPublishMode;
+      if (publishMode === "AUTO_BLOG_PUBLISH" && item.imageQaVerdict !== "APPROVED_HERO") {
+        publishMode = "SEMI_AUTO_REVIEW";
+      }
+      if (publishMode === "AUTO_BLOG_PUBLISH" && item.availableStock < 3) {
+        publishMode = "SEMI_AUTO_REVIEW";
+      }
+
+      const campaignFit = fitAns.choice as CampaignProductFit;
+      const curationScore = Number(((scoreAns.score / 3) * 100).toFixed(1));
+      const confidenceScore = Number(((modeAns.confidence + fitAns.confidence) / 2).toFixed(4));
+      const requiresHumanReview = publishMode === "SEMI_AUTO_REVIEW" || confidenceScore < HUMAN_REVIEW_CONFIDENCE_FLOOR;
+      const rationaleVi =
+        publishMode === "AUTO_BLOG_PUBLISH"
+          ? `Đạt chuẩn ảnh Hero (${item.imageQaScore}/5), tồn kho ${item.availableStock} SP${discountPct > 0 ? `, ưu đãi ${discountPct}%` : ""} — sẵn sàng đưa vào luồng AI Blog tự động (${campaignFit}).`
+          : publishMode === "SEMI_AUTO_REVIEW"
+            ? `Phù hợp vai trò ${campaignFit} (ảnh ${item.imageQaVerdict}, tồn ${item.availableStock} SP) — đề xuất Marketer duyệt 1-click.`
+            : `Chưa ưu tiên đưa vào chiến dịch hiện tại (điểm thương mại ${curationScore}/100).`;
+
+      out[origIdx] = {
+        product_id: item.productId,
+        publish_mode: publishMode,
+        campaign_fit: campaignFit,
+        curation_score: curationScore,
+        confidence_score: confidenceScore,
+        requires_human_review: requiresHumanReview,
+        rationale_vi: rationaleVi,
+        telemetry: {
+          model_used: decision.modelUsed,
+          transport: decision.transport,
+          used_fallback_key: decision.usedFallbackKey,
+          latency_ms: decision.latencyMs,
+        },
+      };
+    });
+
+    const firstResolved = out[activeIndices[0]]!;
+    void recordDecisionAuditLog({
+      useCase: "blog_product_curation",
+      entityType: "product_batch",
+      entityId: firstResolved.product_id,
+      rolloutMode: decision.rolloutMode,
+      modelUsed: decision.modelUsed,
+      transport: decision.transport,
+      usedFallbackKey: decision.usedFallbackKey,
+      latencyMs: decision.latencyMs,
+      inputTokens: decision.inputTokens,
+      confidenceScore: firstResolved.confidence_score,
+      requiresHumanReview: out.some((r) => r?.requires_human_review),
+      verdictCode: `BATCH_${activeIndices.length}`,
+      rawAnswers: serializeAnswers(decision.answers),
+      downstreamAction: firstResolved.publish_mode,
+      actorId: inputs[activeIndices[0]]?.actorId,
+    });
+
+    return out as AutoBlogCurationDecision[];
+  }
 }
 
 export const unifiedDecisionService = new UnifiedDecisionService();
@@ -1343,4 +1534,32 @@ function buildDisputeSummaryVi(
 
 function serializeAnswers(answers: Readonly<Record<string, DecisionAnswer>>): JsonObject {
   return JSON.parse(JSON.stringify(answers)) as JsonObject;
+}
+
+/**
+ * Calibrates ordinal `score` confidence by combining modal bin confidence with maximum adjacent-pair
+ * probability mass `max_i(p_i + p_{i+1})`, so natural probability split across adjacent top levels
+ * (e.g. Studio 4=0.48 + Hero 5=0.45 -> 0.93) does not trigger false HITL review while bimodal/uncertain
+ * splits (e.g. 1=0.45, 5=0.45 -> 0.45) remain gated below 0.70.
+ */
+function ordinalScoreConfidence(ans: DecisionScoreAnswer): number {
+  const keys = Object.keys(ans.probabilities)
+    .map((k) => Number(k))
+    .filter((n) => Number.isInteger(n))
+    .sort((a, b) => a - b);
+  let totalMass = 0;
+  for (const k of keys) {
+    totalMass += ans.probabilities[String(k)] ?? 0;
+  }
+  if (keys.length < 2 || totalMass < 0.5) {
+    return ans.confidence;
+  }
+  let maxPair = 0;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (keys[i + 1] === keys[i] + 1) {
+      const pair = (ans.probabilities[String(keys[i])] ?? 0) + (ans.probabilities[String(keys[i + 1])] ?? 0);
+      if (pair > maxPair) maxPair = pair;
+    }
+  }
+  return Number(Math.min(0.9999, Math.max(ans.confidence, maxPair)).toFixed(4));
 }

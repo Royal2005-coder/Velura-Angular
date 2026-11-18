@@ -124,7 +124,7 @@ export function createContentAdminRepository(): ContentAdminRepository {
     },
 
     async listCandidateProducts(options, accessToken) {
-      const rows = await selectRows(
+      const res = await selectRows(
         "product",
         {
           select: "product_id,name,slug,base_price,sale_price,images,status,category_id,description",
@@ -134,7 +134,8 @@ export function createContentAdminRepository(): ContentAdminRepository {
         },
         authOptions(accessToken),
       );
-      return (rows || []) as unknown as BlogProductCandidate[];
+      const list = Array.isArray(res) ? res : res?.rows;
+      return (list || []) as unknown as BlogProductCandidate[];
     },
   };
 }

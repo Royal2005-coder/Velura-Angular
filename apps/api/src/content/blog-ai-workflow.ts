@@ -339,7 +339,36 @@ export async function matchSemanticInventoryProducts(
 
   const curationService = options.decisionService ?? unifiedDecisionService;
   const curated: SemanticBlogProductMatch[] = [];
-  for (const entry of ranked) {
+  const batchInputs = ranked.map((entry) => ({
+    productId: entry.candidate.product_id,
+    name: entry.candidate.name,
+    availableStock: entry.candidate.available_stock,
+    basePrice: entry.candidate.base_price,
+    salePrice: entry.candidate.sale_price,
+    imageQaVerdict: entry.candidate.image_qa_verdict,
+    imageQaScore: entry.candidate.image_qa_score,
+    campaignGoal: queryText.slice(0, 200),
+    actorId: options.actorId,
+  }));
+
+  let batchDecisions: Array<Awaited<ReturnType<typeof unifiedDecisionService.decideAutoBlogProductCuration>> | null> =
+    new Array(ranked.length).fill(null);
+  try {
+    const maybeBatch = (curationService as { decideAutoBlogProductCurationBatch?: typeof unifiedDecisionService.decideAutoBlogProductCurationBatch })
+      .decideAutoBlogProductCurationBatch;
+    if (typeof maybeBatch === "function") {
+      batchDecisions = await maybeBatch.call(curationService, batchInputs);
+    } else {
+      batchDecisions = await Promise.all(
+        batchInputs.map((inp) => curationService.decideAutoBlogProductCuration(inp).catch(() => null)),
+      );
+    }
+  } catch {
+    batchDecisions = new Array(ranked.length).fill(null);
+  }
+
+  for (let i = 0; i < ranked.length; i++) {
+    const entry = ranked[i];
     const p = entry.candidate;
     let publishMode: AutoBlogPublishMode =
       p.image_qa_verdict === "APPROVED_HERO" && p.available_stock >= 3 ? "AUTO_BLOG_PUBLISH" : "SEMI_AUTO_REVIEW";
@@ -347,27 +376,13 @@ export async function matchSemanticInventoryProducts(
       entry.discountPct >= 15 ? "CLEARANCE" : p.image_qa_verdict === "APPROVED_HERO" ? "HERO_PRODUCT" : "BUNDLE_ADDON";
 
     const rollout = resolveRolloutMode(p.product_id);
-    try {
-      const decision = await curationService.decideAutoBlogProductCuration({
-        productId: p.product_id,
-        name: p.name,
-        availableStock: p.available_stock,
-        basePrice: p.base_price,
-        salePrice: p.sale_price,
-        imageQaVerdict: p.image_qa_verdict,
-        imageQaScore: p.image_qa_score,
-        campaignGoal: queryText.slice(0, 200),
-        actorId: options.actorId,
-      });
-      if (rollout.activeForRequest) {
-        if (decision.publish_mode === "EXCLUDE") {
-          continue;
-        }
-        publishMode = decision.publish_mode;
-        campaignFit = decision.campaign_fit;
+    const decision = batchDecisions[i];
+    if (decision && rollout.activeForRequest) {
+      if (decision.publish_mode === "EXCLUDE") {
+        continue;
       }
-    } catch {
-      // Keep deterministic curation classification if Decision API is throttled during bulk loop
+      publishMode = decision.publish_mode;
+      campaignFit = decision.campaign_fit;
     }
 
     curated.push({

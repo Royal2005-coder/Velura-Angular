@@ -35,6 +35,7 @@ const QUESTION_KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 const decisionMetrics = new Map<DecisionUseCase, DecisionEngineMetric>();
 let primaryCircuitOpenUntil = 0;
+let gatewayCircuitOpenUntil = 0;
 let cachedLocalEnvKey: { path: string; key: string } | null = null;
 
 /** Reads detached, content-free Prometheus metrics for all Decision Engine use-cases. */
@@ -45,6 +46,7 @@ export function readDecisionEngineMetrics(): DecisionEngineMetric[] {
 /** Resets in-memory circuit breaker and metrics during unit tests. */
 export function resetDecisionClientStateForTest(): void {
   primaryCircuitOpenUntil = 0;
+  gatewayCircuitOpenUntil = 0;
   cachedLocalEnvKey = null;
   decisionMetrics.clear();
 }
@@ -276,7 +278,8 @@ export async function evaluateGeminiDecisions(
   }
 
   // Tier 3: Structured Output (`temperature: 0.0` + strict `responseSchema`) over LiteLLM Gateway or available Gemini keys/models
-  const structuredRoutes = listGenerativeRoutes(primaryKey, fallbackKey, Date.now() < primaryCircuitOpenUntil);
+  const hasMultimodalImage = Array.isArray(request.input) && request.input.some((b) => b.type === "image");
+  const structuredRoutes = listGenerativeRoutes(primaryKey, fallbackKey, Date.now() < primaryCircuitOpenUntil, hasMultimodalImage);
   for (const structuredRoute of structuredRoutes) {
     try {
       const res = await callStructuredDecisionFallback({
@@ -303,6 +306,9 @@ export async function evaluateGeminiDecisions(
       };
     } catch (err: unknown) {
       lastError = err;
+      if (structuredRoute.gateway && shouldTripCircuit(err)) {
+        gatewayCircuitOpenUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
+      }
       if (isAbortError(err, request.signal)) break;
     }
   }
@@ -334,7 +340,7 @@ export async function generateFallbackAwareJson(
   const timeoutMs = options.timeoutMs ?? 20_000;
   const temperature = options.temperature ?? 0.25;
   const maxOutputTokens = options.maxOutputTokens ?? 4096;
-  const requestedModel = resolveGenerativeModelName(options.model || config.geminiModel || "gemini-2.5-flash");
+  const rawRequestedModel = (options.model || config.geminiModel || "gemini-flash-lite-latest").trim();
 
   const routes = listGenerativeRoutes(primaryKey, fallbackKey);
   if (!routes.length) {
@@ -344,8 +350,8 @@ export async function generateFallbackAwareJson(
   let lastError: unknown = null;
   for (const route of routes) {
     const modelCandidates = route.gateway
-      ? [requestedModel]
-      : resolveGenerativeModelCandidates(requestedModel);
+      ? [resolveGatewayModelName(rawRequestedModel)]
+      : resolveDirectGoogleModelCandidates(rawRequestedModel);
     for (const candidateModel of modelCandidates) {
       try {
         const controller = new AbortController();
@@ -437,9 +443,12 @@ export async function generateFallbackAwareEmbedding(
   const primaryKey = rawPrimary.trim();
   const fallbackKey = resolveFallbackGeminiKey();
   const routes = listGenerativeRoutes(primaryKey, fallbackKey);
-  const models = Array.from(new Set([config.geminiEmbeddingModel || "gemini-embedding-2", "gemini-embedding-001"]));
+  const configuredEmb = (config.geminiEmbeddingModel || "").trim();
 
   for (const route of routes) {
+    const models = route.gateway
+      ? [configuredEmb || "commerce-embedding"]
+      : resolveDirectGoogleEmbeddingCandidates(configuredEmb);
     for (const model of models) {
       try {
         const url = route.gateway
@@ -502,7 +511,15 @@ export async function recordDecisionAuditLog(entry: {
   const metric = getOrCreateMetric(entry.useCase);
   if (entry.requiresHumanReview) metric.humanReviewCount++;
 
-  if (!config.supabaseUrl || !config.supabaseServiceRoleKey) return;
+  const supabaseUrl = (process.env.VELURA_SUPABASE_URL ?? process.env.SUPABASE_URL ?? config.supabaseUrl ?? "").trim();
+  const serviceKey = (
+    process.env.VELURA_SUPABASE_SERVICE_ROLE_KEY !== undefined
+      ? process.env.VELURA_SUPABASE_SERVICE_ROLE_KEY
+      : process.env.SUPABASE_SERVICE_ROLE_KEY !== undefined
+        ? process.env.SUPABASE_SERVICE_ROLE_KEY
+        : config.supabaseServiceRoleKey || ""
+  ).trim();
+  if (!supabaseUrl || !serviceKey) return;
   try {
     await insertRow("ai_decision_log", {
       use_case: entry.useCase,
@@ -592,8 +609,20 @@ async function callDecisionsEndpoint(args: {
 
     const rawAnswers = asJsonObject(payload.answers);
     const parsedAnswers = parseAndValidateDecisionAnswers(args.questions, rawAnswers);
-    const usage = asJsonObject(payload.usage);
-    const inputTokens = Math.max(0, Math.round(asNumber(usage.total_input_tokens ?? usage.total_tokens) || 0));
+    const usage = asJsonObject(payload.usage || payload.usageMetadata);
+    const inputTokens = Math.max(
+      0,
+      Math.round(
+        asNumber(
+          usage.input_tokens ??
+            usage.total_input_tokens ??
+            usage.prompt_tokens ??
+            usage.promptTokenCount ??
+            usage.total_tokens ??
+            usage.totalTokenCount,
+        ) || 0,
+      ),
+    );
 
     return { answers: parsedAnswers, inputTokens };
   } catch (err: unknown) {
@@ -609,6 +638,10 @@ async function callDecisionsEndpoint(args: {
   }
 }
 
+function readExplicitConfidence(raw: unknown, fallback: number): number {
+  return typeof raw === "number" && Number.isFinite(raw) ? clampProb(raw) : clampProb(fallback);
+}
+
 function parseAndValidateDecisionAnswers(
   questions: Readonly<Record<string, DecisionQuestion>>,
   rawAnswers: JsonObject,
@@ -618,7 +651,7 @@ function parseAndValidateDecisionAnswers(
     const ans = asJsonObject(rawAnswers[key]);
     if (question.type === "noul") {
       const noul = clampProb(asNumber(ans.noul));
-      const confidence = clampProb(asNumber(ans.confidence) || Math.max(noul, 1 - noul));
+      const confidence = readExplicitConfidence(ans.confidence, Math.max(noul, 1 - noul));
       result[key] = { type: "noul", noul, confidence };
     } else if (question.type === "choice") {
       const options = Object.keys(question.criteria);
@@ -630,7 +663,7 @@ function parseAndValidateDecisionAnswers(
       const topChoice = options.includes(asString(ans.choice))
         ? asString(ans.choice)
         : options.slice().sort()[0] || "";
-      const confidence = clampProb(asNumber(ans.confidence) || probabilities[topChoice] || 0.5);
+      const confidence = readExplicitConfidence(ans.confidence, probabilities[topChoice] ?? 0.5);
       result[key] = { type: "choice", choice: topChoice, confidence, probabilities };
     } else {
       const legend: Record<string, string> = {};
@@ -644,7 +677,7 @@ function parseAndValidateDecisionAnswers(
       const maxLevel = Math.max(1, question.criteria.length - 1);
       const rawScore = Number(ans.score);
       const score = Number.isFinite(rawScore) ? Math.max(0, Math.min(maxLevel, rawScore)) : 0;
-      const confidence = clampProb(asNumber(ans.confidence) || Math.max(...Object.values(probabilities), 0.5));
+      const confidence = readExplicitConfidence(ans.confidence, Math.max(...Object.values(probabilities), 0.5));
       result[key] = { type: "score", score, confidence, probabilities, legend };
     }
   }
@@ -658,18 +691,32 @@ interface FallbackRoute {
   usedFallbackKey: boolean;
 }
 
-function listGenerativeRoutes(primaryKey: string, fallbackKey: string, skipPrimary = Date.now() < primaryCircuitOpenUntil): FallbackRoute[] {
+function listGenerativeRoutes(
+  primaryKey: string,
+  fallbackKey: string,
+  skipPrimary = Date.now() < primaryCircuitOpenUntil,
+  preferDirectVision = false,
+): FallbackRoute[] {
   const routes: FallbackRoute[] = [];
   const endpoint = process.env.LITELLM_ENDPOINT?.trim();
   const gatewayKey = process.env.LITELLM_API_KEY?.trim();
-  if (endpoint && gatewayKey) {
-    const clean = endpoint.replace(/\/+$/, "");
-    routes.push({
-      gateway: true,
-      base: clean.endsWith("/v1") ? clean : `${clean}/v1`,
-      key: gatewayKey,
-      usedFallbackKey: false,
-    });
+  const gatewayHealthy = Date.now() >= gatewayCircuitOpenUntil;
+  const gatewayRoute: FallbackRoute | null =
+    endpoint && gatewayKey && gatewayHealthy
+      ? {
+          gateway: true,
+          base: endpoint.replace(/\/+$/, "").endsWith("/v1")
+            ? endpoint.replace(/\/+$/, "")
+            : `${endpoint.replace(/\/+$/, "")}/v1`,
+          key: gatewayKey,
+          usedFallbackKey: false,
+        }
+      : null;
+
+  // For text-only requests, try healthy LiteLLM gateway first; for multimodal vision requests,
+  // try direct Google Vision keys first because K3s `commerce-text` is a text-only gateway alias.
+  if (gatewayRoute && !preferDirectVision) {
+    routes.push(gatewayRoute);
   }
   if (primaryKey && !skipPrimary) {
     routes.push({ gateway: false, base: GEMINI_V1BETA_BASE, key: primaryKey, usedFallbackKey: false });
@@ -677,7 +724,13 @@ function listGenerativeRoutes(primaryKey: string, fallbackKey: string, skipPrima
   if (fallbackKey && fallbackKey !== primaryKey) {
     routes.push({ gateway: false, base: GEMINI_V1BETA_BASE, key: fallbackKey, usedFallbackKey: true });
   }
-  if (!routes.length && primaryKey) {
+  if (gatewayRoute && preferDirectVision) {
+    routes.push(gatewayRoute);
+  }
+  // Last-resort safety net: if `/v1beta/decisions` tripped `skipPrimary` (e.g. per-model `gemini-decision-1` 429)
+  // AND every fallback route (`fallbackKey` / `gateway`) also failed, try `primaryKey` on `:generateContent`
+  // (which uses an independent Google per-model quota bucket) rather than returning 502.
+  if (primaryKey && skipPrimary) {
     routes.push({ gateway: false, base: GEMINI_V1BETA_BASE, key: primaryKey, usedFallbackKey: false });
   }
   return routes;
@@ -758,10 +811,10 @@ async function callStructuredDecisionFallback(args: {
     rubricLines.join("\n"),
   ].join("\n");
 
-  const requestedFallbackModel = resolveGenerativeModelName(config.geminiStylistModel || config.geminiModel || "gemini-3.5-flash");
+  const rawFallbackModel = (config.geminiStylistModel || config.geminiModel || "gemini-flash-lite-latest").trim();
   const modelCandidates = args.route.gateway
-    ? [requestedFallbackModel]
-    : resolveGenerativeModelCandidates(requestedFallbackModel);
+    ? [resolveGatewayModelName(rawFallbackModel)]
+    : resolveDirectGoogleModelCandidates(rawFallbackModel);
 
   let lastModelError: unknown = null;
   for (const fallbackModel of modelCandidates) {
@@ -897,20 +950,55 @@ function validateDecisionRequest(request: CreateDecisionRequest): void {
   }
 }
 
-function resolveGenerativeModelName(rawModel: string): string {
+function resolveGatewayModelName(rawModel: string): string {
   const trimmed = rawModel.trim();
-  if (!trimmed || trimmed === "gemini-1.5-flash" || trimmed === "gemini-2.5-flash") return "gemini-3.5-flash";
+  if (!trimmed || trimmed === "gemini-1.5-flash" || trimmed === "gemini-2.5-flash") return "commerce-text";
   return trimmed;
 }
 
-function resolveGenerativeModelCandidates(requestedModel: string): string[] {
+const VIRTUAL_OR_DEPRECATED_DIRECT_ALIASES = new Set([
+  "commerce-text",
+  "commerce-image-edit",
+  "commerce-embedding",
+  "gemini-1.5-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.8-flash",
+]);
+
+/**
+ * Produces real `generativelanguage.googleapis.com/v1beta` model IDs without LiteLLM virtual aliases,
+ * starting with `gemini-flash-lite-latest` (verified 200 OK across both AQ and AIza Google keys).
+ */
+function resolveDirectGoogleModelCandidates(requestedModel: string): string[] {
+  const trimmed = requestedModel.trim();
+  const isRealDirectModel =
+    Boolean(trimmed) &&
+    !VIRTUAL_OR_DEPRECATED_DIRECT_ALIASES.has(trimmed) &&
+    !trimmed.startsWith("commerce-") &&
+    !trimmed.startsWith("gpt-");
+
   return Array.from(
     new Set([
-      requestedModel,
-      "gemini-3.5-flash",
-      "gemini-3.1-flash-lite",
-      "gemini-3.8-flash",
+      ...(isRealDirectModel && trimmed !== "gemini-2.5-flash" ? [trimmed] : []),
       "gemini-flash-lite-latest",
+      "gemini-flash-latest",
+      "gemini-2.5-flash-lite",
+      "gemini-2.5-flash",
+    ]),
+  );
+}
+
+function resolveDirectGoogleEmbeddingCandidates(configuredModel: string): string[] {
+  const trimmed = configuredModel.trim();
+  const isRealGoogleEmbedding =
+    Boolean(trimmed) && !trimmed.startsWith("commerce-") && !trimmed.startsWith("text-embedding-3");
+  return Array.from(
+    new Set([
+      ...(isRealGoogleEmbedding && trimmed !== "gemini-embedding-2" ? [trimmed] : []),
+      "gemini-embedding-2-preview",
+      "gemini-embedding-001",
     ]),
   );
 }
@@ -961,12 +1049,11 @@ function mapStatusToHttpError(status: number): HttpError {
 
 function shouldTripCircuit(err: unknown): boolean {
   if (!(err instanceof HttpError)) return true;
-  if (
-    err.code === "AI_PROVIDER_BAD_REQUEST" ||
-    err.code === "AI_SAFETY_BLOCK" ||
-    err.code === "AI_PROVIDER_UNSUPPORTED"
-  ) {
+  if (err.code === "AI_PROVIDER_BAD_REQUEST" || err.code === "AI_SAFETY_BLOCK") {
     return false;
+  }
+  if (err.code === "AI_PROVIDER_UNSUPPORTED") {
+    return true;
   }
   return [429, 500, 502, 503, 504].includes(err.status);
 }

@@ -224,6 +224,38 @@ export async function createSignedStorageUrl(
   return signed.startsWith("http") ? signed : `${config.supabaseUrl}/storage/v1${signed}`;
 }
 
+/**
+ * Downloads raw bytes of an ownership-verified Supabase Storage object directly via service-role auth.
+ * Works identically on cloud HTTPS Supabase and internal K3s standby Kong (`http://kong.database.svc:8000`).
+ */
+export async function downloadStorageObject(
+  bucket: string,
+  path: string,
+  maxBytes = MAX_IMAGE_BYTES,
+): Promise<Buffer> {
+  const key = getSupabaseServiceKey();
+  if (!config.supabaseUrl || !key) {
+    throw new HttpError(503, "STORAGE_NOT_CONFIGURED", "Supabase Storage is not configured");
+  }
+  const cleanBucket = bucket.replace(/^\/+|\/+$/g, "");
+  const cleanPath = path.replace(/^\/+/, "");
+  const response = await fetch(`${config.supabaseUrl}/storage/v1/object/${cleanBucket}/${cleanPath}`, {
+    headers: {
+      apikey: key,
+      authorization: `Bearer ${key}`,
+    },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    throw new HttpError(422, "STORAGE_DOWNLOAD_FAILED", `Supabase Storage: ${await storageError(response)}`);
+  }
+  const arrayBuf = await response.arrayBuffer();
+  if (arrayBuf.byteLength > maxBytes) {
+    throw new HttpError(413, "MEDIA_TOO_LARGE", "Tệp bằng chứng vượt quá giới hạn dung lượng cho phép.");
+  }
+  return Buffer.from(arrayBuf);
+}
+
 function storageName(prefix: string, filename: string): string {
   const ext = sanitizeExtension(filename);
   return `${prefix.replace(/^\/+|\/+$/g, "")}/${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${ext}`;

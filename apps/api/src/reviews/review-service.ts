@@ -129,8 +129,8 @@ export function createReviewService({
       const branchPrompt = sentimentDecision && activeForRollout
         ? `\nNhánh quyết định CSKH bắt buộc (${sentimentDecision.routing_branch}):\n- ${sentimentDecision.response_guidelines.join("\n- ")}`
         : "";
-      try {
-        if (checkGemini()) {
+      if (checkGemini()) {
+        try {
           const text = await genText(
             `${reviewReplyPrompt(source)}${branchPrompt}\nChỉ trả một JSON {"replies":["câu 1","câu 2"]}.`,
             { temperature: 0.2, maxOutputTokens: 450, timeoutMs: 6000 }
@@ -139,7 +139,12 @@ export function createReviewService({
           if (replies.length) {
             return { replies, source: "gemini" as const, ...(sentimentDecision && activeForRollout ? { decision: sentimentDecision } : {}) };
           }
-        } else {
+        } catch (error: unknown) {
+          console.error("[REVIEW AI PRIMARY]", errorMessage(error));
+        }
+      }
+      if (checkDecision()) {
+        try {
           const gen = await genJson(
             `${reviewReplyPrompt(source)}${branchPrompt}`,
             {
@@ -154,9 +159,9 @@ export function createReviewService({
           if (replies.length) {
             return { replies, source: "gemini" as const, ...(sentimentDecision && activeForRollout ? { decision: sentimentDecision } : {}) };
           }
+        } catch (error: unknown) {
+          console.error("[REVIEW AI FALLBACK]", errorMessage(error));
         }
-      } catch (error: unknown) {
-        console.error("[REVIEW AI]", errorMessage(error));
       }
       return { replies: groundedReviewReplies(source), source: "review" as const, ...(sentimentDecision && activeForRollout ? { decision: sentimentDecision } : {}) };
     },

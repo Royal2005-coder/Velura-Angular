@@ -438,7 +438,7 @@ Nội dung: ${content}`,
 
     async triggerScheduledPublish(context) {
       requirePermission(context as AuthContext, "content", "update");
-      return runScheduledBlogPublishCycle();
+      return runScheduledBlogPublishCycle({ forceRetry: true });
     }
   };
 }

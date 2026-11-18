@@ -246,6 +246,30 @@
     }
     @if (isMoney()) {
       <p class="flow-warning">Số tiền cho riêng phần này: <strong>{{ money(refundable()) }}</strong>. Không dùng tổng giá trị phiếu.</p>
+      @if (boxForensics(); as fx) {
+        <div class="flow-forensics-card" [class.is-frozen]="fx.freeze_auto_refund" style="margin-bottom: 12px;">
+          <div class="flow-forensics-card__head">
+            <strong>✦ Giám định hộp hàng AI: {{ boxConditionLabel(fx.box_condition) }} · {{ matchVerdictLabel(fx.match_verdict) }}</strong>
+            <span>Rủi ro {{ fx.tampering_risk_score }}/100</span>
+          </div>
+          @if (fx.freeze_auto_refund) {
+            <p class="flow-warning" style="margin-top: 8px;">
+              🔒 Hệ thống AI Forensics đang khóa hoàn tiền tự động do nghi vấn ngoại quan/tráo kiện. Chỉ <strong>Super Admin</strong> mới được phép ghi đè hoàn tiền kèm biên bản xác minh thực tế (tối thiểu 15 ký tự).
+            </p>
+            <label class="erp-field">
+              <span>Căn cứ ghi đè khóa Forensics (Super Admin) <span class="erp-required" aria-hidden="true">*</span></span>
+              <textarea
+                class="erp-input"
+                rows="2"
+                [value]="forensicsOverrideReason()"
+                aria-required="true"
+                placeholder="Nhập biên bản đối chiếu video mở hộp / xác nhận lỗi thuộc ĐVVC (tối thiểu 15 ký tự)…"
+                (input)="setText('forensicsOverrideReason', $event)"
+              ></textarea>
+            </label>
+          }
+        </div>
+      }
       @if (flow() === 'manual') {
         <label class="erp-field">
           <span>Mã giao dịch chuyển khoản duy nhất <span class="erp-required" aria-hidden="true">*</span></span>

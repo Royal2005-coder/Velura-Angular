@@ -2175,6 +2175,83 @@
   color: var(--ink, #2a2522);
 }
 
+.article-voucher-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 28px;
+  padding: 18px 22px;
+  border: 1px solid #dccab8;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fdfaf6 0%, #f6ede2 100%);
+}
+
+.article-voucher-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.article-voucher-card__eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--terracotta, #b4654a);
+}
+
+.article-voucher-card__code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 1.25rem;
+  letter-spacing: 0.08em;
+  color: var(--ink, #2a2522);
+}
+
+.article-voucher-card__hint {
+  font-size: 0.84rem;
+  color: var(--muted, #6b635d);
+}
+
+.article-voucher-card__btn {
+  padding: 10px 18px;
+  border: 1px solid var(--ink, #2a2522);
+  border-radius: 999px;
+  background: var(--ink, #2a2522);
+  color: #fff;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.article-voucher-card__btn:hover {
+  opacity: 0.88;
+}
+
+.article-rich .velura-blog-product-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 20px 0;
+  padding: 18px 20px;
+  border: 1px solid var(--line, #e8dfd6);
+  border-left: 3px solid var(--terracotta, #c97b63);
+  border-radius: 12px;
+  background: #faf6f1;
+}
+
+.article-rich .velura-blog-product-card a {
+  font-weight: 600;
+  color: var(--terracotta, #b4654a);
+  text-decoration: none;
+}
+
+.article-rich .velura-blog-product-card a:hover {
+  text-decoration: underline;
+}
+
+
 .article-tags {
   display: flex;
   flex-wrap: wrap;

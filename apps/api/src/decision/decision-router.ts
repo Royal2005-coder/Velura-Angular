@@ -11,7 +11,7 @@
 import { createHash } from "node:crypto";
 import { config } from "../config.js";
 import { HttpError, readJson, sendJson } from "../http.js";
-import { requireAdmin } from "../rbac.js";
+import { hasCapability, requireAdmin, requirePermission } from "../rbac.js";
 import { fetchSafeMediaBytes } from "../security/safe-media-fetch.js";
 import { insertRow, selectRows, updateRows } from "../supabase.js";
 import { asJsonObject, asNumber, asString, type AuthContext, type JsonObject, type RouteArgs } from "../types.js";
@@ -63,6 +63,14 @@ export async function handleDecisionAdminRoute({
   }
 
   if (req.method === "POST" && parts[4] === "cskh-route" && parts.length === 5) {
+    const authCtx = context as AuthContext;
+    if (
+      !hasCapability(authCtx, "reviews", "read") &&
+      !hasCapability(authCtx, "support_tickets", "read") &&
+      !hasCapability(authCtx, "returns", "read")
+    ) {
+      throw new HttpError(403, "RBAC_DENIED", "Insufficient permissions for CSKH AI Decision routing");
+    }
     const body = await readJson(req, config.maxBodyBytes);
     const message = asString(body.message).trim();
     if (!message && body.rating == null) {
@@ -88,6 +96,7 @@ export async function handleDecisionAdminRoute({
   }
 
   if (req.method === "POST" && parts[4] === "product-qa" && parts.length === 5) {
+    requirePermission(context as AuthContext, "products", "update");
     const body = await readJson(req, config.maxBodyBytes);
     const { bytes, mime, imageUrl } = await decodeAdminImagePayload(body);
     const productId = asString(body.productId).trim() || undefined;
@@ -114,35 +123,40 @@ export async function handleDecisionAdminRoute({
   }
 
   if (req.method === "POST" && parts[4] === "blog-curate" && parts.length === 5) {
+    const authCtx = context as AuthContext;
+    if (!hasCapability(authCtx, "content", "update") && !hasCapability(authCtx, "promotions", "update")) {
+      throw new HttpError(403, "RBAC_DENIED", "Insufficient permissions for AI Blog SKU curation");
+    }
     const body = await readJson(req, config.maxBodyBytes);
     const campaignGoal = asString(body.campaignGoal).trim() || undefined;
     const items = Array.isArray(body.products) ? body.products : [];
     if (!items.length || items.length > 30) {
       throw new HttpError(422, "VALIDATION_ERROR", "Gửi từ 1 đến 30 sản phẩm cần chấm điểm tuyển chọn Blog.");
     }
-    const results = [];
-    for (const raw of items) {
+    const normalizedBatch = items.map((raw) => {
       const p = asJsonObject(raw);
       const verdictRaw = asString(p.imageQaVerdict) as ImageQaVerdict;
       const verdict: ImageQaVerdict = ["APPROVED_HERO", "APPROVED_STANDARD", "NEEDS_EDIT", "REJECTED"].includes(verdictRaw)
         ? verdictRaw
         : "APPROVED_STANDARD";
-      results.push(
-        await service.decideAutoBlogProductCuration({
-          productId: asString(p.productId) || "unknown",
-          name: asString(p.name) || "Sản phẩm Velura",
-          availableStock: Math.max(0, asNumber(p.availableStock) || 0),
-          basePrice: Math.max(0, asNumber(p.basePrice) || 0),
-          salePrice: p.salePrice == null ? null : Math.max(0, asNumber(p.salePrice)),
-          imageQaVerdict: verdict,
-          imageQaScore: Math.max(1, Math.min(5, Number(p.imageQaScore) || 4.0)),
-          ratingAvg: p.ratingAvg == null ? undefined : Number(p.ratingAvg),
-          reviewCount: p.reviewCount == null ? undefined : Number(p.reviewCount),
-          campaignGoal,
-          actorId,
-        }),
-      );
-    }
+      return {
+        productId: asString(p.productId) || "unknown",
+        name: asString(p.name) || "Sản phẩm Velura",
+        availableStock: Math.max(0, asNumber(p.availableStock) || 0),
+        basePrice: Math.max(0, asNumber(p.basePrice) || 0),
+        salePrice: p.salePrice == null ? null : Math.max(0, asNumber(p.salePrice)),
+        imageQaVerdict: verdict,
+        imageQaScore: Math.max(1, Math.min(5, Number(p.imageQaScore) || 4.0)),
+        ratingAvg: p.ratingAvg == null ? undefined : Number(p.ratingAvg),
+        reviewCount: p.reviewCount == null ? undefined : Number(p.reviewCount),
+        campaignGoal,
+        actorId,
+      };
+    });
+    const results =
+      typeof service.decideAutoBlogProductCurationBatch === "function"
+        ? await service.decideAutoBlogProductCurationBatch(normalizedBatch)
+        : await Promise.all(normalizedBatch.map((entry) => service.decideAutoBlogProductCuration(entry)));
     sendJson(res, 200, { results }, headers);
     return true;
   }

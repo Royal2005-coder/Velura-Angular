@@ -12,18 +12,18 @@
   </div>
 </app-erp-page-header>
 
-<section class="logs-kpis" aria-label="Tóm tắt nhật ký">
-  <app-erp-kpi-card label="Bản ghi khớp" [value]="num(total())" hint="Theo bộ lọc hiện tại" tone="accent" icon="log" [loading]="loading() && !hasLoadedOnce()" />
+<section class="erp-kpi-grid logs-kpis" aria-label="Tóm tắt nhật ký">
+  <app-erp-kpi-card label="Bản ghi khớp" [value]="num(total())" hint="Theo bộ lọc hiện tại" tone="accent" icon="activity" [loading]="loading() && !hasLoadedOnce()" />
   <app-erp-kpi-card label="Trang này" [value]="num(rows().length)" hint="Số dòng đang hiển thị" icon="eye" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Thất bại" [value]="num(failureCount())" hint="Trong trang hiện tại" tone="danger" icon="alert" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Bị chặn" [value]="num(blockedCount())" hint="Trong trang hiện tại" tone="warning" icon="lock" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Bảo mật" [value]="num(securityCount())" hint="Auth / role / permission" tone="info" icon="users" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Thất bại" [value]="num(failureCount())" hint="Trong trang hiện tại" tone="danger" icon="x-circle" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Bị chặn" [value]="num(blockedCount())" hint="Trong trang hiện tại" tone="warning" icon="ban" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Bảo mật" [value]="num(securityCount())" hint="Auth / role / permission" tone="info" icon="shield-check" [loading]="loading() && !hasLoadedOnce()" />
 </section>
 
 <section class="erp-card logs-panel" aria-labelledby="logs-title">
-  <div class="logs-tabs">
-    <div>
-      <span class="logs-eyebrow">Audit trail</span>
+  <div class="erp-panel-head logs-tabs">
+    <div class="erp-panel-head__title">
+      <span class="erp-panel-head__icon" aria-hidden="true"><app-erp-icon name="activity" [size]="'16'" /></span>
       <h2 id="logs-title">Sự kiện hệ thống</h2>
     </div>
     <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />

@@ -1,40 +1,46 @@
-/* Velura ERP — Feminine Luxury Design System Tokens + Shared Primitives
-   Aligned strictly with docs/ADMIN-DESIGN-SYSTEM.md (Burgundy 700 / Blush Pink / Warm Canvas).
-   App-level tokens only; feature styling stays in component styles. */
+/* Velura ERP — Feminine Luxury SaaS Design System Tokens + Shared Primitives
+   Aligned strictly with docs/ADMIN-DESIGN-SYSTEM.md (ngx-admin × SaaS Operate Standard).
+   App-level tokens & layout primitives; feature styling stays in component styles. */
 
 :root {
-  /* Brand / Luxury Velvet Rose & Modern Bright Palette (Shadcn Dashboard & Stageshow Standard) */
-  --erp-bg: #F8FAFC;                  /* Slate 50: Modern crisp, bright, luminous canvas */
+  /* Brand / Luxury Velvet Rose & Modern Bright Palette */
+  --erp-bg: #F8FAFC;                  /* Slate 50: Crisp luminous SaaS canvas */
   --erp-surface: #FFFFFF;             /* Pure Surface */
   --erp-surface-muted: #F1F5F9;       /* Slate 100: Soft container */
   --erp-surface-selected: #FFE4E6;    /* Rose 100: Selected container */
   --erp-line: #E2E8F0;                /* Slate 200: Crisp 1px structural border */
+  --erp-border: #E2E8F0;              /* Legacy alias -> --erp-line */
   --erp-line-strong: #CBD5E1;         /* Slate 300: Active / hover border */
   --erp-line-subtle: #F1F5F9;         /* Slate 100: Subtle inner divider */
   --erp-ink: #0F172A;                 /* Slate 900: Primary authoritative ink */
   --erp-text: #0F172A;                /* Slate 900: Primary text */
   --erp-muted: #64748B;               /* Slate 500: Secondary text */
+  --erp-text-muted: #64748B;          /* Legacy alias -> --erp-muted */
   --erp-soft: #94A3B8;                /* Slate 400: Muted caption */
-  --erp-accent: #BE185D;              /* Luxury Rose (Pink 700): Sophisticated feminine brand accent */
+  --erp-accent: #BE185D;              /* Luxury Rose (Pink 700): Primary brand accent */
   --erp-accent-strong: #9D174D;       /* Deep Rose (Hover/Pressed) */
+  --erp-accent-text: #9D174D;         /* Accessible rose text on light tint */
   --erp-accent-soft: #FFF1F3;         /* Rose 50: Soft blush tint */
   --erp-accent-border: #FECDD3;       /* Rose 200: Soft rose border */
-  --erp-sidebar: #FFFFFF;             /* Modern Crisp Light Sidebar (Shadcn Dashboard Inspired) */
+  --erp-sidebar: #FFFFFF;             /* Modern Crisp Light Sidebar */
   --erp-sidebar-raised: #F8FAFC;      /* Raised sidebar container */
   --erp-sidebar-text: #334155;        /* Slate 700: High-contrast legible nav text */
   --erp-sidebar-muted: #94A3B8;       /* Slate 400: Group headers & badges */
   --erp-sidebar-active: #BE185D;      /* Luxury Rose active item text */
   --erp-sidebar-active-bg: #FFE4E6;   /* Rose 100 active pill background */
+  --erp-sidebar-accent: #9D174D;      /* Sidebar eyebrow / accent label */
   --erp-sidebar-border: #E2E8F0;      /* Slate 200: Crisp 1px right border */
 
-  /* Semantic Status Tokens (Clean, legible modern pastels) */
+  /* Semantic Status Tokens */
   --erp-success: #059669;             /* Emerald 600 */
   --erp-success-soft: #ECFDF5;        /* Emerald 50 surface */
   --erp-success-line: #A7F3D0;        /* Emerald 200 border */
-  --erp-warning: #D97706;             /* Amber 600 */
+  --erp-warning: #B45309;             /* Amber 700 (>= 4.5:1 text contrast on Amber 50) */
+  --erp-warning-text: #B45309;        /* Accessible warning text alias */
   --erp-warning-soft: #FFFBEB;        /* Amber 50 surface */
   --erp-warning-line: #FDE68A;        /* Amber 200 border */
   --erp-danger: #E11D48;              /* Rose 600 */
+  --erp-danger-text: #BE123C;         /* Rose 700 (>= 5.8:1 text contrast on Rose 50) */
   --erp-danger-soft: #FFF1F2;         /* Rose 50 surface */
   --erp-danger-line: #FECDD3;         /* Rose 200 border */
   --erp-rose: #E11D48;                /* Focus / alert accent alias */
@@ -46,9 +52,10 @@
 
   /* WCAG 2.1 SC 1.4.11 Form Control Borders (>= 3.0:1 against #FFFFFF & #F8FAFC) */
   --erp-control-border: #8492A6;      /* 3.16:1 on #FFF, 3.02:1 on #F8FAFC */
+  --erp-input-border: #8492A6;        /* Alias for auth/form controls */
   --erp-control-border-hover: #64748B;/* 4.76:1 hover state */
 
-  /* Radii & Elevations (Clean, restrained, diffused shadows per ngx-admin/craft) */
+  /* Radii & Elevations */
   --erp-radius-sm: 6px;               /* badge, tag, icon */
   --erp-radius-md: 8px;               /* button, input, dropdown */
   --erp-radius-lg: 12px;              /* card, table panel */
@@ -56,9 +63,10 @@
   --erp-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
   --erp-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.05);
   --erp-shadow-modal: 0 20px 40px rgba(15, 23, 42, 0.12);
-  --erp-sidebar-w: 250px;
+  --erp-sidebar-w: 256px;
   --erp-topbar-h: 56px;
   --erp-font: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --erp-font-ui: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --erp-display: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --erp-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --erp-brand: 'Cormorant Garamond', Georgia, serif;
@@ -85,7 +93,28 @@ body {
   font-family: var(--erp-font);
   font-size: 14px;
   line-height: 1.5;
+  caret-color: var(--erp-accent);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Themed subtle scrollbars across drawers, tables & panels */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+*::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #CBD5E1;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #94A3B8;
 }
 
 button,
@@ -99,6 +128,7 @@ textarea {
 a {
   color: inherit;
   text-decoration: none;
+  text-underline-offset: 3px;
 }
 
 h1,
@@ -115,7 +145,8 @@ p {
 }
 
 ::selection {
-  background: var(--erp-accent-soft);
+  background: var(--erp-surface-selected);
+  color: var(--erp-ink);
 }
 
 .erp-sr-only {
@@ -135,21 +166,69 @@ p {
   border: 1px solid var(--erp-line);
   border-radius: var(--erp-radius-lg);
   box-shadow: var(--erp-shadow-sm);
+  min-width: 0;
   transition: box-shadow 160ms ease, border-color 160ms ease;
 }
 
-.erp-card:hover {
-  border-color: var(--erp-line-strong);
-  box-shadow: var(--erp-shadow-md);
+/* Anti-Overflow Responsive SaaS KPI Grid (adapts cleanly from 6-col desktop to 1-col mobile) */
+.erp-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+  min-width: 0;
+}
+
+/* Standardized SaaS Workspace Panel Header (replaces mixed English/VN eyebrows) */
+.erp-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--erp-line);
+  background: var(--erp-surface);
+  min-width: 0;
+}
+
+.erp-panel-head__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.erp-panel-head__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--erp-accent-soft);
+  border: 1px solid var(--erp-accent-border);
+  color: var(--erp-accent);
+}
+
+.erp-panel-head__title h2 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--erp-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .erp-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 7px;
   min-height: 38px;
-  padding: 0 16px;
+  padding: 0 15px;
   border: 1px solid var(--erp-line-strong);
   border-radius: var(--erp-radius-md);
   background: var(--erp-surface);
@@ -294,8 +373,9 @@ p {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
   border: 1px solid var(--erp-line);
   border-radius: var(--erp-radius-md);
   background: var(--erp-surface);
@@ -304,15 +384,44 @@ p {
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.erp-icon-btn:hover {
+.erp-icon-btn:hover:not(:disabled) {
   background: var(--erp-surface-muted);
   border-color: var(--erp-line-strong);
+  color: var(--erp-accent);
+}
+
+.erp-icon-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+/* Inline 1-click Copy Button for IDs, codes, phones & emails */
+.erp-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--erp-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.erp-copy-btn:hover {
+  background: var(--erp-accent-soft);
+  border-color: var(--erp-accent-border);
   color: var(--erp-accent);
 }
 
 .erp-field {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .erp-field > label,
@@ -320,6 +429,38 @@ p {
   font-size: 12px;
   font-weight: 600;
   color: var(--erp-muted);
+}
+
+/* Password field with inline eye toggle */
+.erp-secret-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.erp-secret-wrap .erp-input {
+  padding-right: 40px;
+}
+
+.erp-secret-toggle {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--erp-radius-sm);
+  background: transparent;
+  color: var(--erp-muted);
+  cursor: pointer;
+}
+
+.erp-secret-toggle:hover {
+  background: var(--erp-surface-muted);
+  color: var(--erp-ink);
 }
 
 /* Angular Framework Form Validation Feedback */
@@ -344,6 +485,7 @@ p {
 .erp-select,
 .erp-textarea {
   width: 100%;
+  min-width: 0;
   min-height: 40px;
   padding: 8px 12px;
   border: 1px solid var(--erp-control-border);
@@ -406,7 +548,7 @@ p {
 
 .erp-skeleton {
   border-radius: var(--erp-radius-sm);
-  background: linear-gradient(90deg, #efe9e3 25%, #f8f5f2 37%, #efe9e3 63%);
+  background: linear-gradient(90deg, #e9eef5 25%, #f8fafc 37%, #e9eef5 63%);
   background-size: 400% 100%;
   animation: erp-shimmer 1.4s ease infinite;
 }
@@ -453,12 +595,12 @@ svg.admin-line-icon,
   display: block;
   fill: none !important;
   stroke: currentColor !important;
-  stroke-width: 1.8;
+  stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-/* Global Form Validation & Mandatory Red Asterisk (*) Styles (Angular Framework standards) */
+/* Global Form Validation & Mandatory Red Asterisk (*) Styles */
 .erp-required {
   color: var(--erp-danger, #b4233e);
   font-weight: 700;
@@ -468,7 +610,6 @@ svg.admin-line-icon,
   user-select: none;
 }
 
-/* Spinner dùng chung thay cho dòng chữ "Đang tải…"; nhãn chữ đi kèm vẫn giữ để đọc màn hình. */
 .erp-spinner {
   display: inline-block;
   flex: none;
@@ -511,7 +652,7 @@ svg.admin-line-icon,
   box-shadow: 0 0 0 1px var(--erp-danger, #b4233e) !important;
 }
 
-/* Global Filter Bar Search Field Responsive Width */
+/* Global Filter Bar Search Field Responsive Width (safe on 360px mobile) */
 .filter-bar__fields {
   .erp-field:has(input[type='search']),
   .erp-field:has(input[type='text']),
@@ -520,8 +661,8 @@ svg.admin-line-icon,
   .accounts-search,
   .content-search,
   .reviews-search {
-    flex: 1 1 360px !important;
-    min-width: 280px !important;
+    flex: 1 1 320px !important;
+    min-width: min(260px, 100%) !important;
   }
 }
 
@@ -580,5 +721,3 @@ svg.admin-line-icon,
   p { margin: 0; font-size: 11.5px; color: var(--erp-muted); line-height: 1.45; }
   &__kw { font-size: 11px; color: var(--erp-muted); }
 }
-
-

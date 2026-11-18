@@ -199,18 +199,25 @@ export class AdminErpProductsPage {
     {
       key: 'product',
       label: 'Sản phẩm',
-      width: '30%',
+      icon: 'box',
+      truncate: '270px',
       image: (row) => primaryImage(row as AdminProductRow),
-      value: (row) => {
-        const product = row as AdminProductRow;
-        return product.name;
-      },
+      value: (row) => (row as AdminProductRow).name,
+      subtext: (row) => (row as AdminProductRow).brand || '',
     },
-    { key: 'sku', label: 'SKU', value: (row) => (row as AdminProductRow).sku || '—', mono: true },
-    { key: 'category', label: 'Danh mục', value: (row) => this.categoryName(row as AdminProductRow) },
+    {
+      key: 'sku',
+      label: 'SKU',
+      icon: 'hash',
+      value: (row) => (row as AdminProductRow).sku || '—',
+      copyValue: (row) => (row as AdminProductRow).sku || '',
+      mono: true,
+    },
+    { key: 'category', label: 'Danh mục', icon: 'layers', value: (row) => this.categoryName(row as AdminProductRow) },
     {
       key: 'price',
       label: 'Giá bán',
+      icon: 'coins',
       align: 'right',
       mono: true,
       value: (row) => this.money(salePrice(row as AdminProductRow)),
@@ -218,10 +225,11 @@ export class AdminErpProductsPage {
     {
       key: 'stock',
       label: 'Tồn kho',
+      icon: 'trending-down',
       align: 'right',
       mono: true,
       value: (row) => String(variantStockTotal((row as AdminProductRow).variants)),
-      badge: (row) => {
+      secondaryBadge: (row) => {
         const low = lowStockVariants((row as AdminProductRow).variants).length;
         return low > 0 ? { label: `Sắp hết · ${low}`, tone: 'warning' as const } : null;
       },
@@ -229,6 +237,7 @@ export class AdminErpProductsPage {
     {
       key: 'status',
       label: 'Trạng thái',
+      icon: 'activity',
       value: (row) => productStatusLabel((row as AdminProductRow).status),
       badge: (row) => ({
         label: productStatusLabel((row as AdminProductRow).status),
@@ -237,7 +246,7 @@ export class AdminErpProductsPage {
     },
     {
       key: 'flags',
-      label: 'Cờ',
+      label: 'Phân loại',
       value: (row) => {
         const product = row as AdminProductRow;
         return [product.is_combo ? 'Combo' : '', product.is_featured ? 'Nổi bật' : '']
@@ -245,7 +254,7 @@ export class AdminErpProductsPage {
           .join(' · ') || '—';
       },
     },
-    { key: 'updated', label: 'Cập nhật', value: (row) => this.date((row as AdminProductRow).updated_at) },
+    { key: 'updated', label: 'Cập nhật', icon: 'calendar', mono: true, value: (row) => this.date((row as AdminProductRow).updated_at) },
   ]);
 
   readonly lowStockColumns = computed<readonly AdminTableColumn[]>(() => [

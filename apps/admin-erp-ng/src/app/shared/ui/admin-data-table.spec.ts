@@ -99,4 +99,42 @@ describe('AdminErpDataTable', () => {
     expect(host.querySelector('.table-busy')?.textContent).toContain('Đang tải');
     expect(host.querySelector('.table-shell')?.getAttribute('aria-busy')).toBe('true');
   });
+
+  it('renders rich subtext, dual value + secondaryBadge, and copies identifiers without opening the row', async () => {
+    const fixture = await boot();
+    const selected = vi.fn();
+    fixture.componentInstance.rowSelected.subscribe(selected);
+    const richCols: readonly AdminTableColumn[] = [
+      {
+        key: 'code',
+        label: 'Mã đơn',
+        icon: 'hash',
+        value: (row) => (row as { code: string }).code,
+        subtext: (row) => (row as { phone: string }).phone,
+        copyValue: (row) => (row as { code: string }).code,
+      },
+      {
+        key: 'stock',
+        label: 'Tồn kho',
+        value: (row) => String((row as { stock: number }).stock),
+        secondaryBadge: () => ({ label: 'Sắp hết · 2', tone: 'warning' }),
+      },
+    ];
+    fixture.componentRef.setInput('columns', richCols);
+    fixture.componentRef.setInput('rows', [{ code: 'ORD-901', phone: '0909123456', stock: 14 }]);
+    fixture.componentRef.setInput('clickable', true);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.textContent).toContain('ORD-901');
+    expect(host.textContent).toContain('0909123456');
+    expect(host.textContent).toContain('14');
+    expect(host.textContent).toContain('Sắp hết · 2');
+
+    const copyBtn = host.querySelector<HTMLButtonElement>('.erp-copy-btn');
+    expect(copyBtn).not.toBeNull();
+    copyBtn!.click();
+    fixture.detectChanges();
+    expect(selected).not.toHaveBeenCalled();
+  });
 });

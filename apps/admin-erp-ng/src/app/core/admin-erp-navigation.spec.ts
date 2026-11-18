@@ -1,15 +1,28 @@
 import {
   ADMIN_ERP_NAV_GROUPS,
   ADMIN_ERP_NAV_ITEMS,
+  ADMIN_ERP_QUICK_ACTIONS,
   adminErpNavItemForPage,
   adminErpNavLink,
   adminErpNavMatchesSearch,
+  adminErpQuickActionMatchesSearch,
 } from './admin-erp-navigation';
 
 describe('ERP admin navigation registry', () => {
-  it('declares every workspace exactly once', () => {
-    const keys = Object.values(ADMIN_ERP_NAV_ITEMS).map((item) => item.key);
+  it('declares every workspace with a distinct key and distinct topic icon', () => {
+    const items = Object.values(ADMIN_ERP_NAV_ITEMS);
+    const keys = items.map((item) => item.key);
+    const icons = items.map((item) => item.icon);
     expect(new Set(keys).size).toBe(keys.length);
+    expect(new Set(icons).size).toBe(icons.length);
+  });
+
+  it('matches deep quick-actions in the command palette without Vietnamese diacritics', () => {
+    const bannerAction = ADMIN_ERP_QUICK_ACTIONS.find((a) => a.id === 'content-banners')!;
+    const lowStockAction = ADMIN_ERP_QUICK_ACTIONS.find((a) => a.id === 'products-stock')!;
+    expect(adminErpQuickActionMatchesSearch(bannerAction, 'banner san pham')).toBe(true);
+    expect(adminErpQuickActionMatchesSearch(lowStockAction, 'sap het hang')).toBe(true);
+    expect(adminErpNavLink(bannerAction)).toBe('/content?tab=banners');
   });
 
   it('keeps every group item resolvable', () => {

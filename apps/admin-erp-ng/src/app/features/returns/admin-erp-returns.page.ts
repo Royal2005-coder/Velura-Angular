@@ -286,31 +286,41 @@ export class AdminErpReturnsPage {
   readonly columns = computed<readonly AdminTableColumn[]>(() => [
     {
       key: 'return',
-      label: 'Phiếu',
-      width: '95px',
-      value: (row) => (row as AdminReturnRow).return_id.slice(0, 8),
+      label: 'Mã phiếu',
+      icon: 'hash',
+      minWidth: '105px',
+      value: (row) => (row as AdminReturnRow).return_code || (row as AdminReturnRow).return_id.slice(0, 8),
+      copyValue: (row) => (row as AdminReturnRow).return_code || (row as AdminReturnRow).return_id,
       mono: true,
     },
     {
       key: 'order',
       label: 'Đơn hàng',
-      width: '130px',
+      icon: 'shopping-bag',
+      minWidth: '130px',
+      mono: true,
       value: (row) => (row as AdminReturnRow).order_code || (row as AdminReturnRow).order_id?.slice(0, 8) || '—',
+      copyValue: (row) => (row as AdminReturnRow).order_code || (row as AdminReturnRow).order_id || '',
     },
     {
       key: 'customer',
-      label: 'Khách',
-      width: '180px',
-      truncate: '180px',
+      label: 'Khách hàng',
+      icon: 'user',
+      truncate: '200px',
       value: (row) => {
         const record = row as AdminReturnRow;
-        return [record.customer_name, record.customer_phone].filter(Boolean).join(' · ') || '—';
+        return record.customer_name || record.customer_phone || '—';
       },
+      subtext: (row) => {
+        const record = row as AdminReturnRow;
+        return record.customer_name && record.customer_phone ? String(record.customer_phone) : '';
+      },
+      copyValue: (row) => String((row as AdminReturnRow).customer_phone || ''),
     },
     {
       key: 'type',
       label: 'Yêu cầu',
-      width: '110px',
+      icon: 'return',
       value: (row) => typeLabel((row as AdminReturnRow).return_type),
       badge: (row) => {
         const record = row as AdminReturnRow;
@@ -322,13 +332,17 @@ export class AdminErpReturnsPage {
     {
       key: 'channel',
       label: 'Kênh tiền',
-      width: '95px',
+      icon: 'credit-card',
       value: (row) => paymentKindLabel((row as AdminReturnRow).payment_kind),
+      cellIcon: (row) =>
+        String((row as AdminReturnRow).payment_kind || '').toLowerCase() === 'cod'
+          ? { name: 'truck', tone: 'neutral' }
+          : { name: 'credit-card', tone: 'info' },
     },
     {
       key: 'amount',
       label: 'Hoàn',
-      width: '105px',
+      icon: 'coins',
       align: 'right',
       mono: true,
       value: (row) => this.money((row as AdminReturnRow).refund_amount),
@@ -336,61 +350,61 @@ export class AdminErpReturnsPage {
     {
       key: 'status',
       label: 'Trạng thái',
-      width: '240px',
-      truncate: '240px',
+      icon: 'activity',
       value: (row) => returnStatusLabel((row as AdminReturnRow).status),
       badge: (row) => ({
         label: returnStatusLabel((row as AdminReturnRow).status),
         tone: returnStatusTone((row as AdminReturnRow).status),
       }),
     },
-    { key: 'created', label: 'Tạo lúc', width: '140px', value: (row) => this.date((row as AdminReturnRow).created_at) },
+    { key: 'created', label: 'Tạo lúc', icon: 'calendar', mono: true, value: (row) => this.date((row as AdminReturnRow).created_at) },
   ]);
 
   readonly ticketColumns = computed<readonly AdminTableColumn[]>(() => [
     {
       key: 'ticket',
       label: 'Phiếu',
-      width: '110px',
+      icon: 'support',
+      truncate: '200px',
       value: (row) => (row as AdminTicketRow).title || (row as AdminTicketRow).ticket_id.slice(0, 8),
+      copyValue: (row) => (row as AdminTicketRow).ticket_id,
     },
     {
       key: 'channel',
       label: 'Kênh',
-      width: '95px',
+      icon: 'chat',
       value: (row) => ((row as AdminTicketRow).chat_session_id ? 'Chat' : 'Trực tiếp'),
       badge: (row) =>
         (row as AdminTicketRow).chat_session_id
           ? { label: 'Chat', tone: 'info' as const }
           : { label: 'Trực tiếp', tone: 'neutral' as const },
     },
-    { key: 'contact', label: 'Khách', width: '190px', truncate: '190px', value: (row) => this.ticketContact(row as AdminTicketRow) },
+    { key: 'contact', label: 'Khách', icon: 'user', truncate: '190px', value: (row) => this.ticketContact(row as AdminTicketRow) },
     {
       key: 'priority',
       label: 'Ưu tiên',
-      width: '110px',
       value: (row) => TICKET_PRIORITY_LABELS[(row as AdminTicketRow).priority || ''] || (row as AdminTicketRow).priority || '—',
     },
     {
       key: 'status',
       label: 'Trạng thái',
-      width: '160px',
+      icon: 'activity',
       value: (row) => TICKET_STATUS_LABELS[(row as AdminTicketRow).status || ''] || (row as AdminTicketRow).status || '—',
       badge: (row) => ({
         label: TICKET_STATUS_LABELS[(row as AdminTicketRow).status || ''] || String((row as AdminTicketRow).status || '—'),
         tone: ticketStatusTone((row as AdminTicketRow).status),
       }),
     },
-    { key: 'reply', label: 'Phản hồi cuối', width: '220px', truncate: '220px', value: (row) => (row as AdminTicketRow).admin_reply || '—' },
-    { key: 'created', label: 'Tạo lúc', width: '135px', value: (row) => this.date((row as AdminTicketRow).created_at) },
+    { key: 'reply', label: 'Phản hồi cuối', truncate: '220px', value: (row) => (row as AdminTicketRow).admin_reply || '—' },
+    { key: 'created', label: 'Tạo lúc', icon: 'calendar', mono: true, value: (row) => this.date((row as AdminTicketRow).created_at) },
   ]);
 
   readonly logColumns = computed<readonly AdminTableColumn[]>(() => [
-    { key: 'time', label: 'Thời gian', value: (row) => this.date((row as AdminAuditRow).timestamp) },
-    { key: 'actor', label: 'Người thao tác', value: (row) => actor(row as AdminAuditRow) },
-    { key: 'action', label: 'Hành động', value: (row) => (row as AdminAuditRow).action_label || (row as AdminAuditRow).action || '—' },
-    { key: 'target', label: 'Phiếu', value: (row) => (row as AdminAuditRow).target_label || (row as AdminAuditRow).target_id || '—' },
-    { key: 'change', label: 'Thay đổi', width: '28%', value: (row) => (row as AdminAuditRow).change_summary || '—' },
+    { key: 'time', label: 'Thời gian', icon: 'clock', mono: true, value: (row) => this.date((row as AdminAuditRow).timestamp) },
+    { key: 'actor', label: 'Người thao tác', icon: 'user', value: (row) => actor(row as AdminAuditRow) },
+    { key: 'action', label: 'Hành động', icon: 'activity', value: (row) => (row as AdminAuditRow).action_label || (row as AdminAuditRow).action || '—' },
+    { key: 'target', label: 'Phiếu', icon: 'hash', truncate: '180px', value: (row) => (row as AdminAuditRow).target_label || (row as AdminAuditRow).target_id || '—' },
+    { key: 'change', label: 'Thay đổi', truncate: '260px', value: (row) => (row as AdminAuditRow).change_summary || '—' },
     {
       key: 'result',
       label: 'Kết quả',

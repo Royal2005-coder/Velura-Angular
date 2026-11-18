@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ADMIN_ERP_ICON_SPRITE } from './ui/admin-erp-icon';
 
 @Component({
   selector: 'app-admin-icon',
@@ -35,5 +36,5 @@ export class AdminIcon {
   readonly name = input.required<string>();
   readonly cssClass = input('admin-line-icon');
 
-  readonly href = computed(() => `/admin-assets/icons/admin-icons.svg#${this.name()}`);
+  readonly href = computed(() => `${ADMIN_ERP_ICON_SPRITE}#${this.name()}`);
 }

@@ -64,6 +64,17 @@ export async function handleReturnRoute({ req, res, url, parts, context, headers
       return true;
     }
 
+    if (req.method === "GET" && parts[5] === "ai-box-forensics" && parts.length === 6) {
+      sendJson(res, 200, await service.listBoxForensics(context, returnId), headers);
+      return true;
+    }
+
+    if (req.method === "POST" && parts[5] === "ai-box-forensics" && parts.length === 6) {
+      const body = await readJson(req, config.maxBodyBytes);
+      sendJson(res, 200, await service.analyzeBoxForensics(context, returnId, body), headers);
+      return true;
+    }
+
     if (req.method === "POST" && parts[5] === "trigger-stripe-refund" && parts.length === 6) {
       const body = await readJson(req, config.maxBodyBytes);
       sendJson(res, 200, await service.triggerStripeRefund(context, returnId, body), headers);

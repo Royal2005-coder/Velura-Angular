@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { config } from "./config.js";
 import { HttpError, sendJson } from "./http.js";
 import { readAiGatewayMetrics } from "./gemini-client.js";
+import { readDecisionEngineMetrics } from "./decision/gemini-decision-client.js";
 import { renderAuditMetrics } from "./audit-metrics.js";
 import { refreshLedgerMetrics, renderPaymentMetrics } from "./payments/payment-metrics.js";
 import type { HeaderMap } from "./types.js";
@@ -78,6 +79,16 @@ export function runtimeMetrics(): string {
     for (const [name, count] of [["requests", value.requests], ["failures", value.failures], ["retries", value.retries], ["input_tokens", value.promptTokens], ["output_tokens", value.completionTokens], ["usage_measurements", value.usageMeasurements], ["cost_measurements", value.costMeasurements]] as const) lines.push(`velura_ai_${name}_total{${labels}} ${count}`);
     lines.push(`velura_ai_duration_seconds_sum{${labels}} ${value.latencyMs / 1000}`);
     if (value.costMeasurements) lines.push(`velura_ai_cost_usd_total{${labels}} ${value.costUsd}`);
+  }
+  for (const decision of readDecisionEngineMetrics()) {
+    const labels = `use_case="${decision.useCase}"`;
+    lines.push(`velura_ai_decision_requests_total{${labels}} ${decision.requests}`);
+    lines.push(`velura_ai_decision_failures_total{${labels}} ${decision.failures}`);
+    lines.push(`velura_ai_decision_fallback_key_total{${labels}} ${decision.fallbackKeyCount}`);
+    lines.push(`velura_ai_decision_structured_fallback_total{${labels}} ${decision.structuredFallbackCount}`);
+    lines.push(`velura_ai_decision_human_review_total{${labels}} ${decision.humanReviewCount}`);
+    lines.push(`velura_ai_decision_input_tokens_total{${labels}} ${decision.inputTokens}`);
+    lines.push(`velura_ai_decision_duration_seconds_sum{${labels}} ${decision.latencyMs / 1000}`);
   }
   lines.push(...renderAuditMetrics());
   lines.push(...renderPaymentMetrics());

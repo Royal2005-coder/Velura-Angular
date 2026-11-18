@@ -4,10 +4,13 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, debounceTime, distinctUntilChanged, finalize, forkJoin, of, switchMap } from 'rxjs';
 import {
   AdminBannerRow,
+  AdminBlogDiscoverPayload,
   AdminBlogProduct,
   AdminBlogProductMatch,
   AdminBlogRow,
   AdminBlogSeoSuggestion,
+  AdminBlogTopicProposal,
+  AdminBlogWorkflowPayload,
   AdminCategoryRow,
   AdminCollectionRow,
   AdminContentCategory,
@@ -69,11 +72,11 @@ import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 import { AdminErpToastService } from '../../shared/ui/admin-toast';
 
-type ContentTab = 'all' | 'draft' | 'published' | 'archived' | 'banners' | 'collections' | 'subscribers';
+type ContentTab = 'all' | 'draft' | 'scheduled' | 'published' | 'archived' | 'banners' | 'collections' | 'subscribers';
 type EditorTab = 'content' | 'seo' | 'products';
 
 const EMPTY_BLOGS: AdminListPayload<AdminBlogRow> = { rows: [], count: 0 };
-const TABS: readonly ContentTab[] = ['all', 'draft', 'published', 'archived', 'banners', 'collections', 'subscribers'];
+const TABS: readonly ContentTab[] = ['all', 'draft', 'scheduled', 'published', 'archived', 'banners', 'collections', 'subscribers'];
 const EDITOR_TABS: readonly EditorTab[] = ['content', 'seo', 'products'];
 const COMBO_SELLABLE_STATUSES: Readonly<Record<string, true>> = { on_sale: true, out_of_stock: true };
 const CURRENT_RUNWAY_KEY = '__current__';
@@ -176,7 +179,39 @@ export class AdminErpContentPage {
   readonly loadError = signal<string | null>(null);
   readonly notice = signal<string | null>(null);
   readonly counts = signal({ draft: 0, published: 0, archived: 0, categories: 0, subscribers: 0 });
+  readonly scheduledCount = signal(0);
+  readonly schedulerRunning = signal(false);
   readonly subscriberRows = signal<SubscriberRow[]>([]);
+
+  /** End-to-End AI Blog & Promotion Campaign Wizard state (`gemini-decision-1` + Semantic RAG). */
+  readonly aiWizardOpen = signal(false);
+  readonly aiCampaignGoal = signal('');
+  readonly aiCampaignType = signal<'clearance' | 'collection_launch' | 'double_day_sale' | 'styling_guide' | 'personal_color'>('double_day_sale');
+  readonly aiDiscovering = signal(false);
+  readonly aiGeneratingWorkflow = signal(false);
+  readonly aiWizardError = signal<string | null>(null);
+  readonly aiTopics = signal<AdminBlogTopicProposal[]>([]);
+  readonly aiSelectedTopic = signal<AdminBlogTopicProposal | null>(null);
+  readonly aiPromotions = signal<AdminBlogDiscoverPayload['activePromotions']>([]);
+  readonly aiVouchers = signal<AdminBlogDiscoverPayload['activeVouchers']>([]);
+  readonly aiSelectedPromoId = signal('');
+  readonly aiSelectedVoucherCode = signal('');
+  readonly aiDiscountOnly = signal(false);
+  readonly aiHeroImagesOnly = signal(false);
+  readonly aiWorkflowGate = signal<AdminBlogWorkflowPayload['editorialGate'] | null>(null);
+  readonly aiPromoStartAt = signal<string | null>(null);
+  readonly copiedChannel = signal<string | null>(null);
+  readonly campaignPresets: ReadonlyArray<{
+    readonly code: 'clearance' | 'collection_launch' | 'double_day_sale' | 'styling_guide' | 'personal_color';
+    readonly label: string;
+    readonly defaultGoal: string;
+  }> = [
+    { code: 'double_day_sale', label: '⚡ Sale Ngày Đôi & Voucher', defaultGoal: 'Chiến dịch Flash Sale Ngày Đôi săn deal thời trang thiết kế kèm voucher giảm sâu' },
+    { code: 'clearance', label: '📦 Xả kho tồn cao thông minh', defaultGoal: 'Ưu đãi xả kho cuối mùa cho các thiết kế còn tồn kho cao, ảnh đẹp chuẩn studio' },
+    { code: 'collection_launch', label: '✨ Ra mắt Bộ sưu tập mới', defaultGoal: 'Ra mắt bộ sưu tập Quiet Luxury chất liệu lụa và linen cao cấp mùa mới' },
+    { code: 'personal_color', label: '🎨 Phối đồ Personal Color 4 mùa', defaultGoal: 'Bí quyết chọn bảng màu trang phục tôn da theo Personal Color Xuân Hạ Thu Đông' },
+    { code: 'styling_guide', label: '👗 Cẩm nang phối đồ công sở', defaultGoal: 'Gợi ý phối đồ thanh lịch đi làm và dạo phố chuẩn quý cô hiện đại' },
+  ];
   readonly categories = signal<AdminContentCategory[]>([]);
   readonly categoryError = signal<string | null>(null);
   /** Editor state: `null` đóng form; bản đang sửa giữ `editing` để biết version gửi lại. */
@@ -381,6 +416,7 @@ export class AdminErpContentPage {
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
     { key: 'all', label: 'Tất cả bài viết', count: this.allBlogsTotal() || this.total() },
     { key: 'draft', label: 'Bản nháp', count: this.counts().draft },
+    { key: 'scheduled', label: 'Hẹn giờ đăng', count: this.scheduledCount() },
     { key: 'published', label: 'Đã công bố', count: this.counts().published },
     { key: 'archived', label: 'Đã lưu trữ', count: this.counts().archived },
     { key: 'banners', label: 'Quản lý Banner', count: this.banners().length },
@@ -704,6 +740,7 @@ export class AdminErpContentPage {
             }),
           ),
       draft: this.api.listBlogs({ status: 'draft', limit: '1' }).pipe(catchError(() => of(EMPTY_BLOGS))),
+      scheduled: this.api.listBlogs({ status: 'scheduled', limit: '1' }).pipe(catchError(() => of(EMPTY_BLOGS))),
       published: this.api.listBlogs({ status: 'published', limit: '1' }).pipe(catchError(() => of(EMPTY_BLOGS))),
       archived: this.api.listBlogs({ status: 'archived', limit: '1' }).pipe(catchError(() => of(EMPTY_BLOGS))),
       subs: this.api.listSubscribers({ limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0, activeCount: 0, unsubscribedCount: 0 }))),
@@ -721,10 +758,15 @@ export class AdminErpContentPage {
       const draftCount = adminListCount(payload.draft);
       const publishedCount = adminListCount(payload.published);
       const archivedCount = adminListCount(payload.archived);
+      const schedRows = adminListRows(payload.scheduled);
+      const schedCount = schedRows.length && schedRows.every((r) => r.status !== 'scheduled')
+        ? 0
+        : adminListCount(payload.scheduled);
+      this.scheduledCount.set(schedCount);
       if (this.tab() === 'all' && !this.search().trim()) {
         this.allBlogsTotal.set(adminListCount(payload.list as AdminListPayload<AdminBlogRow>));
       } else {
-        this.allBlogsTotal.set(draftCount + publishedCount + archivedCount);
+        this.allBlogsTotal.set(draftCount + schedCount + publishedCount + archivedCount);
       }
       this.counts.update((current) => ({
         ...current,
@@ -1501,7 +1543,13 @@ export class AdminErpContentPage {
       author: blog.author || 'Velura Editorial',
       readMinutes: Number(blog.read_minutes ?? 5),
       isFeatured: Boolean(blog.is_featured),
+      scheduledAt: this.toLocalDateTimeInput(blog.scheduled_at),
+      promoId: blog.promo_id || '',
+      voucherCode: blog.voucher_code || '',
+      socialCaptions: blog.social_captions || null,
     });
+    this.aiWorkflowGate.set(null);
+    this.aiPromoStartAt.set(null);
     this.resetEditorState();
     this.dirty.set(false);
   }
@@ -1585,13 +1633,30 @@ export class AdminErpContentPage {
     this.aiProductError.set(null);
     this.aiProductReasoning.set(null);
     this.suggestedProducts.set([]);
+    this.aiWorkflowGate.set(null);
+    this.aiPromoStartAt.set(null);
   }
 
   /**
    * Edits one text field of the draft.
    */
   onField(
-    field: 'slug' | 'title' | 'categorySlug' | 'status' | 'excerpt' | 'imageUrl' | 'author' | 'metaTitle' | 'metaDescription' | 'canonicalUrl' | 'ogImageUrl' | 'tags',
+    field:
+      | 'slug'
+      | 'title'
+      | 'categorySlug'
+      | 'status'
+      | 'excerpt'
+      | 'imageUrl'
+      | 'author'
+      | 'metaTitle'
+      | 'metaDescription'
+      | 'canonicalUrl'
+      | 'ogImageUrl'
+      | 'tags'
+      | 'scheduledAt'
+      | 'promoId'
+      | 'voucherCode',
     event: Event,
   ): void {
     const value = (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
@@ -1600,12 +1665,279 @@ export class AdminErpContentPage {
     }
     this.draft.update((draft) => {
       if (!draft) return draft;
+      if (field === 'status' && value === 'scheduled' && !(draft.scheduledAt || '').trim()) {
+        const nextHour = new Date(Date.now() + 3600_000);
+        return { ...draft, status: value, scheduledAt: this.toLocalDateTimeInput(nextHour.toISOString()) };
+      }
       const next = { ...draft, [field]: value };
       if (field === 'title' && !this.editing() && !this.slugManuallyEdited()) {
         next.slug = blogSlugFromTitle(value);
       }
       return next;
     });
+  }
+
+  /**
+   * Opens the End-to-End AI Blog & Promotion Campaign Wizard modal (`gemini-decision-1` + Semantic Vector RAG).
+   */
+  openAiWizard(): void {
+    if (!this.canCreate()) return;
+    this.aiWizardOpen.set(true);
+    this.aiWizardError.set(null);
+    if (!this.aiCampaignGoal().trim()) {
+      this.aiCampaignGoal.set(this.campaignPresets[0].defaultGoal);
+    }
+    if (!this.aiTopics().length && !this.aiDiscovering()) {
+      this.discoverAiTopics();
+    }
+  }
+
+  closeAiWizard(): void {
+    if (this.aiGeneratingWorkflow()) return;
+    this.aiWizardOpen.set(false);
+    this.aiWizardError.set(null);
+  }
+
+  selectCampaignPreset(preset: {
+    readonly code: 'clearance' | 'collection_launch' | 'double_day_sale' | 'styling_guide' | 'personal_color';
+    readonly defaultGoal: string;
+  }): void {
+    this.aiCampaignType.set(preset.code);
+    this.aiCampaignGoal.set(preset.defaultGoal);
+  }
+
+  onAiGoalInput(event: Event): void {
+    this.aiCampaignGoal.set((event.target as HTMLInputElement | HTMLTextAreaElement).value);
+  }
+
+  onAiPromoSelect(event: Event): void {
+    this.aiSelectedPromoId.set((event.target as HTMLSelectElement).value);
+  }
+
+  onAiVoucherSelect(event: Event): void {
+    this.aiSelectedVoucherCode.set((event.target as HTMLSelectElement | HTMLInputElement).value);
+  }
+
+  onAiToggle(field: 'aiDiscountOnly' | 'aiHeroImagesOnly', event: Event): void {
+    this[field].set((event.target as HTMLInputElement).checked);
+  }
+
+  /**
+   * Calls `/ai-discover-topics` to propose 5 grounded SEO & campaign topics from real inventory + active promos.
+   */
+  discoverAiTopics(): void {
+    if (this.aiDiscovering()) return;
+    this.aiDiscovering.set(true);
+    this.aiWizardError.set(null);
+    this.api
+      .discoverBlogTopics({
+        campaignGoal: this.aiCampaignGoal().trim(),
+        campaignType: this.aiCampaignType(),
+      })
+      .subscribe({
+        next: (res) => {
+          this.aiDiscovering.set(false);
+          const topics = res.topics || [];
+          this.aiTopics.set(topics);
+          this.aiPromotions.set(res.activePromotions || []);
+          this.aiVouchers.set(res.activeVouchers || []);
+          if (topics.length) {
+            this.selectAiTopic(topics[0]);
+          }
+        },
+        error: (err: unknown) => {
+          this.aiDiscovering.set(false);
+          this.aiWizardError.set(adminErrorMessage(err, 'AI chưa khảo sát được chủ đề chiến dịch. Vui lòng thử lại.'));
+        },
+      });
+  }
+
+  selectAiTopic(topic: AdminBlogTopicProposal): void {
+    this.aiSelectedTopic.set(topic);
+    if (topic.matchedPromoId) {
+      this.aiSelectedPromoId.set(topic.matchedPromoId);
+    }
+    if (topic.matchedVoucherCode) {
+      this.aiSelectedVoucherCode.set(topic.matchedVoucherCode);
+    }
+  }
+
+  /**
+   * Runs the full End-to-End Blog + Semantic SKU + Multi-Channel Copy + `gemini-decision-1` Editorial Gate workflow
+   * and populates the reviewable Blog Editor draft.
+   */
+  runEndToEndBlogWorkflow(): void {
+    if (this.aiGeneratingWorkflow() || !this.canCreate()) return;
+    const chosen = this.aiSelectedTopic();
+    const goal = this.aiCampaignGoal().trim();
+    if (!chosen && goal.length < 4) {
+      this.aiWizardError.set('Chọn một chủ đề gợi ý hoặc nhập ý tưởng chiến dịch tối thiểu 4 ký tự.');
+      return;
+    }
+    this.aiGeneratingWorkflow.set(true);
+    this.aiWizardError.set(null);
+    this.api
+      .generateBlogWorkflow({
+        topic: chosen ? `${chosen.title} — ${chosen.angle}` : goal,
+        title: chosen?.title,
+        angle: chosen?.angle || goal,
+        primaryKeyword: chosen?.primaryKeyword,
+        secondaryKeywords: chosen?.secondaryKeywords,
+        categorySlug: chosen?.recommendedCategorySlug || this.categories()[0]?.slug || '',
+        promoId: this.aiSelectedPromoId() || chosen?.matchedPromoId || null,
+        voucherCode: this.aiSelectedVoucherCode().trim() || chosen?.matchedVoucherCode || null,
+        discountOnly: this.aiDiscountOnly(),
+        heroImagesOnly: this.aiHeroImagesOnly(),
+        limit: 6,
+      })
+      .subscribe({
+        next: (result) => {
+          this.aiGeneratingWorkflow.set(false);
+          this.aiWizardOpen.set(false);
+          this.editing.set(null);
+          this.conflict.set(false);
+          this.errors.set({});
+          this.cacheProducts(result.matchedProducts || []);
+          const fallbackCategory = this.categories().some((c) => c.slug === result.categorySlug)
+            ? result.categorySlug
+            : (this.categories()[0]?.slug || result.categorySlug);
+          const futurePromoSchedule =
+            result.promoStartAt && Date.parse(result.promoStartAt) > Date.now()
+              ? this.toLocalDateTimeInput(result.promoStartAt)
+              : '';
+          this.aiWorkflowGate.set(result.editorialGate);
+          this.aiPromoStartAt.set(result.promoStartAt || null);
+          this.draft.set({
+            ...emptyBlogDraft,
+            title: result.title,
+            slug: result.slug || blogSlugFromTitle(result.title),
+            categorySlug: fallbackCategory,
+            status: futurePromoSchedule ? 'scheduled' : result.recommendedStatus,
+            excerpt: result.excerpt,
+            content: result.contentPlain,
+            contentHtml: result.contentHtml,
+            metaTitle: result.metaTitle,
+            metaDescription: result.metaDescription,
+            tags: (result.tags || []).join(', '),
+            productIds: [...(result.productIds || [])],
+            readMinutes: result.readMinutes || 5,
+            isFeatured: result.editorialGate.passed,
+            scheduledAt: futurePromoSchedule,
+            promoId: result.promoId || '',
+            voucherCode: result.voucherCode || '',
+            socialCaptions: result.socialCaptions,
+          });
+          this.resetEditorState();
+          this.aiWorkflowGate.set(result.editorialGate);
+          this.aiPromoStartAt.set(result.promoStartAt || null);
+          this.suggestedProducts.set(result.matchedProducts || []);
+          this.aiProductReasoning.set(
+            `Gemini Decision 1 đã tuyển chọn ${result.matchedProducts.length} SKU thật trong kho (Zero SKU Hallucination ${(result.editorialGate.zeroHallucinationProb * 100).toFixed(0)}%).`,
+          );
+          this.dirty.set(true);
+          this.notice.set(
+            `AI đã khởi tạo bài viết "${result.title}" kèm ${result.productIds.length} sản phẩm khớp ngữ nghĩa và bộ caption Fanpage/Zalo/Instagram.`,
+          );
+        },
+        error: (err: unknown) => {
+          this.aiGeneratingWorkflow.set(false);
+          this.aiWizardError.set(adminErrorMessage(err, 'Chưa thể tạo bài viết tự động lúc này. Vui lòng thử lại.'));
+        },
+      });
+  }
+
+  /**
+   * Switches the current draft into `scheduled` mode and syncs `scheduledAt` with the selected Promotion's start time (or +1h).
+   */
+  enableSmartSchedule(): void {
+    const current = this.draft();
+    if (!current) return;
+    const promo = this.aiPromotions().find((p) => p.promo_id === current.promoId);
+    const targetIso =
+      (promo?.start_date && Date.parse(promo.start_date) > Date.now() ? promo.start_date : null) ||
+      (this.aiPromoStartAt() && Date.parse(this.aiPromoStartAt()!) > Date.now() ? this.aiPromoStartAt() : null) ||
+      new Date(Date.now() + 3600_000).toISOString();
+    this.draft.set({
+      ...current,
+      status: 'scheduled',
+      scheduledAt: current.scheduledAt?.trim() ? current.scheduledAt : this.toLocalDateTimeInput(targetIso),
+    });
+    this.clearError('scheduledAt');
+    this.markDirty();
+  }
+
+  syncScheduleWithPromo(): void {
+    const current = this.draft();
+    if (!current) return;
+    const promo = this.aiPromotions().find((p) => p.promo_id === current.promoId);
+    const iso = promo?.start_date || this.aiPromoStartAt();
+    if (!iso) return;
+    this.draft.set({
+      ...current,
+      status: 'scheduled',
+      scheduledAt: this.toLocalDateTimeInput(iso),
+    });
+    this.clearError('scheduledAt');
+    this.markDirty();
+  }
+
+  onSocialCaptionInput(channel: 'facebookPage' | 'zaloOa' | 'instagram', event: Event): void {
+    const value = (event.target as HTMLTextAreaElement).value;
+    this.draft.update((d) => {
+      if (!d) return d;
+      const base = d.socialCaptions || { facebookPage: '', zaloOa: '', instagram: '' };
+      return {
+        ...d,
+        socialCaptions: {
+          ...base,
+          [channel]: value,
+        },
+      };
+    });
+    this.markDirty();
+  }
+
+  copySocialCaption(channel: 'facebookPage' | 'zaloOa' | 'instagram'): void {
+    const text = this.draft()?.socialCaptions?.[channel] || '';
+    if (!text) return;
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(text);
+    }
+    this.copiedChannel.set(channel);
+    setTimeout(() => {
+      if (this.copiedChannel() === channel) this.copiedChannel.set(null);
+    }, 2000);
+  }
+
+  /**
+   * Runs one immediate idempotent scheduled-blog publish cycle on the backend.
+   */
+  runSchedulerNow(): void {
+    if (this.schedulerRunning() || !this.canUpdate()) return;
+    this.schedulerRunning.set(true);
+    this.api.triggerBlogScheduler().subscribe({
+      next: (res) => {
+        this.schedulerRunning.set(false);
+        this.notice.set(
+          res.publishedCount > 0
+            ? `Đã xuất bản tự động ${res.publishedCount} bài viết đến hạn${res.broadcastErrors ? ` (${res.broadcastErrors} lỗi gửi bản tin)` : ' và gửi bản tin ưu đãi'}.`
+            : 'Đã kiểm tra hàng đợi lịch đăng: hiện chưa có bài viết nào tới giờ xuất bản.',
+        );
+        this.reload();
+      },
+      error: (err: unknown) => {
+        this.schedulerRunning.set(false);
+        this.loadError.set(adminErrorMessage(err, 'Không chạy được trình kiểm tra lịch đăng.'));
+      },
+    });
+  }
+
+  private toLocalDateTimeInput(iso: string | null | undefined): string {
+    if (!iso) return '';
+    const parsed = new Date(iso);
+    if (Number.isNaN(parsed.getTime())) return '';
+    const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000);
+    return local.toISOString().slice(0, 16);
   }
 
   /**

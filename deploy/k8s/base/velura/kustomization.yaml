@@ -32,6 +32,11 @@ configMapGenerator:
       - GEMINI_MODEL=commerce-text
       - GEMINI_STYLIST_MODEL=commerce-text
       - GEMINI_EMBEDDING_MODEL=commerce-embedding
+      - GEMINI_DECISION_MODEL=gemini-decision-1
+      - GEMINI_DECISION_TIMEOUT_MS=8000
+      - AI_DECISION_ROLLOUT_MODE=active
+      - AI_DECISION_CANARY_PERCENT=100
+      - BLOG_SCHEDULER_INTERVAL_MS=60000
       - LITELLM_IMAGE_MODEL=commerce-image-edit
       - AI_CLUSTER_ENDPOINT=http://ai-worker.ai-staging.svc:8000
       - AI_ENGINE_MODE=cluster

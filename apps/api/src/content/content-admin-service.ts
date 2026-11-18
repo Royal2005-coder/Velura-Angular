@@ -6,8 +6,15 @@ import { selectRows } from "../supabase.js";
 import { blogPlainText, sanitizeBlogHtml } from "./blog-html.js";
 import type { BlogProductCandidate, ContentAdminRepository } from "./content-admin-repository.js";
 import { newsletterService } from "../newsletter/newsletter-service.js";
-/** Trạng thái nội dung mà migration 078 chấp nhận. */
-export const CONTENT_STATUSES = ["draft", "published", "archived"] as const;
+import {
+  discoverInteractiveBlogTopics,
+  generateEndToEndBlogWorkflow,
+  matchSemanticInventoryProducts,
+  type EndToEndBlogWorkflowResult,
+} from "./blog-ai-workflow.js";
+import { runScheduledBlogPublishCycle, type ScheduledBlogPublishSummary } from "./blog-scheduler.js";
+/** Trạng thái nội dung mà migration 078 & 133 chấp nhận. */
+export const CONTENT_STATUSES = ["draft", "ai_reviewed", "scheduled", "published", "failed_retry", "archived"] as const;
 export type ContentStatus = (typeof CONTENT_STATUSES)[number];
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,7 +42,8 @@ const CONTENT_DATABASE_ERRORS: Readonly<Record<string, { status: number; message
   BLOG_PRODUCT_UNAVAILABLE: { status: 422, message: "Có sản phẩm đính kèm đang ẩn hoặc ngừng bán. Gỡ rồi chọn lại." },
   BLOG_READ_MINUTES_INVALID: { status: 422, message: "Thời gian đọc phải từ 1 đến 60 phút." },
   BLOG_STATUS_INVALID: { status: 422, message: "Trạng thái bài viết không hợp lệ." },
-  BLOG_CREATE_STATUS_INVALID: { status: 422, message: "Bài mới chỉ lưu được ở bản nháp hoặc công bố; 'đã lưu trữ' dành cho bài từng đăng." },
+  BLOG_CREATE_STATUS_INVALID: { status: 422, message: "Bài mới chỉ lưu được ở bản nháp, đã duyệt AI, hẹn giờ hoặc công bố; 'đã lưu trữ' dành cho bài từng đăng." },
+  BLOG_SCHEDULE_REQUIRED: { status: 422, message: "Vui lòng chọn ngày giờ đăng hợp lệ khi đặt lịch xuất bản." },
   BLOG_TRANSITION_DENIED: { status: 422, message: "Không thể chuyển bài sang trạng thái này. Bài đã lưu trữ chỉ quay về bản nháp được." },
   BLOG_NOT_FOUND: { status: 404, message: "Không tìm thấy bài viết." },
   VERSION_CONFLICT: { status: 409, message: "Bài viết vừa được người khác sửa. Tải lại bản mới nhất rồi sửa tiếp." },
@@ -76,6 +84,12 @@ export interface ContentDraftInput {
   readonly author?: string;
   readonly readMinutes?: number;
   readonly isFeatured?: boolean;
+  readonly scheduledAt?: string | null;
+  readonly promoId?: string | null;
+  readonly voucherCode?: string | null;
+  readonly socialCaptions?: JsonObject;
+  readonly scheduleIdempotencyKey?: string | null;
+  readonly aiWorkflowMetadata?: JsonObject;
 }
 
 export interface BlogProductCandidateMatch extends BlogProductCandidate {
@@ -95,6 +109,12 @@ export interface ContentAdminService {
   /** Draft-only AI assistance; never persists or publishes, the editor decides what to accept. */
   suggestSeo(context: AuthContext | undefined, body: JsonObject): Promise<JsonObject>;
   suggestBlogProducts(context: AuthContext | undefined, body: JsonObject): Promise<BlogProductSuggestionResult>;
+  /** Step 1 of AI Blog & Promo Workflow: discovers 5 grounded topics + active campaigns. */
+  discoverTopics(context: AuthContext | undefined, body: JsonObject): Promise<JsonObject>;
+  /** Step 2 & 3 of AI Blog & Promo Workflow: generates full SEO post + semantic products + social copy + Decision Gate. */
+  generateWorkflow(context: AuthContext | undefined, body: JsonObject): Promise<EndToEndBlogWorkflowResult>;
+  /** Executes due scheduled blog posts atomically on demand. */
+  triggerScheduledPublish(context: AuthContext | undefined): Promise<ScheduledBlogPublishSummary>;
 }
 export function createContentAdminService({ repository, generateJson = generateGeminiJson }: {
   repository: ContentAdminRepository;
@@ -128,7 +148,16 @@ export function createContentAdminService({ repository, generateJson = generateG
     if ((input.productIds || []).some((id) => !UUID_PATTERN.test(id))) errors.productIds = "Danh sách sản phẩm đính kèm không hợp lệ.";
     if ((input.excerpt || "").length > 500) errors.excerpt = CONTENT_DATABASE_ERRORS.BLOG_EXCERPT_TOO_LONG.message;
     if (!CONTENT_STATUSES.includes(input.status as ContentStatus)) errors.status = CONTENT_DATABASE_ERRORS.BLOG_STATUS_INVALID.message;
-    if (!editing && input.status === "archived") errors.status = CONTENT_DATABASE_ERRORS.BLOG_CREATE_STATUS_INVALID.message;
+    if (!editing && (input.status === "archived" || input.status === "failed_retry")) errors.status = CONTENT_DATABASE_ERRORS.BLOG_CREATE_STATUS_INVALID.message;
+    if (input.status === "scheduled") {
+      const ts = input.scheduledAt ? Date.parse(input.scheduledAt) : NaN;
+      if (!Number.isFinite(ts)) {
+        errors.scheduledAt = CONTENT_DATABASE_ERRORS.BLOG_SCHEDULE_REQUIRED.message;
+      }
+    }
+    if (input.promoId && !UUID_PATTERN.test(input.promoId)) {
+      errors.promoId = "Mã chiến dịch khuyến mãi liên kết không hợp lệ.";
+    }
     if (editing && !Number.isInteger(input.expectedVersion)) errors.expectedVersion = "Thiếu phiên bản bài viết đang sửa.";
     if (Object.keys(errors).length) {
       throw new HttpError(422, "CONTENT_VALIDATION", "Bài viết chưa hợp lệ. Kiểm lại các mục được đánh dấu.", errors);
@@ -139,6 +168,17 @@ export function createContentAdminService({ repository, generateJson = generateG
     const contentHtml = body.contentHtml === undefined || body.contentHtml === null
       ? null
       : sanitizeBlogHtml(asString(body.contentHtml)).normalize("NFC");
+    const scheduledRaw = body.scheduledAt === undefined ? undefined : (asString(body.scheduledAt).trim() || null);
+    const promoRaw = body.promoId === undefined ? undefined : (asString(body.promoId).trim() || null);
+    const voucherRaw = body.voucherCode === undefined ? undefined : (asString(body.voucherCode).trim().toUpperCase() || null);
+    const socialRaw = body.socialCaptions && typeof body.socialCaptions === "object" && !Array.isArray(body.socialCaptions)
+      ? asJsonObject(body.socialCaptions)
+      : undefined;
+    const idempotencyRaw = body.scheduleIdempotencyKey === undefined ? undefined : (asString(body.scheduleIdempotencyKey).trim() || null);
+    const workflowRaw = body.aiWorkflowMetadata && typeof body.aiWorkflowMetadata === "object" && !Array.isArray(body.aiWorkflowMetadata)
+      ? asJsonObject(body.aiWorkflowMetadata)
+      : undefined;
+
     return {
       slug: asString(body.slug).toLowerCase().trim(),
       title: asString(body.title).normalize("NFC").trim(),
@@ -158,6 +198,12 @@ export function createContentAdminService({ repository, generateJson = generateG
       author: asString(body.author).normalize("NFC").trim(),
       readMinutes: body.readMinutes == null ? undefined : Number(body.readMinutes),
       isFeatured: body.isFeatured == null ? undefined : Boolean(body.isFeatured),
+      ...(scheduledRaw === undefined ? {} : { scheduledAt: scheduledRaw }),
+      ...(promoRaw === undefined ? {} : { promoId: promoRaw }),
+      ...(voucherRaw === undefined ? {} : { voucherCode: voucherRaw }),
+      ...(socialRaw === undefined ? {} : { socialCaptions: socialRaw }),
+      ...(idempotencyRaw === undefined ? {} : { scheduleIdempotencyKey: idempotencyRaw }),
+      ...(workflowRaw === undefined ? {} : { aiWorkflowMetadata: workflowRaw }),
     };
   }
 
@@ -348,6 +394,51 @@ Nội dung: ${content}`,
       } catch {
         return fallbackBlogProducts(candidates, title, content, limit);
       }
+    },
+
+    async discoverTopics(context, body) {
+      requirePermission(context as AuthContext, "content", "update");
+      const discovered = await discoverInteractiveBlogTopics(context as AuthContext, body);
+      return discovered as unknown as JsonObject;
+    },
+
+    async generateWorkflow(context, body) {
+      requirePermission(context as AuthContext, "content", "update");
+      if (body.semanticSearchOnly === true) {
+        const q = `${asString(body.title)} ${asString(body.primaryKeyword)}`.trim();
+        const matches = await matchSemanticInventoryProducts(q, {
+          limit: Math.min(12, Math.max(1, Number(body.limit) || 6)),
+          discountOnly: body.discountOnly === true,
+          heroImagesOnly: body.heroImagesOnly === true,
+          actorId: context?.profile?.user_id || context?.authUser?.id || null,
+        });
+        return {
+          title: asString(body.title),
+          slug: "",
+          categorySlug: asString(body.categorySlug),
+          excerpt: "",
+          contentHtml: "",
+          contentPlain: "",
+          metaTitle: "",
+          metaDescription: "",
+          tags: [],
+          readMinutes: 4,
+          recommendedStatus: "draft",
+          promoId: null,
+          promoStartAt: null,
+          voucherCode: null,
+          matchedProducts: matches,
+          productIds: matches.map((m) => m.product_id),
+          socialCaptions: { facebookPage: "", zaloOa: "", instagram: "" },
+          editorialGate: { passed: true, confidence: 1, seoReadyProb: 1, brandToneProb: 1, zeroHallucinationProb: 1, requiresHumanReview: false },
+        };
+      }
+      return generateEndToEndBlogWorkflow(context as AuthContext, body);
+    },
+
+    async triggerScheduledPublish(context) {
+      requirePermission(context as AuthContext, "content", "update");
+      return runScheduledBlogPublishCycle();
     }
   };
 }

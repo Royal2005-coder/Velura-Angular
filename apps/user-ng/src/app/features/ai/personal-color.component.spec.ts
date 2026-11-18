@@ -93,4 +93,41 @@ describe('PersonalColorComponent', () => {
     expect(page.activeTab()).toBe('manual');
     expect(page.selectedManualSeason()).toBe('Winter');
   });
+
+  it('renders CIE L*a*b* ITA° and Base Skin Depth diagnostics strip on AI preview cards', () => {
+    const fixture = TestBed.createComponent(PersonalColorComponent);
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+    page.analysis.set({
+      id: 'diag-1',
+      status: 'SUCCESS',
+      profile_version: 2,
+      policy_version: 'approved-policy',
+      expires_at: '2026-12-01T00:00:00Z',
+      result: {
+        season: 'Autumn',
+        subtype: 'Warm Autumn',
+        palette: ['terracotta', 'olive'],
+        avoided: ['sky'],
+        confidence: 0.91,
+        policy_version: 'approved-policy',
+      },
+      diagnostics: {
+        base_skin_depth: 'DARK_TONE',
+        skin_depth: 'TAN',
+        undertone: 'WARM',
+        contrast_level: 'MEDIUM',
+        ita_angle: 19.4,
+        white_balance_shift: 'BALANCED',
+        recommended_hex_palette: ['#C97B63', '#6B705C'],
+        avoid_hex_palette: ['#8ECAE6'],
+        requires_human_review: false,
+      },
+    });
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent || '';
+    expect(text).toContain('Nền da Trầm / Bánh mật (Dark Tone)');
+    expect(text).toContain('19.4°');
+    expect(text).toContain('Sắc ẩn Ấm (Warm)');
+  });
 });

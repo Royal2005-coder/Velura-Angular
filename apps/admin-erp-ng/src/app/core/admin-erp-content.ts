@@ -10,18 +10,31 @@ import { blogEditorText, sanitizeEditorHtml } from './admin-erp-blog-html';
  * điều kiện bị chặn trước khi gửi, thay vì nhận một lỗi 422 không rõ từ server.
  */
 
-export const CONTENT_STATUSES = ['draft', 'published', 'archived'] as const;
+export const CONTENT_STATUSES = [
+  'draft',
+  'ai_reviewed',
+  'scheduled',
+  'published',
+  'failed_retry',
+  'archived',
+] as const;
 export type ContentStatus = (typeof CONTENT_STATUSES)[number];
 
 export const CONTENT_STATUS_LABELS: Readonly<Record<string, string>> = {
   draft: 'Bản nháp',
+  ai_reviewed: 'Đã duyệt AI',
+  scheduled: 'Hẹn giờ đăng',
   published: 'Đã công bố',
+  failed_retry: 'Lỗi chờ thử lại',
   archived: 'Đã lưu trữ',
 };
 
 const CONTENT_STATUS_TONES: Readonly<Record<string, 'neutral' | 'success' | 'warning'>> = {
   draft: 'neutral',
+  ai_reviewed: 'neutral',
+  scheduled: 'warning',
   published: 'success',
+  failed_retry: 'warning',
   archived: 'warning',
 };
 
@@ -45,18 +58,21 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * lại phải sửa rồi công bố — thêm một lần kiểm tra trước khi bài hiện ra trên website.
  */
 export const BLOG_TRANSITIONS: Readonly<Record<ContentStatus, readonly ContentStatus[]>> = {
-  draft: ['published', 'archived'],
+  draft: ['ai_reviewed', 'scheduled', 'published', 'archived'],
+  ai_reviewed: ['draft', 'scheduled', 'published', 'archived'],
+  scheduled: ['draft', 'ai_reviewed', 'published', 'archived'],
   published: ['draft', 'archived'],
+  failed_retry: ['draft', 'scheduled', 'published', 'archived'],
   archived: ['draft'],
 };
 
 /** Ảnh đại diện: chỉ link ngoài https hoặc tài sản của chính hệ thống. */
 export const BLOG_IMAGE_PATTERN = /^(https:\/\/|\/assets\/)/;
 
-/** Trạng thái khả dụng cho một form: bài mới chỉ là nháp/công bố, bài cũ theo bảng chuyển. */
+/** Trạng thái khả dụng cho một form: bài mới được lưu nháp, duyệt AI, hẹn giờ hoặc công bố; bài cũ theo bảng chuyển. */
 export function blogStatusChoices(status: string | undefined, creating: boolean): ContentStatus[] {
   if (creating) {
-    return ['draft', 'published'];
+    return ['draft', 'ai_reviewed', 'scheduled', 'published'];
   }
   const current = status as ContentStatus | undefined;
   if (!current || !BLOG_TRANSITIONS[current]) {
@@ -71,6 +87,13 @@ export function blogStatusLabel(status: string | undefined): string {
 
 export function blogStatusTone(status: string | undefined): 'neutral' | 'success' | 'warning' {
   return CONTENT_STATUS_TONES[status || ''] || 'neutral';
+}
+
+/** Bản caption đa kênh được AI sinh đồng bộ theo bài viết khuyến mãi. */
+export interface BlogSocialCaptionsDraft {
+  readonly facebookPage: string;
+  readonly zaloOa: string;
+  readonly instagram: string;
 }
 
 /** Bản nháp của trình soạn: một chỗ duy nhất, để validation và body gửi đi không lệch nhau. */
@@ -92,6 +115,10 @@ export interface BlogDraft {
   readonly author: string;
   readonly readMinutes: number;
   readonly isFeatured: boolean;
+  readonly scheduledAt?: string;
+  readonly promoId?: string;
+  readonly voucherCode?: string;
+  readonly socialCaptions?: BlogSocialCaptionsDraft | null;
 }
 
 export const emptyBlogDraft: BlogDraft = {
@@ -112,6 +139,10 @@ export const emptyBlogDraft: BlogDraft = {
   author: 'Velura Editorial',
   readMinutes: 5,
   isFeatured: false,
+  scheduledAt: '',
+  promoId: '',
+  voucherCode: '',
+  socialCaptions: null,
 };
 
 /**
@@ -177,8 +208,14 @@ export function validateBlogDraft(draft: BlogDraft, editing: boolean): Record<st
   if (draft.readMinutes < BLOG_READ_MINUTES_MIN || draft.readMinutes > BLOG_READ_MINUTES_MAX) {
     errors['readMinutes'] = `Thời gian đọc từ ${BLOG_READ_MINUTES_MIN} đến ${BLOG_READ_MINUTES_MAX} phút.`;
   }
-  if (!editing && draft.status === 'archived') {
-    errors['status'] = 'Bài mới chỉ lưu được ở bản nháp hoặc công bố.';
+  if (!editing && (draft.status === 'archived' || draft.status === 'failed_retry')) {
+    errors['status'] = 'Bài mới chỉ lưu được ở bản nháp, duyệt AI, hẹn giờ đăng hoặc công bố.';
+  }
+  if (draft.status === 'scheduled') {
+    const rawSchedule = (draft.scheduledAt || '').trim();
+    if (!rawSchedule || Number.isNaN(Date.parse(rawSchedule))) {
+      errors['scheduledAt'] = 'Chọn thời điểm hẹn giờ xuất bản hợp lệ.';
+    }
   }
   return errors;
 }
@@ -198,6 +235,12 @@ export function blogTags(value: string): string[] {
  */
 export function blogRequestBody(draft: BlogDraft, expectedVersion?: number): AdminBlogInput {
   const contentHtml = sanitizeEditorHtml(draft.contentHtml);
+  const scheduledRaw = (draft.scheduledAt || '').trim();
+  const scheduledIso = scheduledRaw && !Number.isNaN(Date.parse(scheduledRaw))
+    ? new Date(scheduledRaw).toISOString()
+    : undefined;
+  const promoId = (draft.promoId || '').trim();
+  const voucherCode = (draft.voucherCode || '').trim();
   return {
     slug: draft.slug.trim().toLowerCase(),
     title: draft.title.trim(),
@@ -216,6 +259,10 @@ export function blogRequestBody(draft: BlogDraft, expectedVersion?: number): Adm
     author: draft.author.trim() || 'Velura Editorial',
     readMinutes: draft.readMinutes,
     isFeatured: draft.isFeatured,
+    ...(scheduledIso ? { scheduledAt: scheduledIso } : {}),
+    ...(promoId ? { promoId } : {}),
+    ...(voucherCode ? { voucherCode } : {}),
+    ...(draft.socialCaptions ? { socialCaptions: draft.socialCaptions } : {}),
     ...(expectedVersion == null ? {} : { expectedVersion }),
   };
 }

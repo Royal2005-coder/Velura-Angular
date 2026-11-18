@@ -21,6 +21,7 @@ import {
   refundReceiverStatus
 } from "./return-refund-receiver.js";
 import { listReturnEvidence, resolveEvidenceRef, storeReturnEvidence, type ReturnEvidenceKind } from "./return-evidence.js";
+import { executeReturnBoxForensics, listStoredReturnBoxForensics } from "./return-forensics.js";
 import { recordRefundEvent } from "../payments/payment-metrics.js";
 import { GATEWAY_REFUND_LOOKUP_UNAVAILABLE, GATEWAY_REFUND_TIMEOUT, type RefundResult } from "../payments/stripe.js";
 import { earliestPickupSlot } from "./return-pickup.js";
@@ -67,6 +68,10 @@ export interface ReturnService {
   shipExchange(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   /** Stores one admin evidence file (pickup/QA/refund proof) in the private bucket. */
   addReturnEvidence(context: ReturnContext | undefined, returnId: string, kind: string, note: string, req: HttpRequest): Promise<JsonObject>;
+  /** Evaluates warehouse arrival parcel damage & carrier anti-swap forensics via `gemini-decision-1`. */
+  analyzeBoxForensics(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
+  /** Lists persisted parcel forensics evaluations for one return. */
+  listBoxForensics(context: ReturnContext | undefined, returnId: string): Promise<{ rows: JsonObject[] }>;
   listTickets(context: ReturnContext | undefined, searchParams: URLSearchParams): Promise<{ rows: JsonObject[]; count: number | undefined }>;
   getTicket(context: ReturnContext | undefined, ticketId: string): Promise<JsonObject>;
   assignTicket(context: ReturnContext | undefined, ticketId: string, body: JsonObject): Promise<unknown>;
@@ -525,6 +530,30 @@ export function createReturnService({
         note: note || null,
         req
       });
+    },
+
+    async analyzeBoxForensics(context, returnId, body) {
+      requireReturnAdmin(context);
+      const current = await repository.getReturn(returnId, context.accessToken);
+      if (!current) throw new HttpError(404, "RETURN_NOT_FOUND", "Không tìm thấy phiếu đổi trả.");
+      const shipments = repository.listReturnShipments
+        ? await repository.listReturnShipments(returnId).catch(() => [])
+        : [];
+      const decision = await executeReturnBoxForensics({
+        returnRow: current,
+        shipments,
+        body,
+        actorId: context.profile?.user_id || context.authUser.id,
+      });
+      return decision as unknown as JsonObject;
+    },
+
+    async listBoxForensics(context, returnId) {
+      requireReturnReader(context);
+      const current = await repository.getReturn(returnId, context.accessToken);
+      if (!current) throw new HttpError(404, "RETURN_NOT_FOUND", "Không tìm thấy phiếu đổi trả.");
+      const rows = await listStoredReturnBoxForensics(returnId);
+      return { rows };
     },
 
     async listTickets(context, searchParams) {

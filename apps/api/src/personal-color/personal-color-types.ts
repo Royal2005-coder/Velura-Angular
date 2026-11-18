@@ -1,4 +1,5 @@
 import type { AuthContext } from "../types.js";
+import type { PersonalColorDecision } from "../decision/decision-types.js";
 
 /** Business-approved taxonomy and image handling; missing approval disables inference. */
 export interface PersonalColorPolicy {
@@ -31,6 +32,19 @@ export interface ColorResult {
 }
 /** The only color value allowed into recommendation or stylist context. */
 export interface ConfirmedColor extends ColorResult { status: "CONFIRMED"; analysis_id: string; confirmed_at: string; }
+/** Scientific skin-depth, undertone, and CIE L*a*b* ITA° telemetry from `gemini-decision-1`. */
+export interface ColorDecisionDiagnostics {
+  base_skin_depth: "LIGHT_TONE" | "DARK_TONE";
+  skin_depth: "FAIR" | "LIGHT" | "MEDIUM" | "TAN" | "DEEP";
+  undertone: "COOL" | "WARM" | "NEUTRAL_OLIVE";
+  contrast_level: "LOW" | "MEDIUM" | "HIGH";
+  ita_angle: number;
+  white_balance_shift: "BALANCED" | "WARM_CAST" | "COOL_CAST" | "EXTREME_CAST";
+  recommended_hex_palette: readonly string[];
+  avoid_hex_palette: readonly string[];
+  requires_human_review: boolean;
+}
+
 /** Analysis metadata excludes input paths, image bytes and owner identity from public responses. */
 export interface ColorAnalysis {
   id: string;
@@ -39,6 +53,7 @@ export interface ColorAnalysis {
   policy_version: string;
   expires_at: string;
   result?: ColorResult;
+  diagnostics?: ColorDecisionDiagnostics;
   error?: string;
 }
 /** Member storage is durable; guest storage shares the existing session Style Profile. */
@@ -46,7 +61,7 @@ export interface ColorRepository {
   profile(principal: ColorPrincipal): Promise<{ version: number; personal_color: ConfirmedColor | null }>;
   begin(principal: ColorPrincipal, analysis: ColorAnalysis): Promise<ColorAnalysis>;
   get(principal: ColorPrincipal, id: string): Promise<ColorAnalysis>;
-  finish(principal: ColorPrincipal, id: string, patch: Pick<ColorAnalysis, "status" | "result" | "error">): Promise<ColorAnalysis>;
+  finish(principal: ColorPrincipal, id: string, patch: Pick<ColorAnalysis, "status" | "result" | "diagnostics" | "error">): Promise<ColorAnalysis>;
   confirm(principal: ColorPrincipal, id: string, version: number): Promise<{ version: number; personal_color: ConfirmedColor }>;
   confirmManual(principal: ColorPrincipal, personalColor: ConfirmedColor, version: number): Promise<{ version: number; personal_color: ConfirmedColor }>;
 }
@@ -56,8 +71,9 @@ export interface ColorAssets {
   deleteOwnedAsset(owner: string, id: string): Promise<void>;
   upload?(owner: string, bytes: Buffer, mime: string): Promise<{ asset_id: string; expires_at: string }>;
 }
-/** Real configured gateway vision, not a heuristic classifier. Backend validates every response. */
+/** Real configured gateway vision / `gemini-decision-1` adapter, not a heuristic classifier. Backend validates every response. */
 export interface ColorVision {
   ready(): boolean;
   generate(prompt: string, image: { bytes: Buffer; mime: string }, schema: unknown, options: { model: string; signal: AbortSignal }): Promise<unknown>;
+  decide?(image: { bytes: Buffer; mime: "image/jpeg" | "image/png" }, options: { entityId: string; actorId?: string | null; signal: AbortSignal }): Promise<PersonalColorDecision>;
 }

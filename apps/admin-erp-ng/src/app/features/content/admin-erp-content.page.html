@@ -20,11 +20,20 @@
           Thêm bộ sưu tập mới
         </button>
       } @else {
+        <button class="erp-btn erp-btn--outline erp-btn--sm content-ai-launch-btn" type="button" (click)="openAiWizard()">
+          <span class="ai-sparkle" aria-hidden="true">✦</span>
+          AI Tạo bài &amp; Chiến dịch End-to-End
+        </button>
         <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCreate()">
           <app-erp-icon name="plus" [size]="'15'" />
           Bài viết mới
         </button>
       }
+    }
+    @if (canUpdate() && (scheduledCount() > 0 || tab() === 'scheduled')) {
+      <button class="erp-btn erp-btn--sm" type="button" [disabled]="schedulerRunning()" (click)="runSchedulerNow()">
+        {{ schedulerRunning() ? 'Đang xuất bản…' : '⏱ Chạy lịch đăng (' + scheduledCount() + ')' }}
+      </button>
     }
   </div>
 </app-erp-page-header>
@@ -429,6 +438,72 @@
         <p class="erp-error" role="alert">{{ errors()['categorySlug'] || errors()['status'] || errors()['readMinutes'] }}</p>
       }
 
+      @if (aiWorkflowGate(); as gate) {
+        <div class="ai-editorial-gate" [class.is-review]="gate.requiresHumanReview" role="status">
+          <div class="ai-editorial-gate__head">
+            <strong>✦ Cổng kiểm duyệt Gemini Decision 1: {{ gate.passed ? 'ĐẠT CHUẨN BIÊN TẬP' : 'CẦN BIÊN TẬP VIÊN RÀ SOÁT' }}</strong>
+            <span class="ai-editorial-gate__pill">Độ tin cậy: {{ (gate.confidence * 100).toFixed(0) }}%</span>
+          </div>
+          <div class="ai-editorial-gate__metrics">
+            <span>SEO Ready: <strong>{{ (gate.seoReadyProb * 100).toFixed(0) }}%</strong></span>
+            <span>Giọng điệu thương hiệu: <strong>{{ (gate.brandToneProb * 100).toFixed(0) }}%</strong></span>
+            <span>Không bịa SKU (Zero Hallucination): <strong>{{ (gate.zeroHallucinationProb * 100).toFixed(0) }}%</strong></span>
+          </div>
+        </div>
+      }
+
+      <!-- LỊCH ĐĂNG CHUẨN & ĐỒNG BỘ CHIẾN DỊCH KHUYẾN MÃI -->
+      <div class="content-scheduler-bar">
+        <div class="content-scheduler-bar__top">
+          <div>
+            <strong>⏰ Lịch xuất bản thông minh &amp; Gắn kết Khuyến mãi / Voucher</strong>
+            <small>Đặt trạng thái “Hẹn giờ đăng” để Worker tự động công bố đúng giờ mở chiến dịch và gửi bản tin ưu đãi.</small>
+          </div>
+          @if (form.status !== 'scheduled') {
+            <button class="erp-btn erp-btn--sm erp-btn--outline" type="button" (click)="enableSmartSchedule()">
+              Hẹn giờ đăng tự động
+            </button>
+          } @else if (aiPromoStartAt() || form.promoId) {
+            <button class="erp-btn erp-btn--sm" type="button" (click)="syncScheduleWithPromo()">
+              Đồng bộ giờ mở Khuyến mãi
+            </button>
+          }
+        </div>
+        <div class="content-scheduler-bar__grid">
+          <label class="erp-field">
+            <span>Thời điểm xuất bản tự động {{ form.status === 'scheduled' ? '*' : '(tùy chọn)' }}</span>
+            <input
+              class="erp-input"
+              type="datetime-local"
+              [value]="form.scheduledAt || ''"
+              (input)="onField('scheduledAt', $event); markDirty()"
+            />
+          </label>
+          <label class="erp-field">
+            <span>Mã Voucher gắn trong bài</span>
+            <input
+              class="erp-input"
+              type="text"
+              [value]="form.voucherCode || ''"
+              (input)="onField('voucherCode', $event); markDirty()"
+              placeholder="VD: VELURA10, FLASH20"
+            />
+          </label>
+          <label class="erp-field">
+            <span>Chiến dịch Khuyến mãi liên kết</span>
+            <select class="erp-select" [value]="form.promoId || ''" (change)="onField('promoId', $event); markDirty()">
+              <option value="">— Không gắn chiến dịch cố định —</option>
+              @for (promo of aiPromotions(); track promo.promo_id) {
+                <option [value]="promo.promo_id">{{ promo.name }} (-{{ promo.discount_value }}%)</option>
+              }
+            </select>
+          </label>
+        </div>
+        @if (errors()['scheduledAt']) {
+          <p class="erp-error" role="alert">{{ errors()['scheduledAt'] }}</p>
+        }
+      </div>
+
       <div class="content-compose">
         <nav class="content-compose__tabs" role="tablist" aria-label="Khu vực biên tập">
           @for (editorTabOption of editorTabs(); track editorTabOption.key) {
@@ -791,6 +866,44 @@
         </section>
       </div>
 
+      @if (form.socialCaptions; as social) {
+        <div class="content-social-panel">
+          <div class="content-social-panel__head">
+            <strong>📣 Bộ bài đăng rút gọn Đa kênh (Tự động sinh từ nội dung &amp; Voucher)</strong>
+            <small>Sẵn sàng đăng đồng bộ lên Fanpage, Zalo OA và Instagram khi bài blog lên sóng.</small>
+          </div>
+          <div class="content-social-panel__grid">
+            <div class="content-social-card">
+              <div class="content-social-card__top">
+                <span>Facebook Fanpage</span>
+                <button class="erp-btn erp-btn--sm" type="button" (click)="copySocialCaption('facebookPage')">
+                  {{ copiedChannel() === 'facebookPage' ? '✓ Đã chép' : 'Sao chép' }}
+                </button>
+              </div>
+              <textarea class="erp-input" rows="3" [value]="social.facebookPage" (input)="onSocialCaptionInput('facebookPage', $event)"></textarea>
+            </div>
+            <div class="content-social-card">
+              <div class="content-social-card__top">
+                <span>Zalo Official Account</span>
+                <button class="erp-btn erp-btn--sm" type="button" (click)="copySocialCaption('zaloOa')">
+                  {{ copiedChannel() === 'zaloOa' ? '✓ Đã chép' : 'Sao chép' }}
+                </button>
+              </div>
+              <textarea class="erp-input" rows="3" [value]="social.zaloOa" (input)="onSocialCaptionInput('zaloOa', $event)"></textarea>
+            </div>
+            <div class="content-social-card">
+              <div class="content-social-card__top">
+                <span>Instagram Lookbook</span>
+                <button class="erp-btn erp-btn--sm" type="button" (click)="copySocialCaption('instagram')">
+                  {{ copiedChannel() === 'instagram' ? '✓ Đã chép' : 'Sao chép' }}
+                </button>
+              </div>
+              <textarea class="erp-input" rows="3" [value]="social.instagram" (input)="onSocialCaptionInput('instagram', $event)"></textarea>
+            </div>
+          </div>
+        </div>
+      }
+
       @if (conflict()) {
         <div class="content-banner content-banner--warn" role="alert">
           Bản này vừa được người khác sửa nên hệ thống không ghi đè. Nội dung của bạn vẫn nằm nguyên trong khung.
@@ -815,6 +928,127 @@
   <div footer>
     <button class="erp-btn" type="button" (click)="cancelDiscard()">Tiếp tục sửa</button>
     <button class="erp-btn erp-btn--danger" type="button" (click)="confirmDiscard()">Bỏ thay đổi</button>
+  </div>
+</app-erp-modal>
+
+<!-- MODAL AI TẠO BÀI BLOG & CHIẾN DỊCH KHUYẾN MÃI END-TO-END -->
+<app-erp-modal
+  [open]="aiWizardOpen()"
+  title="✦ AI Tạo bài Blog & Chiến dịch Khuyến mãi End-to-End"
+  size="xl"
+  (closed)="closeAiWizard()"
+>
+  <div class="ai-wizard">
+    <p class="erp-hint">
+      Quy trình khép kín: <strong>Khảo sát Topic &amp; Từ khóa SEO</strong> → <strong>Semantic Vector RAG khớp SKU còn tồn &amp; đạt QA ảnh (Gemini Decision 1)</strong> → <strong>Soạn bài chuẩn SEO + Thẻ sản phẩm + Caption Đa kênh + Lịch đăng chuẩn</strong>.
+    </p>
+
+    <div class="ai-wizard__presets">
+      @for (preset of campaignPresets; track preset.code) {
+        <button
+          type="button"
+          class="ai-preset-chip"
+          [class.is-active]="aiCampaignType() === preset.code"
+          (click)="selectCampaignPreset(preset)"
+        >
+          {{ preset.label }}
+        </button>
+      }
+    </div>
+
+    <div class="ai-wizard__discover-row">
+      <label class="erp-field ai-wizard__goal">
+        <span>Chủ đề hoặc mục tiêu chiến dịch bạn muốn triển khai</span>
+        <input
+          class="erp-input"
+          type="text"
+          [value]="aiCampaignGoal()"
+          (input)="onAiGoalInput($event)"
+          placeholder="VD: Gợi ý phối đồ lụa mùa thu kèm ưu đãi 15% xả kho..."
+        />
+      </label>
+      <button
+        type="button"
+        class="erp-btn erp-btn--sm erp-btn--outline"
+        [disabled]="aiDiscovering() || aiGeneratingWorkflow()"
+        (click)="discoverAiTopics()"
+      >
+        {{ aiDiscovering() ? 'AI đang quét kho…' : '✦ AI Gợi ý 5 Chủ đề' }}
+      </button>
+    </div>
+
+    @if (aiTopics().length) {
+      <div class="ai-wizard__topics">
+        @for (topic of aiTopics(); track topic.topicId) {
+          <article
+            class="ai-topic-card"
+            [class.is-selected]="aiSelectedTopic()?.topicId === topic.topicId"
+            (click)="selectAiTopic(topic)"
+          >
+            <div class="ai-topic-card__top">
+              <span class="ai-topic-card__intent">{{ topic.estimatedSearchIntent }}</span>
+              @if (topic.matchedVoucherCode) {
+                <span class="ai-topic-card__voucher">Mã: {{ topic.matchedVoucherCode }}</span>
+              }
+            </div>
+            <h4>{{ topic.title }}</h4>
+            <p>{{ topic.angle }}</p>
+            <div class="ai-topic-card__kw">
+              <strong>Từ khóa chính:</strong> <code>{{ topic.primaryKeyword }}</code>
+            </div>
+          </article>
+        }
+      </div>
+    }
+
+    <div class="ai-wizard__filters">
+      <label class="erp-field">
+        <span>Chiến dịch Khuyến mãi đồng bộ lịch</span>
+        <select class="erp-select" [value]="aiSelectedPromoId()" (change)="onAiPromoSelect($event)">
+          <option value="">— Tự động hoặc không chọn —</option>
+          @for (promo of aiPromotions(); track promo.promo_id) {
+            <option [value]="promo.promo_id">{{ promo.name }} (-{{ promo.discount_value }}%)</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Mã Voucher nhúng CTA bài viết</span>
+        <input
+          class="erp-input"
+          type="text"
+          [value]="aiSelectedVoucherCode()"
+          (input)="onAiVoucherSelect($event)"
+          placeholder="VD: VELURA10 (hoặc chọn từ gợi ý)"
+        />
+      </label>
+    </div>
+
+    <div class="ai-wizard__checks">
+      <label class="content-check">
+        <input type="checkbox" [checked]="aiDiscountOnly()" (change)="onAiToggle('aiDiscountOnly', $event)" />
+        <span>Chỉ ghép sản phẩm đang giảm giá (<code>sale_price &lt; base_price</code>)</span>
+      </label>
+      <label class="content-check">
+        <input type="checkbox" [checked]="aiHeroImagesOnly()" (change)="onAiToggle('aiHeroImagesOnly', $event)" />
+        <span>Chỉ ghép sản phẩm có ảnh đạt chuẩn <code>APPROVED_HERO</code> (Gemini Decision 1)</span>
+      </label>
+    </div>
+
+    @if (aiWizardError()) {
+      <p class="erp-error" role="alert">{{ aiWizardError() }}</p>
+    }
+  </div>
+
+  <div footer>
+    <button class="erp-btn" type="button" [disabled]="aiGeneratingWorkflow()" (click)="closeAiWizard()">Đóng</button>
+    <button
+      class="erp-btn erp-btn--primary"
+      type="button"
+      [disabled]="aiGeneratingWorkflow() || aiDiscovering()"
+      (click)="runEndToEndBlogWorkflow()"
+    >
+      {{ aiGeneratingWorkflow() ? '✦ AI đang soạn bài & tuyển chọn SKU…' : '⚡ Tạo Bài viết End-to-End & Đưa vào Trình soạn' }}
+    </button>
   </div>
 </app-erp-modal>
 

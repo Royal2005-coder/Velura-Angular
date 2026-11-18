@@ -23,6 +23,8 @@
     "build": "npm run build:api && npm run build:user && npm run build:admin && npm run build:admin-erp",
     "test:api": "node --import tsx --test tests/api/*.test.ts",
     "eval:ai-decisions": "node --import tsx scripts/eval-decision-golden.mjs",
+    "test:mutate:ai": "node scripts/mutate-ai-suite.mjs",
+    "uat:prod:ai": "node --import tsx scripts/uat-production-ai.mjs",
     "test:user": "npm run test -w @velura/user-ng -- --watch=false",
     "test:admin": "npm run test -w @velura/admin-ng -- --watch=false",
     "test:admin-erp": "npm run test -w @velura/admin-erp-ng -- --watch=false",

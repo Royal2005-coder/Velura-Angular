@@ -3,7 +3,7 @@ import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject } from "../types.js";
 import { asNumber, asString, errorMessage, isJsonObject } from "../types.js";
 import { generateGeminiText, isGeminiConfigured } from "../gemini-client.js";
-import { generateFallbackAwareJson, isDecisionEngineConfigured } from "../decision/gemini-decision-client.js";
+import { generateFallbackAwareJson, isDecisionEngineConfigured, resolveRolloutMode } from "../decision/gemini-decision-client.js";
 import { unifiedDecisionService } from "../decision/decision-service.js";
 import type { CskhSentimentDecision } from "../decision/decision-types.js";
 import { REVIEW_OPERATOR_ROLES, REVIEW_READER_ROLES } from "./review-constants.js";
@@ -27,7 +27,26 @@ export interface ReviewService {
 /**
  * Build the admin review service around a PostgREST repository.
  */
-export function createReviewService({ repository }: { repository: ReviewRepository }): ReviewService {
+export interface ReviewServiceAiDeps {
+  readonly decisionService?: Pick<typeof unifiedDecisionService, "decideCskhSentiment">;
+  readonly isDecisionConfigured?: () => boolean;
+  readonly isGeminiConfiguredFn?: typeof isGeminiConfigured;
+  readonly generateText?: typeof generateGeminiText;
+  readonly generateJson?: typeof generateFallbackAwareJson;
+}
+
+export function createReviewService({
+  repository,
+  deps = {},
+}: {
+  repository: ReviewRepository;
+  deps?: ReviewServiceAiDeps;
+}): ReviewService {
+  const decisionSvc = deps.decisionService ?? unifiedDecisionService;
+  const checkDecision = deps.isDecisionConfigured ?? isDecisionEngineConfigured;
+  const checkGemini = deps.isGeminiConfiguredFn ?? isGeminiConfigured;
+  const genText = deps.generateText ?? generateGeminiText;
+  const genJson = deps.generateJson ?? generateFallbackAwareJson;
   function requireReviewAdmin(context: AuthContext | undefined): asserts context is AuthContext & { authUser: AuthUser } {
     if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
     if (!REVIEW_OPERATOR_ROLES.includes(context.roleCode)) {
@@ -90,13 +109,13 @@ export function createReviewService({ repository }: { repository: ReviewReposito
         comment: asString(review.comment),
         productName: asString(product.name)
       };
-      if (!isGeminiConfigured() && !isDecisionEngineConfigured()) {
+      if (!checkGemini() && !checkDecision()) {
         return { replies: groundedReviewReplies(source), source: "review" as const };
       }
       let sentimentDecision: CskhSentimentDecision | undefined;
       try {
-        sentimentDecision = await unifiedDecisionService.decideCskhSentiment({
-          message: source.comment || `Đánh giá ${source.rating} sao`,
+        sentimentDecision = await decisionSvc.decideCskhSentiment({
+          message: source.comment.trim(),
           rating: source.rating,
           contextKind: "review",
           entityId: reviewId,
@@ -106,21 +125,22 @@ export function createReviewService({ repository }: { repository: ReviewReposito
         sentimentDecision = undefined;
       }
 
-      const branchPrompt = sentimentDecision
+      const activeForRollout = resolveRolloutMode(reviewId).activeForRequest;
+      const branchPrompt = sentimentDecision && activeForRollout
         ? `\nNhánh quyết định CSKH bắt buộc (${sentimentDecision.routing_branch}):\n- ${sentimentDecision.response_guidelines.join("\n- ")}`
         : "";
       try {
-        if (isGeminiConfigured()) {
-          const text = await generateGeminiText(
+        if (checkGemini()) {
+          const text = await genText(
             `${reviewReplyPrompt(source)}${branchPrompt}\nChỉ trả một JSON {"replies":["câu 1","câu 2"]}.`,
             { temperature: 0.2, maxOutputTokens: 450, timeoutMs: 6000 }
           );
           const replies = readReplySuggestions(text);
           if (replies.length) {
-            return { replies, source: "gemini" as const, ...(sentimentDecision ? { decision: sentimentDecision } : {}) };
+            return { replies, source: "gemini" as const, ...(sentimentDecision && activeForRollout ? { decision: sentimentDecision } : {}) };
           }
         } else {
-          const gen = await generateFallbackAwareJson(
+          const gen = await genJson(
             `${reviewReplyPrompt(source)}${branchPrompt}`,
             {
               type: "object",
@@ -132,13 +152,13 @@ export function createReviewService({ repository }: { repository: ReviewReposito
           );
           const replies = readReplySuggestions(gen.data);
           if (replies.length) {
-            return { replies, source: "gemini" as const, ...(sentimentDecision ? { decision: sentimentDecision } : {}) };
+            return { replies, source: "gemini" as const, ...(sentimentDecision && activeForRollout ? { decision: sentimentDecision } : {}) };
           }
         }
       } catch (error: unknown) {
         console.error("[REVIEW AI]", errorMessage(error));
       }
-      return { replies: groundedReviewReplies(source), source: "review" as const, ...(sentimentDecision ? { decision: sentimentDecision } : {}) };
+      return { replies: groundedReviewReplies(source), source: "review" as const, ...(sentimentDecision && activeForRollout ? { decision: sentimentDecision } : {}) };
     },
 
     async reply(context, reviewId, body) {

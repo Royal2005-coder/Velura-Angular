@@ -75,24 +75,53 @@ export async function measurePortraitSkinOptics(bytes: Buffer): Promise<SkinOpti
     .raw()
     .toBuffer();
 
-  // 1. Estimate ambient illuminant cast from bright neutral/sclera-like pixels (top 8% luminance, low saturation)
+  // 1. Estimate ambient illuminant cast preferentially from upper-central eye/sclera ROI (x: 22%..78%, y: 20%..52%)
   let hiR = 0;
   let hiG = 0;
   let hiB = 0;
   let hiCount = 0;
-  for (let i = 0; i < sampleSize * sampleSize; i++) {
-    const r = raw[i * 3];
-    const g = raw[i * 3 + 1];
-    const b = raw[i * 3 + 2];
-    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const maxC = Math.max(r, g, b);
-    const minC = Math.min(r, g, b);
-    if (lum >= 185 && lum <= 250 && maxC - minC < 55) {
-      hiR += r;
-      hiG += g;
-      hiB += b;
-      hiCount++;
+  let minLum = 255;
+  let maxLum = 0;
+
+  const collectBrightNeutral = (x0: number, x1: number, y0: number, y1: number) => {
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const i = y * sampleSize + x;
+        const r = raw[i * 3];
+        const g = raw[i * 3 + 1];
+        const b = raw[i * 3 + 2];
+        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        const maxC = Math.max(r, g, b);
+        const minC = Math.min(r, g, b);
+        if (lum >= 180 && lum <= 252 && maxC - minC < 95) {
+          hiR += r;
+          hiG += g;
+          hiB += b;
+          hiCount++;
+        }
+      }
     }
+  };
+
+  for (let i = 0; i < sampleSize * sampleSize; i++) {
+    const lum = 0.2126 * raw[i * 3] + 0.7152 * raw[i * 3 + 1] + 0.0722 * raw[i * 3 + 2];
+    if (lum < minLum) minLum = lum;
+    if (lum > maxLum) maxLum = lum;
+  }
+  const isBlankSolid = maxLum - minLum < 3;
+
+  collectBrightNeutral(
+    Math.floor(sampleSize * 0.22),
+    Math.ceil(sampleSize * 0.78),
+    Math.floor(sampleSize * 0.20),
+    Math.ceil(sampleSize * 0.52),
+  );
+  if (hiCount < 8) {
+    hiR = 0;
+    hiG = 0;
+    hiB = 0;
+    hiCount = 0;
+    collectBrightNeutral(0, sampleSize, 0, sampleSize);
   }
 
   let gainR = 1.0;
@@ -163,9 +192,10 @@ export async function measurePortraitSkinOptics(bytes: Buffer): Promise<SkinOpti
 
   const L = sumL / Math.max(1, skinPixels);
   const a = sumA / Math.max(1, skinPixels);
-  const b = Math.max(0.5, sumB / Math.max(1, skinPixels));
+  const rawMeanB = sumB / Math.max(1, skinPixels);
+  const b = Math.abs(rawMeanB) < 0.5 ? (rawMeanB < 0 ? -0.5 : 0.5) : rawMeanB;
   const itaAngle = Number(((Math.atan2(L - 50, b) * 180) / Math.PI).toFixed(2));
-  // Dermatology Del Bino & Bernerd ITA° classification: > 28° corresponds to Fair/Light/Intermediate-Light tones
+  // Dermatology Del Bino & Bernerd ITA° classification: >= 28° corresponds to Fair/Light/Intermediate-Light tones
   const measuredBaseDepth: BaseSkinDepth = itaAngle >= 28 ? "LIGHT_TONE" : "DARK_TONE";
 
   return {
@@ -175,6 +205,7 @@ export async function measurePortraitSkinOptics(bytes: Buffer): Promise<SkinOpti
     yellowBlueB: Number(b.toFixed(2)),
     whiteBalanceShift,
     measuredBaseDepth,
+    isBlankSolid,
   };
 }
 
@@ -325,31 +356,41 @@ export class UnifiedDecisionService {
     if (optics.whiteBalanceShift === "EXTREME_CAST" && !failedChecks.includes("lighting_valid")) {
       failedChecks.push("lighting_valid");
     }
+    if (optics.isBlankSolid && !failedChecks.includes("skin_visible")) {
+      failedChecks.push("skin_visible");
+    }
 
     const lightingValid: "PASS" | "RETAKE" = failedChecks.length === 0 ? "PASS" : "RETAKE";
     const baseDepthAns = decision.answers.base_skin_depth as DecisionChoiceAnswer;
+    const unambiguousIta = optics.itaAngle > 35 || optics.itaAngle < 20;
     const baseSkinDepth: BaseSkinDepth =
-      baseDepthAns.confidence >= 0.65
-        ? (baseDepthAns.choice as BaseSkinDepth)
-        : optics.measuredBaseDepth;
+      (baseDepthAns.confidence < 0.78 && unambiguousIta) || baseDepthAns.confidence < 0.65
+        ? optics.measuredBaseDepth
+        : (baseDepthAns.choice as BaseSkinDepth);
 
-    const skinDepth = (decision.answers.skin_depth as DecisionChoiceAnswer).choice as DetailedSkinDepth;
+    const rawSkinDepth = (decision.answers.skin_depth as DecisionChoiceAnswer).choice as DetailedSkinDepth;
+    const skinDepth: DetailedSkinDepth =
+      baseSkinDepth === "LIGHT_TONE" && (rawSkinDepth === "TAN" || rawSkinDepth === "DEEP")
+        ? "LIGHT"
+        : baseSkinDepth === "DARK_TONE" && (rawSkinDepth === "FAIR" || rawSkinDepth === "LIGHT")
+          ? "TAN"
+          : rawSkinDepth;
     const undertone = (decision.answers.undertone as DecisionChoiceAnswer).choice as SkinUndertone;
     const contrastLevel = (decision.answers.contrast_level as DecisionChoiceAnswer).choice as ContrastLevel;
 
     const seasonAns = decision.answers.personal_season as DecisionChoiceAnswer;
-    const season = resolveScientificSeason(
+    const computedSeason = resolveScientificSeason(
       seasonAns.choice as FourSeason,
       seasonAns.confidence,
       baseSkinDepth,
       undertone,
       contrastLevel,
     );
+    const season: FourSeason | null = lightingValid === "RETAKE" ? null : computedSeason;
 
-    const paletteKeys = SEASON_PALETTE_KEYS[season];
     const paletteMap = policy.palette || DEFAULT_PERSONAL_COLOR_POLICY.palette;
-    const recommendedIds = paletteKeys.recommended.filter((id) => Boolean(paletteMap[id]));
-    const avoidIds = paletteKeys.avoided.filter((id) => Boolean(paletteMap[id]));
+    const recommendedIds = season ? SEASON_PALETTE_KEYS[season].recommended.filter((id) => Boolean(paletteMap[id])) : [];
+    const avoidIds = season ? SEASON_PALETTE_KEYS[season].avoided.filter((id) => Boolean(paletteMap[id])) : [];
     const confidenceScore = Number(
       Math.min(seasonAns.confidence, baseDepthAns.confidence * 0.4 + seasonAns.confidence * 0.6).toFixed(4),
     );
@@ -367,9 +408,9 @@ export class UnifiedDecisionService {
       inputTokens: decision.inputTokens,
       confidenceScore,
       requiresHumanReview,
-      verdictCode: lightingValid === "RETAKE" ? `RETAKE:${failedChecks.join(",")}` : `${season}:${baseSkinDepth}:${undertone}`,
+      verdictCode: lightingValid === "RETAKE" ? `RETAKE:${failedChecks.join(",")}` : `${computedSeason}:${baseSkinDepth}:${undertone}`,
       rawAnswers: serializeAnswers(decision.answers),
-      downstreamAction: lightingValid === "RETAKE" ? "REQUEST_PHOTO_RETAKE" : `SEASON_${season.toUpperCase()}`,
+      downstreamAction: lightingValid === "RETAKE" ? "REQUEST_PHOTO_RETAKE" : `SEASON_${computedSeason.toUpperCase()}`,
       actorId: options.actorId,
     });
 
@@ -417,9 +458,9 @@ export class UnifiedDecisionService {
       rating: input.rating ?? null,
       recent_history: (input.history || []).slice(-8).map((turn) => ({
         sender: turn.sender,
-        text: String(turn.text || "").slice(0, 600),
+        text: redactCustomerPii(String(turn.text || "")).slice(0, 600),
       })),
-      latest_customer_message: String(input.message || "").slice(0, 2000),
+      latest_customer_message: redactCustomerPii(String(input.message || "")).slice(0, 2000),
     });
 
     const decision = await this.evaluate({
@@ -473,14 +514,15 @@ export class UnifiedDecisionService {
     const escalateAns = decision.answers.escalate_threat_or_human as DecisionNoulAnswer;
 
     let sentiment = sentimentAns.choice as CskhSentimentLabel;
-    // Anchor extreme star ratings if text is empty or ultra-short
-    if (typeof input.rating === "number" && input.message.trim().length < 8) {
-      if (input.rating <= 2) sentiment = "NEGATIVE";
-      else if (input.rating >= 4) sentiment = "POSITIVE";
+    // Unconditional 1-2 star safety anchor: polite/sarcastic 1-2 star reviews MUST NEVER route to NURTURE_AND_UPSELL
+    if (typeof input.rating === "number" && input.rating >= 1 && input.rating <= 2) {
+      sentiment = "NEGATIVE";
+    } else if (typeof input.rating === "number" && input.rating >= 4 && input.message.trim().length < 8) {
+      sentiment = "POSITIVE";
     }
 
     const urgency: CskhUrgencyLevel =
-      urgencyAns.score >= 1.45 || escalateAns.noul >= 0.65
+      urgencyAns.score >= 1.45 || escalateAns.noul >= 0.60
         ? "CRITICAL"
         : urgencyAns.score >= 0.65 || sentiment === "NEGATIVE"
           ? "MEDIUM"
@@ -645,8 +687,11 @@ export class UnifiedDecisionService {
     const rawComp = 1 + (decision.answers.composition_framing as DecisionScoreAnswer).score;
     const rawBg = 1 + (decision.answers.background_cleanliness as DecisionScoreAnswer).score;
 
-    // Grounding guard: a physically blank dark image (measured.overallScore < 55) can NEVER be scored high
-    const physicalCap = measured.metrics.brightness < 55 && measured.metrics.backgroundScore < 45 ? 1.8 : 5.0;
+    // Grounding guard: physically dark/corrupt or zero-contrast solid-color images can NEVER be scored high
+    const physicalCap =
+      (measured.metrics.brightness < 55 && measured.metrics.backgroundScore < 45) || measured.metrics.contrast < 2
+        ? 1.8
+        : 5.0;
     const sharpnessFocus = Number(Math.min(physicalCap, rawSharp * 0.75 + (measured.metrics.sharpnessScore / 20) * 0.25).toFixed(2));
     const lightingExposure = Number(Math.min(physicalCap, rawLight * 0.75 + (measured.criteria.find((c) => c.key === "lighting")!.score / 20) * 0.25).toFixed(2));
     const compositionFraming = Number(Math.min(physicalCap, rawComp).toFixed(2));
@@ -669,14 +714,23 @@ export class UnifiedDecisionService {
     if (Math.min(measured.metrics.width, measured.metrics.height) < 500) defectTags.push("LOW_RESOLUTION");
 
     let finalVerdict: ImageQaVerdict;
-    if (avgScore >= 4.3 && minAxis >= 4.0 && !defectTags.includes("WATERMARK") && !defectTags.includes("CROP_CUTOFF")) {
+    if (physicalCap < 5.0 || minAxis <= 2.0 || (cutoffAns.noul >= 0.80 && compositionFraming <= 2.5)) {
+      finalVerdict = "REJECTED";
+    } else if (avgScore >= 4.3 && minAxis >= 4.0 && !defectTags.includes("WATERMARK") && !defectTags.includes("CROP_CUTOFF")) {
       finalVerdict = "APPROVED_HERO";
-    } else if (avgScore >= 3.5 && minAxis >= 3.0 && !defectTags.includes("WATERMARK")) {
+    } else if (avgScore >= 3.5 && minAxis >= 3.0 && !defectTags.includes("WATERMARK") && !defectTags.includes("CROP_CUTOFF")) {
       finalVerdict = "APPROVED_STANDARD";
-    } else if (avgScore >= 2.7 && !defectTags.includes("WATERMARK") && !defectTags.includes("CROP_CUTOFF")) {
+    } else if (avgScore >= 2.7 && !defectTags.includes("WATERMARK")) {
       finalVerdict = "NEEDS_EDIT";
     } else {
       finalVerdict = "REJECTED";
+    }
+
+    if ((finalVerdict === "NEEDS_EDIT" || finalVerdict === "REJECTED") && defectTags.length === 0) {
+      if (sharpnessFocus < 3.5) defectTags.push("BLURRY");
+      else if (lightingExposure < 3.5) defectTags.push("POOR_EXPOSURE");
+      else if (compositionFraming < 3.5) defectTags.push("CROP_CUTOFF");
+      else defectTags.push("CLUTTERED_BG");
     }
 
     const failedCodes: string[] = [];
@@ -931,8 +985,13 @@ export class UnifiedDecisionService {
       tamperingRiskScore = Math.max(45, tamperingRiskScore);
     }
 
-    const carrierClaimRecommended = boxCondition === "SEVERE_CRUSH" || boxCondition === "TORN_WET";
-    const freezeAutoRefund = matchVerdict === "MISMATCHED" || matchVerdict === "SUSPICIOUS_DIFF";
+    const carrierClaimRecommended =
+      boxCondition === "SEVERE_CRUSH" || boxCondition === "TORN_WET" || matchVerdict === "MISMATCHED";
+    const freezeAutoRefund =
+      matchVerdict === "MISMATCHED" ||
+      matchVerdict === "SUSPICIOUS_DIFF" ||
+      boxCondition === "SEVERE_CRUSH" ||
+      boxCondition === "TORN_WET";
     // Visual Forensics grey-zone [40..75] or low confidence ALWAYS enforces 1-click Human-in-the-Loop
     const requiresHumanReview =
       (tamperingRiskScore >= 40 && tamperingRiskScore <= 75) ||
@@ -944,7 +1003,7 @@ export class UnifiedDecisionService {
     const suggestedQaFailedCodes: string[] = [];
     if (matchVerdict === "MISMATCHED") suggestedQaFailedCodes.push("package_mismatch");
     if (sealBroken) suggestedQaFailedCodes.push("seal_broken");
-    if (boxCondition === "TORN_WET") suggestedQaFailedCodes.push("condition_bad");
+    if (boxCondition === "TORN_WET" || boxCondition === "SEVERE_CRUSH") suggestedQaFailedCodes.push("condition_bad");
 
     const suggestedDisposition: ReturnBoxForensicsDecision["suggested_disposition"] =
       boxCondition === "TORN_WET"
@@ -1244,11 +1303,20 @@ function buildCskhBranchGuidelines(
   }
   return [
     "Chuẩn hóa giọng văn đồng cảm, điềm tĩnh, nhận trách nhiệm xác minh ngay lập tức và tuyệt đối không tranh cãi với khách.",
-    "Thu thập chính xác mã đơn hàng và hình ảnh/video thực tế để đối chiếu quy trình QA chuẩn SOP; không tự ý hứa hoàn tiền hay cấp mã giảm giá vượt thẩm quyền.",
+    "Tuyệt đối KHÔNG chào bán thêm (no upsell/cross-sell) hay gợi ý mua sản phẩm khác; thu thập chính xác mã đơn hàng và hình ảnh thực tế để đối chiếu SOP và không tự ý hứa hoàn tiền vượt thẩm quyền.",
     escalate
       ? "Chuyển tiếp ưu tiên cao (L3 Escalation) cho chuyên viên CSKH tiếp nhận xử lý trực tiếp trên hồ sơ."
       : "Đề xuất phương án xử lý nằm trong chính sách đã duyệt và hỏi xác nhận sự đồng thuận của khách hàng.",
   ];
+}
+
+/** Masks emails, phone numbers, 6-digit OTPs, and long payment/account digit sequences before external API calls. */
+export function redactCustomerPii(raw: string): string {
+  return raw
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[EMAIL_REDACTED]")
+    .replace(/\b(?:\+?84|0)(?:3|5|7|8|9)\d{8}\b/g, "[PHONE_REDACTED]")
+    .replace(/\b\d{12,19}\b/g, "[ACCOUNT_REDACTED]")
+    .replace(/(?:\bOTP\s*[:=-]?\s*|\bmã xác thực\s*[:=-]?\s*)\d{4,8}\b/giu, "[OTP_REDACTED]");
 }
 
 function buildDisputeSummaryVi(

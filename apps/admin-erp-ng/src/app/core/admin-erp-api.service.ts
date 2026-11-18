@@ -878,6 +878,7 @@ export interface AdminBlogWorkflowPayload {
 /** Kết quả giám định thùng hàng đổi trả & đối chiếu chống tráo hàng ĐVVC từ `gemini-decision-1`. */
 export interface AdminReturnBoxForensicsResult {
   forensics_id?: string;
+  single_image_mode?: boolean;
   box_condition: 'INTACT' | 'MINOR_DENT' | 'SEVERE_CRUSH' | 'TORN_WET';
   seal_intact: boolean;
   carrier_claim_recommended: boolean;

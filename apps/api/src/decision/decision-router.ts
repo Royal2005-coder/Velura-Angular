@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { config } from "../config.js";
 import { HttpError, readJson, sendJson } from "../http.js";
 import { requireAdmin } from "../rbac.js";
+import { fetchSafeMediaBytes } from "../security/safe-media-fetch.js";
 import { insertRow, selectRows, updateRows } from "../supabase.js";
 import { asJsonObject, asNumber, asString, type AuthContext, type JsonObject, type RouteArgs } from "../types.js";
 import {
@@ -48,10 +49,10 @@ export async function handleDecisionAdminRoute({
       200,
       {
         configured: isDecisionEngineConfigured(),
-        decisionModel: config.geminiDecisionModel || "gemini-decision-1",
+        decisionModel: process.env.GEMINI_DECISION_MODEL || config.geminiDecisionModel || "gemini-decision-1",
         rolloutMode: rollout.mode,
-        canaryPercent: config.aiDecisionCanaryPercent,
-        primaryKeyConfigured: Boolean(config.geminiApiKey.trim()),
+        canaryPercent: Number(process.env.AI_DECISION_CANARY_PERCENT ?? config.aiDecisionCanaryPercent ?? 100),
+        primaryKeyConfigured: Boolean((process.env.GEMINI_PRIMARY_KEY || process.env.GEMINI_API_KEY || config.geminiApiKey || "").trim()),
         fallbackKeyConfigured: Boolean(resolveFallbackGeminiKey()),
         gatewayConfigured: Boolean(process.env.LITELLM_ENDPOINT && process.env.LITELLM_API_KEY),
         metrics: readDecisionEngineMetrics(),
@@ -98,7 +99,13 @@ export async function handleDecisionAdminRoute({
       actorId,
     });
 
-    if (productId && /^[0-9a-f-]{36}$/i.test(productId) && config.supabaseUrl && config.supabaseServiceRoleKey) {
+    if (
+      productId &&
+      /^[0-9a-f-]{36}$/i.test(productId) &&
+      resolveRolloutMode(productId).activeForRequest &&
+      config.supabaseUrl &&
+      config.supabaseServiceRoleKey
+    ) {
       await persistProductAiQa(productId, imageUrl, bytes, decision).catch(() => undefined);
     }
 
@@ -206,18 +213,10 @@ async function decodeAdminImagePayload(body: JsonObject): Promise<{
     return { bytes, mime: sniffRasterMime(bytes), imageUrl: asString(body.imageUrl) };
   }
   const imageUrl = asString(body.imageUrl).trim();
-  if (!/^https?:\/\//i.test(imageUrl)) {
+  if (!imageUrl) {
     throw new HttpError(422, "IMAGE_REQUIRED", "Cần cung cấp imageBase64 hoặc đường dẫn https:// của ảnh.");
   }
-  const resp = await fetch(imageUrl, { redirect: "error", signal: AbortSignal.timeout(15_000) });
-  if (!resp.ok) {
-    await resp.body?.cancel();
-    throw new HttpError(422, "IMAGE_FETCH_FAILED", "Không tải được ảnh sản phẩm để kiểm định.");
-  }
-  const bytes = Buffer.from(await resp.arrayBuffer());
-  if (bytes.length < 16 || bytes.length > 10 * 1024 * 1024) {
-    throw new HttpError(422, "INVALID_IMAGE", "Dung lượng ảnh không hợp lệ.");
-  }
+  const bytes = await fetchSafeMediaBytes(imageUrl, { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 });
   return { bytes, mime: sniffRasterMime(bytes), imageUrl };
 }
 

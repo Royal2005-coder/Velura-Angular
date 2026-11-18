@@ -69,10 +69,28 @@ export interface BroadcastBlogInput {
   author?: string | null;
 }
 
+function escapeEmailHtml(raw: string): string {
+  return String(raw || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeEmailHref(raw: string, fallback: string): string {
+  const trimmed = String(raw || "").trim();
+  if (/^https?:\/\/[^\s"'<>]+$/i.test(trimmed)) {
+    return escapeEmailHtml(trimmed);
+  }
+  return escapeEmailHtml(fallback);
+}
+
 /**
  * Builds responsive luxury HTML for welcome newsletter with 10% voucher.
  */
 export function buildWelcomeEmailHtml(unsubscribeUrl: string): string {
+  const safeUnsubscribe = sanitizeEmailHref(unsubscribeUrl, "https://velura.royalai.dev");
   return `<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -126,7 +144,7 @@ export function buildWelcomeEmailHtml(unsubscribeUrl: string): string {
             <td style="background-color: #FAF5F7; padding: 20px 24px; text-align: center; border-top: 1px solid #EAD7DD; font-size: 12px; color: #8A7B80; line-height: 1.5;">
               <p style="margin: 0 0 8px;">Bạn nhận được email này vì đã đăng ký nhận bản tin thời trang tại Velura.</p>
               <p style="margin: 0;">
-                <a href="${unsubscribeUrl}" style="color: #7A283C; text-decoration: underline;">Hủy đăng ký nhận tin</a>
+                <a href="${safeUnsubscribe}" style="color: #7A283C; text-decoration: underline;">Hủy đăng ký nhận tin</a>
               </p>
             </td>
           </tr>
@@ -140,6 +158,7 @@ export function buildWelcomeEmailHtml(unsubscribeUrl: string): string {
 
 /**
  * Builds responsive luxury HTML for automated blog newsletter broadcasts.
+ * Escapes all dynamic text and URL attributes so malicious HTML/XSS never reaches email clients.
  */
 export function buildBlogBroadcastHtml(
   title: string,
@@ -148,13 +167,23 @@ export function buildBlogBroadcastHtml(
   articleUrl: string,
   unsubscribeUrl: string
 ): string {
-  const safeImage = imageUrl || "https://velura.royalai.dev/assets/images/logo.png";
+  const safeTitle = escapeEmailHtml(title);
+  const safeExcerpt = escapeEmailHtml(excerpt);
+  const rawImage = String(imageUrl || "").trim();
+  const normalizedImage = /^https:\/\/[^\s"'<>]+$/i.test(rawImage)
+    ? rawImage
+    : rawImage.startsWith("/assets/")
+      ? `https://velura.royalai.dev${rawImage}`
+      : "https://velura.royalai.dev/assets/images/logo.png";
+  const safeImage = escapeEmailHtml(normalizedImage);
+  const safeArticleUrl = sanitizeEmailHref(articleUrl, "https://velura.royalai.dev/blog");
+  const safeUnsubscribeUrl = sanitizeEmailHref(unsubscribeUrl, "https://velura.royalai.dev");
   return `<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
+  <title>${safeTitle}</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #FAF5F7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #2A2522;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #FAF5F7; padding: 24px 12px;">
@@ -171,8 +200,8 @@ export function buildBlogBroadcastHtml(
           <!-- Cover Image -->
           <tr>
             <td style="padding: 0;">
-              <a href="${articleUrl}" target="_blank">
-                <img src="${safeImage}" alt="${title}" width="600" style="display: block; width: 100%; max-height: 320px; object-fit: cover; border: 0;" />
+              <a href="${safeArticleUrl}" target="_blank">
+                <img src="${safeImage}" alt="${safeTitle}" width="600" style="display: block; width: 100%; max-height: 320px; object-fit: cover; border: 0;" />
               </a>
             </td>
           </tr>
@@ -180,17 +209,17 @@ export function buildBlogBroadcastHtml(
           <tr>
             <td style="padding: 28px 24px;">
               <h2 style="margin: 0 0 12px; color: #7A283C; font-size: 20px; font-weight: 700; line-height: 1.4;">
-                <a href="${articleUrl}" target="_blank" style="color: #7A283C; text-decoration: none;">${title}</a>
+                <a href="${safeArticleUrl}" target="_blank" style="color: #7A283C; text-decoration: none;">${safeTitle}</a>
               </h2>
               <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.6; color: #4A4044;">
-                ${excerpt}
+                ${safeExcerpt}
               </p>
               
               <!-- CTA Button -->
               <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 0 auto;">
                 <tr>
                   <td style="border-radius: 999px; background-color: #7A283C; text-align: center;">
-                    <a href="${articleUrl}" target="_blank" style="display: inline-block; padding: 12px 28px; font-size: 14px; font-weight: 600; color: #FFFFFF; text-decoration: none; border-radius: 999px;">
+                    <a href="${safeArticleUrl}" target="_blank" style="display: inline-block; padding: 12px 28px; font-size: 14px; font-weight: 600; color: #FFFFFF; text-decoration: none; border-radius: 999px;">
                       Đọc Bài Viết Trên Velura &rarr;
                     </a>
                   </td>
@@ -203,7 +232,7 @@ export function buildBlogBroadcastHtml(
             <td style="background-color: #FAF5F7; padding: 20px 24px; text-align: center; border-top: 1px solid #EAD7DD; font-size: 12px; color: #8A7B80; line-height: 1.5;">
               <p style="margin: 0 0 8px;">Bạn nhận được bản tin này vì đã đăng ký nhận tin tại Velura.</p>
               <p style="margin: 0;">
-                <a href="${unsubscribeUrl}" style="color: #7A283C; text-decoration: underline;">Hủy đăng ký nhận tin</a>
+                <a href="${safeUnsubscribeUrl}" style="color: #7A283C; text-decoration: underline;">Hủy đăng ký nhận tin</a>
               </p>
             </td>
           </tr>
@@ -368,49 +397,84 @@ export class NewsletterService {
   }
 
   /**
-   * Broadcasts a newly published blog article to all active newsletter subscribers.
+   * Broadcasts a newly published blog article to all active newsletter subscribers with per-recipient deduplication.
    */
-  async broadcastBlog(blog: BroadcastBlogInput): Promise<{ queuedCount: number }> {
+  async broadcastBlog(
+    blog: BroadcastBlogInput,
+    deps: {
+      selectSubscribers?: () => Promise<JsonObject[]>;
+      selectAlreadyQueuedRecipients?: (blogId: string) => Promise<Set<string>>;
+      insertOutbox?: (row: JsonObject) => Promise<unknown>;
+      stampBroadcastAt?: (blogId: string, isoNow: string) => Promise<unknown>;
+    } = {},
+  ): Promise<{ queuedCount: number }> {
     const blogId = String(blog.blogId || "").trim();
     if (!blogId) return { queuedCount: 0 };
 
-    // 1. Fetch active subscribers
-    let subscribers: JsonObject[] = [];
-    try {
-      const res = await selectRows("newsletter_subscribers", {
-        status: "eq.active",
-        select: "subscriber_id,email,unsubscribe_token",
-        limit: 50000
+    const loadSubscribers =
+      deps.selectSubscribers ??
+      (async () => {
+        const res = await selectRows("newsletter_subscribers", {
+          status: "eq.active",
+          select: "subscriber_id,email,unsubscribe_token",
+          limit: 50000
+        });
+        return res.rows || [];
       });
-      subscribers = res.rows || [];
-    } catch (err: unknown) {
-      console.warn("[BLOG_BROADCAST] Could not load subscribers:", errorMessage(err));
-      return { queuedCount: 0 };
-    }
 
+    const loadAlreadyQueued =
+      deps.selectAlreadyQueuedRecipients ??
+      (async (targetBlogId: string) => {
+        const res = await selectRows("email_outbox", {
+          template_code: "eq.newsletter_blog_broadcast",
+          "metadata->>blog_id": `eq.${targetBlogId}`,
+          select: "recipient",
+          limit: 50000
+        }).catch(() => ({ rows: [] as JsonObject[] }));
+        return new Set(
+          (res.rows || [])
+            .map((r) => asString(asJsonObject(r).recipient).trim().toLowerCase())
+            .filter(Boolean),
+        );
+      });
+
+    const insertOutbox = deps.insertOutbox ?? ((row: JsonObject) => insertRow("email_outbox", row));
+    const stampBroadcast =
+      deps.stampBroadcastAt ??
+      ((targetBlogId: string, isoNow: string) =>
+        updateRows("blog", { blog_id: `eq.${targetBlogId}` }, { newsletter_broadcast_at: isoNow }));
+
+    // 1. Fetch active subscribers (propagate DB outage to scheduler so it enters failed_retry)
+    const subscribers = await loadSubscribers();
     if (!subscribers.length) {
+      await stampBroadcast(blogId, new Date().toISOString());
       return { queuedCount: 0 };
     }
 
+    const alreadyQueued = await loadAlreadyQueued(blogId);
     const apiBaseUrl = config.nodeEnv === "production" ? "https://api.royalai.dev" : `http://127.0.0.1:${config.port}`;
     const storefrontBaseUrl = "https://velura.royalai.dev";
-    const articleUrl = `${storefrontBaseUrl}/blog/${blog.slug}`;
+    const safeSlug = encodeURIComponent(String(blog.slug || "").trim());
+    const articleUrl = `${storefrontBaseUrl}/blog/${safeSlug}`;
     const subject = `[Velura Fashion] ${blog.title}`;
     const excerpt = blog.excerpt || "Khám phá xu hướng thời trang và phong cách mới nhất cùng Velura.";
     const imageUrl = blog.imageUrl || "";
 
     let queuedCount = 0;
+    let failedCount = 0;
+    let lastError = "";
     for (const sub of subscribers) {
       const email = asString(sub.email).trim().toLowerCase();
       if (!email || !EMAIL_REGEX.test(email)) continue;
+      if (alreadyQueued.has(email)) continue;
 
-      const token = asString(sub.unsubscribe_token);
+      const token = encodeURIComponent(asString(sub.unsubscribe_token));
       const unsubscribeUrl = `${apiBaseUrl}/api/user/newsletter/unsubscribe?token=${token}`;
       const plainText = `Bản tin thời trang Velura: ${blog.title}\n\n${excerpt}\n\nXem chi tiết tại: ${articleUrl}\n\nHủy đăng ký nhận tin: ${unsubscribeUrl}`;
       const html = buildBlogBroadcastHtml(blog.title, excerpt, imageUrl, articleUrl, unsubscribeUrl);
 
       try {
-        await insertRow("email_outbox", {
+        await insertOutbox({
           recipient: email,
           template_code: "newsletter_blog_broadcast",
           subject,
@@ -426,16 +490,18 @@ export class NewsletterService {
         });
         queuedCount += 1;
       } catch (err: unknown) {
-        console.warn(`[BLOG_BROADCAST] Failed to queue email for ${email}:`, errorMessage(err));
+        failedCount += 1;
+        lastError = errorMessage(err);
+        console.warn(`[BLOG_BROADCAST] Failed to queue email for ${email}:`, lastError);
       }
     }
 
-    // 2. Mark blog as broadcasted to prevent duplicate blasts on subsequent minor edits
-    try {
-      await updateRows("blog", { blog_id: `eq.${blogId}` }, { newsletter_broadcast_at: new Date().toISOString() });
-    } catch (err: unknown) {
-      console.warn("[BLOG_BROADCAST] Failed to stamp newsletter_broadcast_at on blog:", errorMessage(err));
+    if (failedCount > 0) {
+      throw new Error(`BLOG_BROADCAST_PARTIAL_OR_TOTAL_FAILURE (${failedCount} failed): ${lastError}`);
     }
+
+    // 2. Mark blog as broadcasted to prevent duplicate blasts on subsequent minor edits
+    await stampBroadcast(blogId, new Date().toISOString());
 
     return { queuedCount };
   }

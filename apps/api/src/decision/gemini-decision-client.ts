@@ -55,34 +55,41 @@ export function resetDecisionClientStateForTest(): void {
  * Supports both `GEMINI_API_KEY=...` lines and single-line raw `AQ...` / `AIza...` keys.
  * Never logs or exposes key material.
  */
-export function resolveFallbackGeminiKey(): string {
+export function resolveFallbackGeminiKey(options?: { cwd?: string; nodeEnv?: string }): string {
   const explicitEnv = (
-    config.geminiFallbackApiKey ||
     process.env.GEMINI_FALLBACK_FREE_KEY ||
     process.env.GEMINI_DECISION_FALLBACK_KEY ||
+    config.geminiFallbackApiKey ||
     ""
   ).trim();
   if (explicitEnv) return explicitEnv;
 
+  const effectiveNodeEnv = (options?.nodeEnv || process.env.NODE_ENV || config.nodeEnv || "development").trim();
+  if (effectiveNodeEnv === "production") {
+    return "";
+  }
+
+  const baseCwd = options?.cwd ? resolve(options.cwd) : process.cwd();
   const configuredPath = (process.env.LOCAL_GEMINI_ENV_PATH || config.localGeminiEnvPath || "").trim();
   const inNodeTestRunner = Boolean(process.env.NODE_TEST_CONTEXT);
   const allowImplicitLocalFile =
-    config.nodeEnv !== "production" &&
     process.env.ALLOW_LOCAL_GEMINI_ENV_FALLBACK !== "false" &&
     (!inNodeTestRunner || process.env.ALLOW_LOCAL_GEMINI_ENV_FALLBACK === "true");
   const candidatePaths = configuredPath
-    ? [resolve(process.cwd(), configuredPath)]
+    ? [resolve(baseCwd, configuredPath)]
     : allowImplicitLocalFile
-      ? [
-          resolve(process.cwd(), "gemini.env"),
-          resolve(process.cwd(), "apps", "gemini.env"),
-          resolve(process.cwd(), "..", "gemini.env"),
-          resolve(process.cwd(), "..", "..", "gemini.env"),
-        ]
+      ? options?.cwd
+        ? [resolve(baseCwd, "gemini.env"), resolve(baseCwd, "apps", "gemini.env")]
+        : [
+            resolve(baseCwd, "gemini.env"),
+            resolve(baseCwd, "apps", "gemini.env"),
+            resolve(baseCwd, "..", "gemini.env"),
+            resolve(baseCwd, "..", "..", "gemini.env"),
+          ]
       : [];
 
   if (candidatePaths.length === 0) return "";
-  const cacheKey = candidatePaths.join("|");
+  const cacheKey = `${effectiveNodeEnv}::${candidatePaths.join("|")}`;
   if (cachedLocalEnvKey && cachedLocalEnvKey.path === cacheKey) {
     return cachedLocalEnvKey.key;
   }
@@ -136,7 +143,7 @@ function stripWrappingQuotes(value: string): string {
 /** Determines whether at least one Decision Engine route (primary, fallback key, or LiteLLM gateway) is configured. */
 export function isDecisionEngineConfigured(): boolean {
   if (Boolean(process.env.LITELLM_ENDPOINT?.trim() && process.env.LITELLM_API_KEY?.trim())) return true;
-  if (config.geminiApiKey.trim()) return true;
+  if ((process.env.GEMINI_PRIMARY_KEY || process.env.GEMINI_API_KEY || config.geminiApiKey || "").trim()) return true;
   if (resolveFallbackGeminiKey()) return true;
   return false;
 }
@@ -183,7 +190,13 @@ export async function evaluateGeminiDecisions(
   const decisionModel = (config.geminiDecisionModel || "gemini-decision-1").trim();
   const rollout = resolveRolloutMode(request.entityId || request.useCase);
 
-  const primaryKey = (process.env.GEMINI_PRIMARY_KEY || config.geminiApiKey || "").trim();
+  const rawPrimary =
+    process.env.GEMINI_PRIMARY_KEY !== undefined && process.env.GEMINI_PRIMARY_KEY !== ""
+      ? process.env.GEMINI_PRIMARY_KEY
+      : process.env.GEMINI_API_KEY !== undefined
+        ? process.env.GEMINI_API_KEY
+        : config.geminiApiKey || "";
+  const primaryKey = rawPrimary.trim();
   const fallbackKey = resolveFallbackGeminiKey();
   const now = Date.now();
 
@@ -218,7 +231,7 @@ export async function evaluateGeminiDecisions(
       };
     } catch (err: unknown) {
       lastError = err;
-      if (isAbortError(err, request.signal)) {
+      if (isAbortError(err, request.signal) || isNonFailoverClientError(err)) {
         metric.failures++;
         throw err;
       }
@@ -255,7 +268,7 @@ export async function evaluateGeminiDecisions(
       };
     } catch (err: unknown) {
       lastError = err;
-      if (isAbortError(err, request.signal)) {
+      if (isAbortError(err, request.signal) || isNonFailoverClientError(err)) {
         metric.failures++;
         throw err;
       }
@@ -263,7 +276,7 @@ export async function evaluateGeminiDecisions(
   }
 
   // Tier 3: Structured Output (`temperature: 0.0` + strict `responseSchema`) over LiteLLM Gateway or available Gemini keys/models
-  const structuredRoutes = listGenerativeRoutes(primaryKey, fallbackKey);
+  const structuredRoutes = listGenerativeRoutes(primaryKey, fallbackKey, Date.now() < primaryCircuitOpenUntil);
   for (const structuredRoute of structuredRoutes) {
     try {
       const res = await callStructuredDecisionFallback({
@@ -309,7 +322,13 @@ export async function generateFallbackAwareJson(
   options: { model?: string; temperature?: number; maxOutputTokens?: number; timeoutMs?: number; signal?: AbortSignal; customFetch?: typeof fetch } = {},
 ): Promise<{ data: JsonObject; modelUsed: string; usedFallbackKey: boolean }> {
   const schema = normalizeOutputSchema(rawSchema);
-  const primaryKey = (process.env.GEMINI_PRIMARY_KEY || config.geminiApiKey || "").trim();
+  const rawPrimary =
+    process.env.GEMINI_PRIMARY_KEY !== undefined && process.env.GEMINI_PRIMARY_KEY !== ""
+      ? process.env.GEMINI_PRIMARY_KEY
+      : process.env.GEMINI_API_KEY !== undefined
+        ? process.env.GEMINI_API_KEY
+        : config.geminiApiKey || "";
+  const primaryKey = rawPrimary.trim();
   const fallbackKey = resolveFallbackGeminiKey();
   const customFetch = options.customFetch ?? globalThis.fetch;
   const timeoutMs = options.timeoutMs ?? 20_000;
@@ -409,7 +428,13 @@ export async function generateFallbackAwareEmbedding(
   const dimensions = options.dimensions ?? config.geminiEmbeddingDimensions ?? 1536;
   const timeoutMs = options.timeoutMs ?? 10_000;
   const customFetch = options.customFetch ?? globalThis.fetch;
-  const primaryKey = (process.env.GEMINI_PRIMARY_KEY || config.geminiApiKey || "").trim();
+  const rawPrimary =
+    process.env.GEMINI_PRIMARY_KEY !== undefined && process.env.GEMINI_PRIMARY_KEY !== ""
+      ? process.env.GEMINI_PRIMARY_KEY
+      : process.env.GEMINI_API_KEY !== undefined
+        ? process.env.GEMINI_API_KEY
+        : config.geminiApiKey || "";
+  const primaryKey = rawPrimary.trim();
   const fallbackKey = resolveFallbackGeminiKey();
   const routes = listGenerativeRoutes(primaryKey, fallbackKey);
   const models = Array.from(new Set([config.geminiEmbeddingModel || "gemini-embedding-2", "gemini-embedding-001"]));
@@ -497,7 +522,7 @@ export async function recordDecisionAuditLog(entry: {
       actor_id: entry.actorId && /^[0-9a-f-]{36}$/i.test(entry.actorId) ? entry.actorId : null,
     });
   } catch {
-    // Non-blocking telemetry persistence: never fail user workflow if migration 133 is pending
+    // Non-blocking telemetry persistence: never fail user workflow if migration 134 is pending
   }
 }
 
@@ -541,16 +566,21 @@ async function callDecisionsEndpoint(args: {
     });
 
     if (!response.ok) {
-      let blockCode = "";
       if (response.status === 400) {
         const errBody = asJsonObject(await response.json().catch(() => ({})));
-        blockCode = asString(asJsonObject(errBody.error).code);
-      } else {
-        await response.body?.cancel();
+        const errObj = asJsonObject(errBody.error);
+        const blockCode = asString(errObj.code).toLowerCase();
+        const errMsg = asString(errObj.message);
+        const errDetails = JSON.stringify(errObj.details || "");
+        if (["safety", "prohibited_content", "blocklist", "image_safety", "content_blocked"].includes(blockCode)) {
+          throw new HttpError(422, "AI_SAFETY_BLOCK", "Nội dung đầu vào bị bộ lọc an toàn từ chối.");
+        }
+        if (/API_KEY_INVALID|API key not valid/i.test(`${errMsg} ${errDetails}`)) {
+          throw new HttpError(503, "AI_PROVIDER_UNAUTHORIZED", "Xác thực khóa AI thất bại.");
+        }
+        throw new HttpError(400, "AI_PROVIDER_BAD_REQUEST", "Định dạng yêu cầu gửi tới Decision API không hợp lệ.");
       }
-      if (["safety", "prohibited_content", "blocklist", "image_safety", "content_blocked"].includes(blockCode)) {
-        throw new HttpError(422, "AI_SAFETY_BLOCK", "Nội dung đầu vào bị bộ lọc an toàn từ chối.");
-      }
+      await response.body?.cancel();
       throw mapStatusToHttpError(response.status);
     }
 
@@ -628,7 +658,7 @@ interface FallbackRoute {
   usedFallbackKey: boolean;
 }
 
-function listGenerativeRoutes(primaryKey: string, fallbackKey: string): FallbackRoute[] {
+function listGenerativeRoutes(primaryKey: string, fallbackKey: string, skipPrimary = Date.now() < primaryCircuitOpenUntil): FallbackRoute[] {
   const routes: FallbackRoute[] = [];
   const endpoint = process.env.LITELLM_ENDPOINT?.trim();
   const gatewayKey = process.env.LITELLM_API_KEY?.trim();
@@ -641,18 +671,16 @@ function listGenerativeRoutes(primaryKey: string, fallbackKey: string): Fallback
       usedFallbackKey: false,
     });
   }
-  if (primaryKey) {
+  if (primaryKey && !skipPrimary) {
     routes.push({ gateway: false, base: GEMINI_V1BETA_BASE, key: primaryKey, usedFallbackKey: false });
   }
   if (fallbackKey && fallbackKey !== primaryKey) {
     routes.push({ gateway: false, base: GEMINI_V1BETA_BASE, key: fallbackKey, usedFallbackKey: true });
   }
+  if (!routes.length && primaryKey) {
+    routes.push({ gateway: false, base: GEMINI_V1BETA_BASE, key: primaryKey, usedFallbackKey: false });
+  }
   return routes;
-}
-
-function resolveStructuredFallbackRoute(primaryKey: string, fallbackKey: string): FallbackRoute | null {
-  const routes = listGenerativeRoutes(primaryKey, fallbackKey);
-  return routes[0] || null;
 }
 
 async function callStructuredDecisionFallback(args: {
@@ -777,10 +805,14 @@ async function callStructuredDecisionFallback(args: {
             },
           };
 
+      const perModelTimeout = Math.max(500, Math.min(args.timeoutMs, 8_000));
+      const combinedSignal = args.signal
+        ? AbortSignal.any([args.signal, AbortSignal.timeout(perModelTimeout)])
+        : AbortSignal.timeout(perModelTimeout);
       const response = await args.customFetch(url, {
         method: "POST",
         redirect: "error",
-        signal: args.signal ?? AbortSignal.timeout(args.timeoutMs),
+        signal: combinedSignal,
         headers: {
           "content-type": "application/json",
           ...(args.route.gateway ? { authorization: `Bearer ${args.route.key}` } : { "x-goog-api-key": args.route.key }),
@@ -929,7 +961,21 @@ function mapStatusToHttpError(status: number): HttpError {
 
 function shouldTripCircuit(err: unknown): boolean {
   if (!(err instanceof HttpError)) return true;
+  if (
+    err.code === "AI_PROVIDER_BAD_REQUEST" ||
+    err.code === "AI_SAFETY_BLOCK" ||
+    err.code === "AI_PROVIDER_UNSUPPORTED"
+  ) {
+    return false;
+  }
   return [429, 500, 502, 503, 504].includes(err.status);
+}
+
+function isNonFailoverClientError(err: unknown): boolean {
+  return (
+    err instanceof HttpError &&
+    (err.code === "AI_SAFETY_BLOCK" || err.code === "AI_PROVIDER_BAD_REQUEST" || err.status === 400)
+  );
 }
 
 function isAbortError(err: unknown, signal?: AbortSignal): boolean {

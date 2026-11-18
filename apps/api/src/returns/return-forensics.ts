@@ -2,27 +2,49 @@
  * Return Parcel Visual Forensics & Carrier Dispute Helper.
  *
  * Resolves private evidence images (`pickup_photo` / `packing_photo` vs `qa_photo`) or operator-supplied
- * base64 inspection frames, invokes `UnifiedDecisionService.decideReturnBoxForensics`, and persists
- * immutable forensics audit rows in `public.return_box_forensics`.
+ * base64 inspection frames, enforces strict `return-evidence` ownership + SSRF-safe byte fetching,
+ * invokes `UnifiedDecisionService.decideReturnBoxForensics`, and persists immutable forensics audit rows
+ * in `public.return_box_forensics`.
  */
 
 import { config } from "../config.js";
-import { HttpError } from "../http.js";
-import { insertRow, selectRows } from "../supabase.js";
-import { asJsonObject, asString, type JsonObject } from "../types.js";
+import { resolveRolloutMode } from "../decision/gemini-decision-client.js";
 import { unifiedDecisionService } from "../decision/decision-service.js";
 import type { ReturnBoxForensicsDecision } from "../decision/decision-types.js";
+import { HttpError } from "../http.js";
+import { assertReturnEvidenceOwnership, fetchSafeMediaBytes } from "../security/safe-media-fetch.js";
+import { insertRow, selectRows } from "../supabase.js";
+import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { listReturnEvidence, resolveEvidenceRef } from "./return-evidence.js";
+
+/** Optional dependency injection contract for isolated forensics unit and mutation tests. */
+export interface ReturnBoxForensicsDeps {
+  readonly decisionService?: Pick<typeof unifiedDecisionService, "decideReturnBoxForensics">;
+  readonly listEvidence?: typeof listReturnEvidence;
+  readonly resolveRef?: typeof resolveEvidenceRef;
+  readonly fetchBytes?: typeof fetchSafeMediaBytes;
+  readonly insertForensics?: (row: JsonObject) => Promise<JsonObject>;
+}
 
 /**
  * Evaluates a return parcel's structural integrity and pickup-vs-warehouse identity verification.
  */
-export async function executeReturnBoxForensics(input: {
-  returnRow: JsonObject;
-  shipments: JsonObject[];
-  body: JsonObject;
-  actorId: string | null;
-}): Promise<ReturnBoxForensicsDecision & { forensics_id?: string }> {
+export async function executeReturnBoxForensics(
+  input: {
+    returnRow: JsonObject;
+    shipments: JsonObject[];
+    body: JsonObject;
+    actorId: string | null;
+  },
+  deps: ReturnBoxForensicsDeps = {},
+): Promise<ReturnBoxForensicsDecision & { forensics_id?: string; single_image_mode: boolean }> {
+  const decisionService = deps.decisionService ?? unifiedDecisionService;
+  const listEvidence = deps.listEvidence ?? listReturnEvidence;
+  const resolveRef = deps.resolveRef ?? resolveEvidenceRef;
+  const fetchBytes = deps.fetchBytes ?? fetchSafeMediaBytes;
+  const insertForensics =
+    deps.insertForensics ?? ((row: JsonObject) => insertRow("return_box_forensics", row).then(asJsonObject));
+
   const returnId = asString(input.returnRow.return_id);
   const returnCode = asString(input.returnRow.return_code) || null;
   const inbound = input.shipments.find((s) => asString(s.direction) === "inbound") || input.shipments[0] || {};
@@ -30,9 +52,9 @@ export async function executeReturnBoxForensics(input: {
   const carrierName = asString(input.body.carrier || inbound.carrier) || null;
   const returnItemId = asString(input.body.returnItemId).trim() || null;
 
-  const evidenceRows = await listReturnEvidence(returnId).catch(() => [] as JsonObject[]);
+  const evidenceRows = await listEvidence(returnId).catch(() => [] as JsonObject[]);
 
-  // 1. Resolve Warehouse QA Photo (operator upload base64, explicit URL/ref, or latest stored qa_photo)
+  // 1. Resolve Warehouse QA Photo (operator upload base64, explicit owned storage:// ref, or latest stored qa_photo)
   const warehouseB64 = asString(input.body.warehouseImageBase64).trim();
   const warehouseRef = asString(input.body.warehouseEvidenceRef).trim();
   let warehouseImage: { bytes: Buffer; mime: "image/jpeg" | "image/png" | "image/webp" } | null = null;
@@ -41,13 +63,18 @@ export async function executeReturnBoxForensics(input: {
   if (warehouseB64) {
     warehouseImage = decodeImageBase64(warehouseB64);
   } else if (warehouseRef) {
-    const signed = await resolveEvidenceRef(warehouseRef);
-    warehouseImage = await fetchSignedEvidenceBytes(signed || warehouseRef);
+    assertReturnEvidenceOwnership(warehouseRef, returnId);
+    const signed = await resolveRef(warehouseRef);
+    if (!signed) {
+      throw new HttpError(422, "INVALID_EVIDENCE_URL", "Không đọc được đường dẫn bằng chứng riêng tư.");
+    }
+    warehouseImage = toImagePayload(await fetchBytes(signed, { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 }));
   } else {
     const latestQa = [...evidenceRows].reverse().find((r) => asString(r.kind) === "qa_photo" && asString(r.url));
     if (latestQa) {
       storedWarehouseRef = `storage://${asString(latestQa.storage_bucket)}/${asString(latestQa.storage_path)}`;
-      warehouseImage = await fetchSignedEvidenceBytes(asString(latestQa.url));
+      assertReturnEvidenceOwnership(storedWarehouseRef, returnId);
+      warehouseImage = toImagePayload(await fetchBytes(asString(latestQa.url), { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 }));
     }
   }
 
@@ -68,26 +95,45 @@ export async function executeReturnBoxForensics(input: {
   if (pickupB64) {
     pickupImage = decodeImageBase64(pickupB64);
   } else if (pickupRef) {
-    const signed = await resolveEvidenceRef(pickupRef);
-    pickupImage = await fetchSignedEvidenceBytes(signed || pickupRef).catch(() => null);
+    assertReturnEvidenceOwnership(pickupRef, returnId);
+    const signed = await resolveRef(pickupRef);
+    if (signed) {
+      const loaded = await fetchBytes(signed, { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 }).catch(() => null);
+      pickupImage = loaded ? toImagePayload(loaded) : null;
+    }
   } else {
     const pickupEvidence =
       [...evidenceRows].reverse().find((r) => asString(r.kind) === "pickup_photo" && asString(r.url)) ||
       [...evidenceRows].reverse().find((r) => asString(r.kind) === "packing_photo" && asString(r.url));
     if (pickupEvidence) {
-      storedPickupRef = `storage://${asString(pickupEvidence.storage_bucket)}/${asString(pickupEvidence.storage_path)}`;
-      pickupImage = await fetchSignedEvidenceBytes(asString(pickupEvidence.url)).catch(() => null);
+      const candidateRef = `storage://${asString(pickupEvidence.storage_bucket)}/${asString(pickupEvidence.storage_path)}`;
+      if (/^storage:\/\/return-evidence(?:-private)?\/returns\//.test(candidateRef)) {
+        assertReturnEvidenceOwnership(candidateRef, returnId);
+        storedPickupRef = candidateRef;
+        const loaded = await fetchBytes(asString(pickupEvidence.url), { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 }).catch(() => null);
+        pickupImage = loaded ? toImagePayload(loaded) : null;
+      }
     } else if (Array.isArray(inbound.pickup_photo_urls) && inbound.pickup_photo_urls.length) {
       const firstRef = asString(inbound.pickup_photo_urls[0]);
-      storedPickupRef = firstRef;
-      const signed = await resolveEvidenceRef(firstRef);
-      if (signed) {
-        pickupImage = await fetchSignedEvidenceBytes(signed).catch(() => null);
+      if (firstRef.startsWith("storage://")) {
+        assertReturnEvidenceOwnership(firstRef, returnId);
+        const signed = await resolveRef(firstRef);
+        if (signed) {
+          storedPickupRef = firstRef;
+          const loaded = await fetchBytes(signed, { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 }).catch(() => null);
+          pickupImage = loaded ? toImagePayload(loaded) : null;
+        }
       }
     }
   }
 
-  const decision = await unifiedDecisionService.decideReturnBoxForensics({
+  // Never record a phantom pickup reference when pickup bytes were unavailable (single-image mode)
+  if (!pickupImage) {
+    storedPickupRef = null;
+  }
+  const singleImageMode = !pickupImage;
+
+  const decision = await decisionService.decideReturnBoxForensics({
     returnId,
     returnCode,
     trackingCode,
@@ -97,35 +143,39 @@ export async function executeReturnBoxForensics(input: {
     actorId: input.actorId,
   });
 
+  const rollout = resolveRolloutMode(returnId);
   let forensicsId: string | undefined;
-  if (config.supabaseUrl && config.supabaseServiceRoleKey && /^[0-9a-f-]{36}$/i.test(returnId)) {
+  if (
+    rollout.activeForRequest &&
+    (deps.insertForensics || (config.supabaseUrl && config.supabaseServiceRoleKey)) &&
+    /^[0-9a-f-]{36}$/i.test(returnId)
+  ) {
     try {
-      const inserted = asJsonObject(
-        await insertRow("return_box_forensics", {
-          return_id: returnId,
-          return_item_id: returnItemId && /^[0-9a-f-]{36}$/i.test(returnItemId) ? returnItemId : null,
-          pickup_evidence_ref: storedPickupRef,
-          warehouse_evidence_ref: storedWarehouseRef,
-          box_condition: decision.box_condition,
-          carrier_claim_recommended: decision.carrier_claim_recommended,
-          match_verdict: decision.match_verdict,
-          tampering_risk_score: decision.tampering_risk_score,
-          confidence_score: decision.confidence_score,
-          requires_human_review: decision.requires_human_review,
-          freeze_auto_refund: decision.freeze_auto_refund,
-          diff_factors: [...decision.diff_factors],
-          factor_probabilities: decision.factor_probabilities,
-          carrier_claim_report: decision.carrier_claim_report as unknown as JsonObject,
-        }),
-      );
+      const inserted = await insertForensics({
+        return_id: returnId,
+        return_item_id: returnItemId && /^[0-9a-f-]{36}$/i.test(returnItemId) ? returnItemId : null,
+        pickup_evidence_ref: storedPickupRef,
+        warehouse_evidence_ref: storedWarehouseRef,
+        box_condition: decision.box_condition,
+        carrier_claim_recommended: decision.carrier_claim_recommended,
+        match_verdict: decision.match_verdict,
+        tampering_risk_score: decision.tampering_risk_score,
+        confidence_score: decision.confidence_score,
+        requires_human_review: decision.requires_human_review,
+        freeze_auto_refund: decision.freeze_auto_refund,
+        diff_factors: [...decision.diff_factors],
+        factor_probabilities: decision.factor_probabilities,
+        carrier_claim_report: decision.carrier_claim_report as unknown as JsonObject,
+      });
       forensicsId = asString(inserted.forensics_id) || undefined;
     } catch {
-      // Non-blocking if migration 133 has not yet been applied
+      // Non-blocking if migration 134 has not yet been applied
     }
   }
 
   return {
     ...decision,
+    single_image_mode: singleImageMode,
     ...(forensicsId ? { forensics_id: forensicsId } : {}),
   };
 }
@@ -154,19 +204,7 @@ function decodeImageBase64(raw: string): { bytes: Buffer; mime: "image/jpeg" | "
   return { bytes, mime: sniffMime(bytes) };
 }
 
-async function fetchSignedEvidenceBytes(url: string): Promise<{ bytes: Buffer; mime: "image/jpeg" | "image/png" | "image/webp" }> {
-  if (!/^https?:\/\//i.test(url)) {
-    throw new HttpError(422, "INVALID_EVIDENCE_URL", "Không đọc được đường dẫn bằng chứng riêng tư.");
-  }
-  const resp = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15_000) });
-  if (!resp.ok) {
-    await resp.body?.cancel();
-    throw new HttpError(422, "EVIDENCE_FETCH_FAILED", "Không tải được ảnh bằng chứng từ kho lưu trữ.");
-  }
-  const bytes = Buffer.from(await resp.arrayBuffer());
-  if (bytes.length < 16 || bytes.length > 10 * 1024 * 1024) {
-    throw new HttpError(422, "INVALID_IMAGE", "Ảnh bằng chứng trống hoặc vượt giới hạn.");
-  }
+function toImagePayload(bytes: Buffer): { bytes: Buffer; mime: "image/jpeg" | "image/png" | "image/webp" } {
   return { bytes, mime: sniffMime(bytes) };
 }
 

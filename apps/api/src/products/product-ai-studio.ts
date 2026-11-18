@@ -5,10 +5,11 @@ import { join, resolve } from "node:path";
 import sharp from "sharp";
 import { config, getSupabaseServiceKey } from "../config.js";
 import { generateGeminiText } from "../gemini-client.js";
-import { isDecisionEngineConfigured } from "../decision/gemini-decision-client.js";
+import { isDecisionEngineConfigured, resolveRolloutMode } from "../decision/gemini-decision-client.js";
 import { unifiedDecisionService } from "../decision/decision-service.js";
 import { persistProductAiQa } from "../decision/decision-router.js";
 import type { ProductImageQaDecision } from "../decision/decision-types.js";
+import { fetchSafeMediaBytes, resolveSafePublicAssetPath } from "../security/safe-media-fetch.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 
@@ -94,38 +95,20 @@ async function resolveImageBytes(body: JsonObject): Promise<{ bytes: Buffer; mim
   }
 
   if (imageUrl.startsWith("/")) {
-    const normalizedRel = imageUrl.replace(/^\/src\/assets\//, "/assets/").replace(/^\/+/, "");
-    const candidates = [
-      resolve(process.cwd(), "apps/user-ng/public", normalizedRel),
-      resolve(process.cwd(), "apps/user-ng/src", normalizedRel),
-      resolve(process.cwd(), "apps/admin-ng/public", normalizedRel),
-      resolve(process.cwd(), normalizedRel),
-    ];
-    for (const candidate of candidates) {
-      if (existsSync(candidate)) {
-        const bytes = await readFile(candidate);
-        return { bytes, mime: detectMime(bytes) || "image/jpeg" };
-      }
+    const normalizedRel = imageUrl.replace(/^\/src\/assets\//, "/assets/");
+    const localPath = resolveSafePublicAssetPath(normalizedRel);
+    if (localPath) {
+      const bytes = await readFile(localPath);
+      return { bytes, mime: detectMime(bytes) || "image/jpeg" };
     }
-    // Fallback to public storefront URL
     const publicBase = (process.env.PUBLIC_STOREFRONT_URL || "https://velura.royalai.dev").replace(/\/$/, "");
-    const response = await fetch(`${publicBase}/${normalizedRel}`, { signal: AbortSignal.timeout(12_000) });
-    if (!response.ok) {
-      throw new HttpError(422, "IMAGE_FETCH_FAILED", "Không đọc được file ảnh gốc của sản phẩm.");
-    }
-    const bytes = Buffer.from(await response.arrayBuffer());
+    const cleanSub = normalizedRel.replace(/^\/+/, "");
+    const bytes = await fetchSafeMediaBytes(`${publicBase}/${cleanSub}`, { timeoutMs: 12_000 });
     return { bytes, mime: detectMime(bytes) || "image/jpeg" };
   }
 
   if (/^https?:\/\//i.test(imageUrl)) {
-    const response = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) });
-    if (!response.ok) {
-      throw new HttpError(422, "IMAGE_FETCH_FAILED", "Không tải được ảnh từ đường dẫn hiện tại.");
-    }
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length < 16 || bytes.length > 10 * 1024 * 1024) {
-      throw new HttpError(422, "INVALID_IMAGE", "Dung lượng ảnh vượt quá giới hạn xử lý.");
-    }
+    const bytes = await fetchSafeMediaBytes(imageUrl, { maxBytes: 10 * 1024 * 1024, timeoutMs: 15_000 });
     return { bytes, mime: detectMime(bytes) || "image/jpeg" };
   }
 
@@ -396,32 +379,49 @@ export async function measureTechnicalQuality(bytes: Buffer): Promise<ProductIma
 /**
  * Analyzes a newly uploaded or existing product image using measured metrics + Gemini Vision recommendation.
  */
-export async function analyzeProductImageQuality(body: JsonObject): Promise<ProductImageQualityAnalysis> {
+export interface ProductQualityDeps {
+  readonly decisionService?: Pick<typeof unifiedDecisionService, "decideProductImageQa">;
+  readonly isDecisionConfigured?: () => boolean;
+  readonly persistQa?: typeof persistProductAiQa;
+  readonly uploadBucket?: typeof uploadToProductImagesBucket;
+  readonly generateText?: typeof generateGeminiText;
+}
+
+export async function analyzeProductImageQuality(
+  body: JsonObject,
+  deps: ProductQualityDeps = {},
+): Promise<ProductImageQualityAnalysis> {
   const { bytes, mime } = await resolveImageBytes(body);
   const analysis = await measureTechnicalQuality(bytes);
   const productName = asString(body.productName).trim() || "Sản phẩm thời trang Velura";
+  const decisionSvc = deps.decisionService ?? unifiedDecisionService;
+  const checkDecision = deps.isDecisionConfigured ?? isDecisionEngineConfigured;
+  const persistQaFn = deps.persistQa ?? persistProductAiQa;
+  const uploadFn = deps.uploadBucket ?? uploadToProductImagesBucket;
 
   // If the caller uploaded a new base64 image file, stage its original URL so the admin can use it directly if desired
   if (asString(body.imageBase64).trim()) {
-    analysis.uploadedUrl = await uploadToProductImagesBucket(bytes, mime, "uploads");
+    analysis.uploadedUrl = await uploadFn(bytes, mime, "uploads");
   }
 
   // Evaluate scientific 4-axis Visual QA Taxonomy & Blog Eligibility via `gemini-decision-1` when AI is enabled
-  if (process.env.AI_DISABLE !== "true" && isDecisionEngineConfigured()) {
+  if (process.env.AI_DISABLE !== "true" && checkDecision()) {
     try {
       const productId = asString(body.productId).trim() || undefined;
-      const taxonomy = await unifiedDecisionService.decideProductImageQa(
+      const taxonomy = await decisionSvc.decideProductImageQa(
         bytes,
         (mime === "image/png" || mime === "image/webp" ? mime : "image/jpeg"),
         { productId, productName },
       );
-      analysis.decisionTaxonomy = taxonomy;
-      if (taxonomy.actionable_fix.length > 0 && !analysis.passed) {
-        analysis.recommendations = [...taxonomy.actionable_fix];
-      }
-      if (productId && /^[0-9a-f-]{36}$/i.test(productId)) {
-        const targetUrl = analysis.uploadedUrl || asString(body.imageUrl).trim();
-        await persistProductAiQa(productId, targetUrl, bytes, taxonomy).catch(() => undefined);
+      if (resolveRolloutMode(productId || "product_image_qa").activeForRequest) {
+        analysis.decisionTaxonomy = taxonomy;
+        if (taxonomy.actionable_fix.length > 0 && !analysis.passed) {
+          analysis.recommendations = [...taxonomy.actionable_fix];
+        }
+        if (productId && /^[0-9a-f-]{36}$/i.test(productId)) {
+          const targetUrl = analysis.uploadedUrl || asString(body.imageUrl).trim();
+          await persistQaFn(productId, targetUrl, bytes, taxonomy).catch(() => undefined);
+        }
       }
     } catch {
       // Preserve measured Sharp technical analysis if Decision Engine is temporarily offline

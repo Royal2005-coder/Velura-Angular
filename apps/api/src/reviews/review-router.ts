@@ -41,6 +41,7 @@ export async function handleReviewRoute({ req, res, url, parts, context, headers
   }
 
   if (req.method === "POST" && parts[5] === "suggest-reply" && parts.length === 6) {
+    await readJson(req, config.maxBodyBytes).catch(() => ({}));
     sendJson(res, 200, await service.suggestReply(context, reviewId), headers);
     return true;
   }

@@ -1,8 +1,8 @@
 import { DOCUMENT } from '@angular/common';
-import { Component, effect, inject } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Meta, Title } from '@angular/platform-browser';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map, switchMap } from 'rxjs';
 import { BlogCatalogService } from '../../core/services/blog-catalog.service';
 import { BlogPost } from '../../core/models/blog-post';
@@ -18,9 +18,11 @@ import { SafeHtmlPipe } from '../../shared/pipes/safe-html.pipe';
 export class BlogDetailPage {
   private readonly catalog = inject(BlogCatalogService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly titleService = inject(Title);
   private readonly metaService = inject(Meta);
   private readonly document = inject(DOCUMENT);
+  readonly copiedVoucher = signal(false);
 
   constructor() {
     useBodyClass('page-blog-detail');
@@ -54,6 +56,26 @@ export class BlogDetailPage {
   /** One price format for the article's product cards. */
   money(value: number): string {
     return `${Number(value || 0).toLocaleString('vi-VN')}đ`;
+  }
+
+  /** Copies the article's linked campaign voucher code to clipboard for checkout. */
+  copyVoucher(code: string): void {
+    const clean = code.trim();
+    if (!clean) return;
+    navigator.clipboard?.writeText(clean).catch(() => undefined);
+    this.copiedVoucher.set(true);
+    setTimeout(() => this.copiedVoucher.set(false), 2200);
+  }
+
+  /** Routes internal root-relative links inside `[innerHTML]` via Angular Router without full page reload. */
+  onRichContentClick(event: MouseEvent): void {
+    const target = (event.target as HTMLElement | null)?.closest?.('a');
+    if (!target) return;
+    const href = target.getAttribute('href') || '';
+    if (href.startsWith('/') && !href.startsWith('//') && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+      event.preventDefault();
+      void this.router.navigateByUrl(href);
+    }
   }
 
   /**

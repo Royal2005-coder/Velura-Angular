@@ -86,6 +86,24 @@ export const AI_MUTATION_CATALOG = {
     replacement: "const safeTitle = title;",
     spec: "tests/api/uat-f7-blog-scheduler-and-prod.test.ts",
   },
+  M9: {
+    id: "M9",
+    domain: "F1 · Decision Admin RBAC Gate",
+    description: "Bypass module-level products.update RBAC check on /api/v1/admin/ai-decisions/product-qa",
+    fileSuffix: "apps/api/src/decision/decision-router.ts",
+    target: 'requirePermission(context as AuthContext, "products", "update");',
+    replacement: "/* RBAC_MUTANT_BYPASSED */",
+    spec: "tests/api/uat-f1-decision-gateway.test.ts",
+  },
+  M10: {
+    id: "M10",
+    domain: "F6 · Batch SKU Curation Ceiling",
+    description: "Allow non-HERO product images to bypass human review into AUTO_BLOG_PUBLISH in batch curation",
+    fileSuffix: "apps/api/src/decision/decision-service.ts",
+    target: 'if (publishMode === "AUTO_BLOG_PUBLISH" && item.imageQaVerdict !== "APPROVED_HERO") {',
+    replacement: 'if (false && publishMode === "AUTO_BLOG_PUBLISH" && item.imageQaVerdict !== "APPROVED_HERO") {',
+    spec: "tests/api/uat-f6-blog-curation-workflow.test.ts",
+  },
 };
 
 export async function load(url, context, nextLoad) {

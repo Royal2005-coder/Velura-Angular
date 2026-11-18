@@ -130,4 +130,31 @@ describe('PersonalColorComponent', () => {
     expect(text).toContain('19.4°');
     expect(text).toContain('Sắc ẩn Ấm (Warm)');
   });
+
+  it('renders Light Tone optical diagnostics and disables confirmation when status is VALIDATION_FAILED (RETAKE)', () => {
+    const fixture = TestBed.createComponent(PersonalColorComponent);
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+    page.analysis.set({
+      id: 'diag-retake',
+      status: 'VALIDATION_FAILED',
+      profile_version: 2,
+      policy_version: 'approved-policy',
+      expires_at: '2026-12-01T00:00:00Z',
+      error: 'COLOR_PICTURE_GUIDANCE:lighting_valid',
+      diagnostics: {
+        base_skin_depth: 'LIGHT_TONE',
+        skin_depth: 'FAIR',
+        undertone: 'COOL',
+        contrast_level: 'HIGH',
+        ita_angle: 48.5,
+        white_balance_shift: 'EXTREME_CAST',
+        recommended_hex_palette: [],
+        avoid_hex_palette: [],
+        requires_human_review: true,
+      },
+    });
+    fixture.detectChanges();
+    expect(page.canConfirm()).toBe(false);
+  });
 });

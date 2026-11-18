@@ -6,6 +6,7 @@ import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 import { classifyReturnPayment, refundFlowFor, refundReceiverStatus, type ReturnPaymentKind } from "./return-refund-receiver.js";
 import { writeAuditLog } from "../audit.js";
 import { listReturnEvidence } from "./return-evidence.js";
+import { listStoredReturnBoxForensics } from "./return-forensics.js";
 
 /** Forward the resolved client IP so audited RPCs can replace their legacy 127.0.0.1. */
 function clientIpOptions(ipAddress?: string) {
@@ -130,6 +131,11 @@ export function createReturnRepository() {
     /** Evidence ledger used by approval gates; tests inject a deterministic customer upload list. */
     async listEvidence(returnId: string): Promise<JsonObject[]> {
       return listReturnEvidence(returnId);
+    },
+
+    /** Stored AI parcel forensics ledger used by server-side refund freeze gates. */
+    async listBoxForensics(returnId: string): Promise<JsonObject[]> {
+      return listStoredReturnBoxForensics(returnId);
     },
 
     /**
@@ -623,9 +629,11 @@ export function createReturnRepository() {
 }
 
 /**
- * Repository returned by `createReturnRepository`.
+ * Repository returned by `createReturnRepository` (`listBoxForensics` optional for legacy unit-test stubs).
  */
-export type ReturnRepository = ReturnType<typeof createReturnRepository>;
+export type ReturnRepository = Omit<ReturnType<typeof createReturnRepository>, "listBoxForensics"> & {
+  listBoxForensics?(returnId: string): Promise<JsonObject[]>;
+};
 
 function authOptions(accessToken: string | null | undefined): { useAnonKey?: boolean; accessToken?: string } {
   if (!accessToken) return {};

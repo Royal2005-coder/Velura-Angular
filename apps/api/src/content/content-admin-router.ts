@@ -55,6 +55,23 @@ export async function handleContentAdminRoute({
     return true;
   }
 
+  if (req.method === "POST" && parts.length === 6 && parts[5] === "ai-discover-topics") {
+    const body = await readJson(req, config.maxBodyBytes);
+    sendJson(res, 200, await service.discoverTopics(context, body), headers);
+    return true;
+  }
+
+  if (req.method === "POST" && parts.length === 6 && parts[5] === "ai-generate-workflow") {
+    const body = await readJson(req, config.maxBodyBytes);
+    sendJson(res, 200, await service.generateWorkflow(context, body), headers);
+    return true;
+  }
+
+  if (req.method === "POST" && parts.length === 6 && parts[5] === "run-scheduler") {
+    sendJson(res, 200, await service.triggerScheduledPublish(context), headers);
+    return true;
+  }
+
   if (req.method === "POST" && parts.length === 6 && parts[5] === "upload-image") {
     requirePermission(context as AuthContext, "content", "update");
     const image = await readMultipartImage(req);

@@ -233,3 +233,91 @@
   padding: 0;
   font-weight: 600;
 }
+
+.flow-forensics-btn {
+  margin-left: auto;
+  border-color: var(--erp-accent);
+  color: var(--erp-accent-strong);
+  font-weight: 700;
+}
+
+.flow-forensics-card {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--erp-radius-md);
+  border: 1px solid var(--erp-line);
+  background: var(--erp-surface-muted);
+  display: grid;
+  gap: 8px;
+  font-size: 11.5px;
+
+  &.is-warn {
+    border-color: var(--erp-warning);
+  }
+
+  &.is-danger {
+    border-color: var(--erp-danger);
+    background: var(--erp-danger-soft);
+  }
+
+  &__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    strong {
+      display: block;
+      margin-top: 2px;
+      font-size: 12.5px;
+      color: var(--erp-ink);
+    }
+  }
+
+  &__scores {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  &__tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__list {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--erp-ink);
+  }
+
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 4px;
+  }
+}
+
+.flow-risk-pill,
+.flow-conf-pill {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-line);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.flow-risk-pill.is-grey {
+  border-color: var(--erp-warning);
+  color: var(--erp-warning);
+}
+
+.flow-risk-pill.is-high {
+  border-color: var(--erp-danger);
+  color: var(--erp-danger);
+}

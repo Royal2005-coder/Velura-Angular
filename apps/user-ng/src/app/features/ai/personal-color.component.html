@@ -276,6 +276,26 @@
             <h3 class="pc-season-title">Mùa nhận diện: {{ seasonTitle(result.season) }}</h3>
             <span class="pc-undertone-tag">{{ seasonUndertone(result.season) }}</span>
           </div>
+          @if (currentAnalysis.diagnostics; as diag) {
+            <div class="pc-diagnostics-strip" aria-label="Thông số quang học sắc tố da Gemini Decision">
+              <div class="pc-diag-item">
+                <span class="pc-diag-label">Quyết định gốc (Base Depth)</span>
+                <strong class="pc-diag-value">{{ baseSkinDepthLabel(diag.base_skin_depth) }}</strong>
+              </div>
+              <div class="pc-diag-item">
+                <span class="pc-diag-label">Thang sắc độ &amp; Góc ITA°</span>
+                <strong class="pc-diag-value">{{ skinTierLabel(diag.skin_depth) }} ({{ diag.ita_angle | number:'1.1-1' }}°)</strong>
+              </div>
+              <div class="pc-diag-item">
+                <span class="pc-diag-label">Undertone (Hiệu chỉnh Sclera WB)</span>
+                <strong class="pc-diag-value">{{ undertoneDiagnosticLabel(diag.undertone) }}</strong>
+              </div>
+              <div class="pc-diag-item">
+                <span class="pc-diag-label">Độ tương phản ngũ quan</span>
+                <strong class="pc-diag-value">{{ contrastLabel(diag.contrast_level) }}</strong>
+              </div>
+            </div>
+          }
           <p class="pc-result-desc">
             Xác nhận để lưu kết quả này vào Style Profile của bạn và nhận gợi ý trang phục theo đúng bảng màu tự nhiên.
           </p>

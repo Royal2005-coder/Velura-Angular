@@ -172,6 +172,7 @@ export class ProductGalleryComponent {
       .analyzeProductImage({
         ...(pending ? { imageBase64: pending, mimeType: this.pendingMime } : { imageUrl: existingUrl }),
         productName: this.productName(),
+        ...(this.productId() ? { productId: this.productId()! } : {}),
       })
       .pipe(finalize(() => this.busy.set(false)))
       .subscribe({
@@ -423,6 +424,16 @@ export class ProductGalleryComponent {
    */
   scoreOf(url: string): number | null {
     return this.scores()[url]?.overallScore ?? null;
+  }
+
+  taxonomyVerdictLabel(verdict: string): string {
+    const labels: Readonly<Record<string, string>> = {
+      APPROVED_HERO: 'APPROVED_HERO · Chuẩn Hero Banner & AI Blog',
+      APPROVED_STANDARD: 'APPROVED_STANDARD · Đạt chuẩn Catalog',
+      NEEDS_EDIT: 'NEEDS_EDIT · Cần hậu kỳ sáng/nền',
+      REJECTED: 'REJECTED · Không đạt chuẩn thương mại',
+    };
+    return labels[verdict] || verdict;
   }
 
   private imageUrlAtSlot(): string {

@@ -10,7 +10,7 @@
     </button>
     @if (canMutate()) {
       @if (view() === 'campaigns') {
-        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCampaignForm()">
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCreateCampaign()">
           <app-erp-icon name="plus" [size]="'15'" />
           Tạo chiến dịch
         </button>
@@ -58,7 +58,29 @@
       <span class="erp-panel-head__icon" aria-hidden="true"><app-erp-icon name="ticket" [size]="'16'" /></span>
       <h2 id="promotions-title">Trung tâm khuyến mãi</h2>
     </div>
-    <app-erp-tabs [tabs]="tabs()" [active]="view()" [busy]="loading()" (changed)="setView($event)" />
+    <div class="promotions-tabs__controls">
+      @if (view() === 'campaigns') {
+        <div class="promo-layout-switch" role="group" aria-label="Chế độ hiển thị chiến dịch">
+          <button
+            type="button"
+            class="promo-layout-switch__btn"
+            [class.is-active]="campaignLayout() === 'table'"
+            (click)="setCampaignLayout('table')"
+          >
+            Bảng dữ liệu
+          </button>
+          <button
+            type="button"
+            class="promo-layout-switch__btn"
+            [class.is-active]="campaignLayout() === 'banners'"
+            (click)="setCampaignLayout('banners')"
+          >
+            Banner Slider 5s
+          </button>
+        </div>
+      }
+      <app-erp-tabs [tabs]="tabs()" [active]="view()" [busy]="loading()" (changed)="setView($event)" />
+    </div>
   </div>
 
   @if (view() === 'stats' && loadError()) {
@@ -105,23 +127,161 @@
   }
 
   @if (view() === 'campaigns') {
-    <app-erp-data-table
-      caption="Danh sách chiến dịch"
-      [columns]="campaignColumns"
-      [rows]="campaigns()"
-      [loading]="loading()"
-      [error]="loadError() || ''"
-      errorTitle="Không tải được chiến dịch"
-      emptyTitle="Chưa có chiến dịch"
-      emptyMessage="Tạo chiến dịch mới hoặc điều chỉnh bộ lọc."
-      [emptyActionLabel]="hasFilters() ? 'Xoá bộ lọc' : ''"
-      [clickable]="true"
-      [rowId]="campaignRowId"
-      [rowActions]="campaignRowActions"
-      (emptyAction)="resetFilters()"
-      (retry)="reload()"
-      (rowSelected)="openCampaign($event)"
-    />
+    @if (campaignLayout() === 'banners') {
+      <div class="promo-studio">
+        @if (activePreviewCampaign(); as live) {
+          @let liveMedia = campaignMediaPreview(live);
+          <section
+            class="promo-live-stage"
+            aria-label="Mô phỏng trực tiếp Banner Slider 5 giây trên trang Ưu đãi"
+            (mouseenter)="setPreviewPaused(true)"
+            (mouseleave)="setPreviewPaused(false)"
+          >
+            <div class="promo-live-stage__head">
+              <span class="promo-live-stage__badge">Mô phỏng trực tiếp trang /offers · Tự trượt 5s</span>
+              <div class="promo-live-stage__nav">
+                @if (sortedBannerCampaigns().length > 1) {
+                  <button type="button" class="erp-btn erp-btn--sm" (click)="stepPreviewSlide(-1)" aria-label="Slide trước">‹</button>
+                  <span class="promo-live-stage__counter">
+                    Slide {{ previewSlideIndex() + 1 }} / {{ sortedBannerCampaigns().length }}
+                  </span>
+                  <button type="button" class="erp-btn erp-btn--sm" (click)="stepPreviewSlide(1)" aria-label="Slide tiếp">›</button>
+                }
+                @if (canMutate()) {
+                  <button type="button" class="erp-btn erp-btn--primary erp-btn--sm" (click)="openEditCampaign(live)">
+                    Sửa banner đang xem
+                  </button>
+                }
+              </div>
+            </div>
+
+            <div class="promo-live-card">
+              <div class="promo-live-card__copy">
+                <div class="promo-live-card__tags">
+                  <span class="promo-live-card__pill">{{ live.highlight_label || campaignType(live) }}</span>
+                  <app-erp-status-badge [label]="lifecycleLabel(live)" [tone]="lifecycleTone(live)" [dot]="true" />
+                  @if (live.is_featured) {
+                    <span class="promo-live-card__featured">Ghim đầu Slider</span>
+                  }
+                </div>
+                <h3>{{ campaignName(live) }}</h3>
+                <p>{{ live.description || 'Hiển thị tự động kèm danh sách mã giảm giá liên kết bên dưới.' }}</p>
+                <div class="promo-live-card__meta">
+                  <span>{{ live.voucher_count ?? 0 }} voucher liên kết</span>
+                  <span>Thứ tự #{{ (live.display_order ?? 0) + 1 }}</span>
+                  <span>{{ date(live.start_date) }} → {{ date(live.end_date) }}</span>
+                </div>
+              </div>
+              <div class="promo-live-card__media">
+                @if (liveMedia.isVideo) {
+                  <video
+                    [src]="liveMedia.src"
+                    autoplay
+                    muted
+                    loop
+                    playsinline
+                    [style.object-position]="liveMedia.objectPosition"
+                    [style.transform-origin]="liveMedia.objectPosition"
+                    [style.transform]="liveMedia.transform"
+                  ></video>
+                } @else {
+                  <img
+                    [src]="liveMedia.src"
+                    [alt]="campaignName(live)"
+                    [style.object-position]="liveMedia.objectPosition"
+                    [style.transform-origin]="liveMedia.objectPosition"
+                    [style.transform]="liveMedia.transform"
+                  />
+                }
+              </div>
+            </div>
+
+            @if (sortedBannerCampaigns().length > 1) {
+              <div class="promo-live-dots">
+                @for (item of sortedBannerCampaigns(); track item.promo_id || item.promotion_id; let idx = $index) {
+                  <button
+                    type="button"
+                    class="promo-live-dot"
+                    [class.is-active]="previewSlideIndex() === idx"
+                    (click)="setPreviewSlide(idx)"
+                    [attr.aria-label]="'Xem slide ' + campaignName(item)"
+                  ></button>
+                }
+              </div>
+            }
+          </section>
+
+          <div class="promo-banner-grid">
+            @for (item of sortedBannerCampaigns(); track item.promo_id || item.promotion_id; let idx = $index) {
+              @let media = campaignMediaPreview(item);
+              <article class="promo-banner-card" (click)="openCampaign(item)">
+                <div class="promo-banner-card__thumb">
+                  @if (media.isVideo) {
+                    <video
+                      [src]="media.src"
+                      muted
+                      loop
+                      playsinline
+                      [style.object-position]="media.objectPosition"
+                      [style.transform-origin]="media.objectPosition"
+                      [style.transform]="media.transform"
+                    ></video>
+                    <span class="promo-banner-card__kind">VIDEO</span>
+                  } @else {
+                    <img
+                      [src]="media.src"
+                      [alt]="campaignName(item)"
+                      loading="lazy"
+                      [style.object-position]="media.objectPosition"
+                      [style.transform-origin]="media.objectPosition"
+                      [style.transform]="media.transform"
+                    />
+                  }
+                  <span class="promo-banner-card__order">#{{ idx + 1 }}</span>
+                </div>
+                <div class="promo-banner-card__body">
+                  <div class="promo-banner-card__top">
+                    <span class="promo-banner-card__label">{{ item.highlight_label || campaignType(item) }}</span>
+                    <app-erp-status-badge [label]="lifecycleLabel(item)" [tone]="lifecycleTone(item)" [dot]="true" />
+                  </div>
+                  <h4>{{ campaignName(item) }}</h4>
+                  <p class="promo-banner-card__meta">
+                    {{ item.voucher_count ?? 0 }} voucher · Ngân sách {{ budgetLabel(item) }}
+                  </p>
+                  @if (canMutate()) {
+                    <div class="promo-banner-card__actions">
+                      <button type="button" class="erp-btn erp-btn--sm" (click)="openEditCampaign(item, $event)">
+                        Sửa banner
+                      </button>
+                    </div>
+                  }
+                </div>
+              </article>
+            }
+          </div>
+        } @else {
+          <p class="erp-hint promo-studio__empty">Chưa có chiến dịch nào khớp bộ lọc để dựng Banner Slider.</p>
+        }
+      </div>
+    } @else {
+      <app-erp-data-table
+        caption="Danh sách chiến dịch"
+        [columns]="campaignColumns"
+        [rows]="campaigns()"
+        [loading]="loading()"
+        [error]="loadError() || ''"
+        errorTitle="Không tải được chiến dịch"
+        emptyTitle="Chưa có chiến dịch"
+        emptyMessage="Tạo chiến dịch mới hoặc điều chỉnh bộ lọc."
+        [emptyActionLabel]="hasFilters() ? 'Xoá bộ lọc' : ''"
+        [clickable]="true"
+        [rowId]="campaignRowId"
+        [rowActions]="campaignRowActions"
+        (emptyAction)="resetFilters()"
+        (retry)="reload()"
+        (rowSelected)="openCampaign($event)"
+      />
+    }
     <app-erp-pagination
       [page]="page()"
       [pageCount]="pageCount()"
@@ -228,10 +388,33 @@
   (closed)="closeCampaign()"
 >
   @if (selectedCampaign(); as campaign) {
+    @let detailMedia = campaignMediaPreview(campaign);
     <div class="promo-detail">
+      <div class="promo-detail__banner-preview">
+        @if (detailMedia.isVideo) {
+          <video
+            [src]="detailMedia.src"
+            autoplay
+            muted
+            loop
+            playsinline
+            [style.object-position]="detailMedia.objectPosition"
+            [style.transform-origin]="detailMedia.objectPosition"
+            [style.transform]="detailMedia.transform"
+          ></video>
+        } @else {
+          <img
+            [src]="detailMedia.src"
+            [alt]="campaignName(campaign)"
+            [style.object-position]="detailMedia.objectPosition"
+            [style.transform-origin]="detailMedia.objectPosition"
+            [style.transform]="detailMedia.transform"
+          />
+        }
+      </div>
       <div class="promo-detail__head">
         <div>
-          <span class="promo-detail__eyebrow">{{ campaignType(campaign) }}</span>
+          <span class="promo-detail__eyebrow">{{ campaign.highlight_label || campaignType(campaign) }}</span>
           <h3>{{ campaignName(campaign) }}</h3>
           <p>{{ date(campaign.start_date) }} → {{ date(campaign.end_date) }}</p>
         </div>
@@ -240,8 +423,9 @@
       <dl class="detail-grid">
         <div><dt>Ngân sách</dt><dd>{{ budgetLabel(campaign) }}</dd></div>
         <div><dt>Voucher</dt><dd>{{ campaign.voucher_count ?? 0 }} · {{ campaign.active_voucher_count ?? 0 }} đang bật</dd></div>
-        <div><dt>Phiên bản</dt><dd class="is-mono">{{ campaign.version ?? '—' }}</dd></div>
+        <div><dt>Vị trí Banner</dt><dd>Slide #{{ (campaign.display_order ?? 0) + 1 }}{{ campaign.is_featured ? ' · Ghim nổi bật' : '' }}</dd></div>
         <div><dt>Đã giảm</dt><dd>{{ money(campaign.total_discount_issued) }}</dd></div>
+        <div><dt>Phiên bản</dt><dd class="is-mono">{{ campaign.version ?? '—' }}</dd></div>
       </dl>
       @if (campaign.description) {
         <p class="promo-detail__description">{{ campaign.description }}</p>
@@ -333,48 +517,130 @@
 <app-erp-modal
   #campaignModal
   [open]="campaignFormOpen()"
-  [title]="editingCampaign() ? 'Sửa chiến dịch' : 'Tạo chiến dịch'"
-  size="md"
+  [title]="editingCampaign() ? 'Sửa chiến dịch & Banner 5s' : 'Tạo chiến dịch & Banner 5s'"
+  size="lg"
   [dirty]="dirty()"
   [busy]="saving()"
   (closed)="closeForm()"
 >
   <form id="promo-campaign-form" class="promo-form" (submit)="submitCampaign($event)" (input)="markDirty()" (change)="markDirty()">
-    <label class="erp-field"><span>Tên chiến dịch <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="name" type="text" [value]="campaignFormName()" required /></label>
-    <label class="erp-field">
-      <span>Loại chiến dịch</span>
-      <select class="erp-select" name="type" [disabled]="editingCampaign() !== null">
-        <option value="product_discount">Giảm giá sản phẩm</option>
-        <option value="flash_sale">Flash Sale</option>
-        <option value="combo_discount">Giảm giá Combo</option>
-        <option value="seasonal_sale">Giảm giá theo mùa</option>
-      </select>
-    </label>
+    <div class="promo-form__row">
+      <label class="erp-field">
+        <span>Tên chiến dịch <span class="erp-required" aria-hidden="true">*</span></span>
+        <input class="erp-input" name="name" type="text" [value]="campaignFormName()" required />
+      </label>
+      <label class="erp-field">
+        <span>Loại chiến dịch</span>
+        <select class="erp-select" name="type" [value]="editingCampaign()?.promo_type || editingCampaign()?.type || 'product_discount'" [disabled]="editingCampaign() !== null">
+          <option value="product_discount">Giảm giá sản phẩm</option>
+          <option value="flash_sale">Flash Sale</option>
+          <option value="combo_discount">Giảm giá Combo</option>
+          <option value="seasonal_sale">Giảm giá theo mùa</option>
+          <option value="bulk_discount">Ưu đãi mua kèm</option>
+        </select>
+      </label>
+    </div>
     <div class="promo-form__row">
       <label class="erp-field"><span>Bắt đầu <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="startDate" type="datetime-local" [value]="toLocalInput(editingCampaign()?.start_date)" required /></label>
       <label class="erp-field"><span>Kết thúc <span class="erp-required" aria-hidden="true">*</span></span><input class="erp-input" name="endDate" type="datetime-local" [value]="toLocalInput(editingCampaign()?.end_date)" required /></label>
     </div>
     <label class="erp-field"><span>Ngân sách (0 = không trần)</span><input class="erp-input" name="budgetLimit" type="number" min="0" [value]="editingCampaign()?.budget_limit ?? editingCampaign()?.budget ?? 0" /><small class="erp-hint">Khi tổng số tiền giảm thực tế của các voucher trực thuộc đạt mức trần này, hệ thống sẽ tự động đóng các voucher để bảo toàn ngân sách.</small></label>
-    <div class="erp-field">
-      <span>Ảnh banner chiến dịch (hiển thị trên trang Ưu đãi của người dùng)</span>
-      <div class="promo-banner-field">
-        @if (campaignBannerUrl()) {
-          <div class="promo-banner-thumb">
-            <img [src]="campaignBannerUrl()" alt="Banner xem trước" />
-            <button type="button" class="btn-remove-thumb" (click)="campaignBannerUrl.set('')">Gỡ ảnh</button>
+
+    <div class="promo-banner-studio-box">
+      <div class="promo-banner-studio-box__head">
+        <strong>Cấu hình Banner chuyển động (Tự trượt 5s trên trang Ưu đãi)</strong>
+        <label class="promo-featured-toggle">
+          <input type="checkbox" name="isFeatured" [checked]="campaignIsFeatured()" (change)="onFeaturedChange($event)" />
+          <span>Ghim nổi bật đầu chuỗi Slider</span>
+        </label>
+      </div>
+
+      <div class="promo-form__row">
+        <div class="erp-field">
+          <span>Nhãn nổi bật trên Banner (tối đa 60 ký tự)</span>
+          <input
+            class="erp-input"
+            name="highlightLabel"
+            type="text"
+            maxlength="60"
+            placeholder="VD: Đặc quyền tháng này, Flash Sale 48H..."
+            [value]="campaignHighlightLabel()"
+            (input)="onHighlightInput($event)"
+          />
+          <div class="promo-preset-pills">
+            @for (preset of highlightPresets; track preset) {
+              <button
+                type="button"
+                class="promo-preset-pill"
+                [class.is-active]="campaignHighlightLabel() === preset"
+                (click)="applyHighlightPreset(preset)"
+              >
+                {{ preset }}
+              </button>
+            }
           </div>
-        }
-        <div class="promo-banner-inputs">
-          <label class="erp-btn erp-btn--sm promo-upload-btn">
-            <input type="file" accept="image/*" class="erp-sr-only" (change)="onBannerFileSelected($event)" [disabled]="bannerUploading()" />
-            <span>{{ bannerUploading() ? 'Đang tải ảnh…' : (campaignBannerUrl() ? 'Đổi ảnh banner' : 'Tải ảnh banner lên') }}</span>
-          </label>
-          <span class="erp-hint">hoặc nhập link ảnh trực tiếp:</span>
-          <input class="erp-input erp-input--sm" type="url" placeholder="https://..." [value]="campaignBannerUrl()" (input)="onBannerUrlInput($event)" />
+        </div>
+        <label class="erp-field">
+          <span>Thứ tự trượt trên Banner (0 = đầu tiên)</span>
+          <input
+            class="erp-input"
+            name="displayOrder"
+            type="number"
+            min="0"
+            step="1"
+            [value]="campaignDisplayOrder()"
+            (input)="onDisplayOrderInput($event)"
+          />
+          <small class="erp-hint">Các chiến dịch ghim nổi bật được ưu tiên trước, sau đó trượt theo thứ tự tăng dần mỗi 5 giây.</small>
+        </label>
+      </div>
+
+      <div class="erp-field">
+        <span>Media Banner (Ảnh JPG/PNG/WebP/GIF hoặc Video MP4/WebM chuyển động)</span>
+        <div class="promo-banner-field">
+          <div class="promo-banner-inputs">
+            <label class="erp-btn erp-btn--sm promo-upload-btn">
+              <input
+                type="file"
+                accept="image/*,video/mp4,video/webm"
+                class="erp-sr-only"
+                (change)="onBannerFileSelected($event)"
+                [disabled]="bannerUploading()"
+              />
+              <span>{{ bannerUploading() ? 'Đang tải media…' : (cleanBannerSrc() ? 'Đổi ảnh / video' : 'Tải ảnh / video lên') }}</span>
+            </label>
+            <input
+              class="erp-input erp-input--sm"
+              type="url"
+              placeholder="Hoặc dán URL https://... (.jpg, .webp, .mp4)"
+              [value]="cleanBannerSrc()"
+              (input)="onBannerUrlInput($event)"
+            />
+            @if (cleanBannerSrc()) {
+              <button type="button" class="erp-btn erp-btn--danger erp-btn--sm" (click)="clearCampaignBanner()">
+                Gỡ media
+              </button>
+            }
+          </div>
+
+          @if (cleanBannerSrc()) {
+            <app-erp-image-cropper
+              [src]="cleanBannerSrc()"
+              [mediaType]="bannerMediaType()"
+              aspectRatio="16 / 9"
+              [posX]="campaignFraming().posX"
+              [posY]="campaignFraming().posY"
+              [zoom]="campaignFraming().zoom"
+              [defaultPosY]="32"
+              alt="Căn khung Banner chiến dịch khuyến mãi"
+              (framingChange)="onBannerFramingChange($event)"
+            />
+          }
         </div>
       </div>
     </div>
-    <label class="erp-field"><span>Mô tả</span><textarea class="erp-input" name="description" rows="3">{{ editingCampaign()?.description || '' }}</textarea></label>
+
+    <label class="erp-field"><span>Câu chuyện / Mô tả chiến dịch</span><textarea class="erp-input" name="description" rows="3">{{ editingCampaign()?.description || '' }}</textarea></label>
     @if (formError()) {
       <p class="erp-error" role="alert">{{ formError() }}</p>
     }

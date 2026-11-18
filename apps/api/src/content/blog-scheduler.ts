@@ -25,35 +25,77 @@ export interface ScheduledBlogPublishSummary {
 /**
  * Claims and publishes all due `scheduled` / `failed_retry` (`publish_attempts < 3`) blog posts,
  * synchronizing promotion schedules and triggering idempotent newsletter broadcasts.
- * Transitions any post whose downstream broadcast fails into `failed_retry` so retries occur up to `publish_attempts = 3`.
+ * Never demotes an already-published live article back to `failed_retry` (preventing Storefront 404s);
+ * instead records `last_publish_error` while `newsletter_broadcast_at` stays null so pending broadcasts
+ * are retried up to 3 times via `velura_claim_pending_blog_broadcasts`.
  */
 export async function runScheduledBlogPublishCycle(
   deps: {
+    forceRetry?: boolean;
     claimDueBlogs?: (limit: number) => Promise<JsonObject[]>;
+    claimPendingBroadcasts?: (limit: number) => Promise<JsonObject[]>;
     broadcastBlog?: (payload: Parameters<typeof newsletterService.broadcastBlog>[0]) => Promise<{ queuedCount: number }>;
     recordBroadcastError?: (blogId: string, errText: string) => Promise<void>;
   } = {},
 ): Promise<ScheduledBlogPublishSummary> {
+  const forceRetry = deps.forceRetry === true;
   const claim =
     deps.claimDueBlogs ??
     (async (limit: number) => {
-      const res = await callRpc("velura_publish_scheduled_blogs", { p_limit: limit }, { useAnonKey: false });
-      return Array.isArray(res) ? res.map(asJsonObject) : [];
+      try {
+        const res = await callRpc(
+          "velura_publish_scheduled_blogs",
+          { p_limit: limit, p_force_retry: forceRetry },
+          { useAnonKey: false },
+        );
+        return Array.isArray(res) ? res.map(asJsonObject) : [];
+      } catch (err: unknown) {
+        if (/p_force_retry|PGRST202/i.test(errorMessage(err))) {
+          const legacy = await callRpc("velura_publish_scheduled_blogs", { p_limit: limit }, { useAnonKey: false });
+          return Array.isArray(legacy) ? legacy.map(asJsonObject) : [];
+        }
+        throw err;
+      }
+    });
+  const claimPendingBroadcasts =
+    deps.claimPendingBroadcasts ??
+    (async (limit: number) => {
+      if (deps.claimDueBlogs) return [];
+      try {
+        const res = await callRpc(
+          "velura_claim_pending_blog_broadcasts",
+          { p_limit: limit, p_force_retry: forceRetry },
+          { useAnonKey: false },
+        );
+        return Array.isArray(res) ? res.map(asJsonObject) : [];
+      } catch {
+        return [];
+      }
     });
   const broadcast = deps.broadcastBlog ?? ((payload) => newsletterService.broadcastBlog(payload));
   const recordErr =
     deps.recordBroadcastError ??
     (async (blogId: string, errText: string) => {
+      const retryStatus = "published";
       await updateRows(
         "blog",
         { blog_id: `eq.${blogId}` },
-        { status: "failed_retry", last_publish_error: errText.slice(0, 500) },
+        { status: retryStatus, last_publish_error: errText.slice(0, 500) },
       ).catch(() => undefined);
     });
 
   let rows: JsonObject[] = [];
   try {
-    rows = await claim(10);
+    const newlyPublished = await claim(10);
+    const pendingBroadcasts = await claimPendingBroadcasts(10);
+    const seen = new Set<string>();
+    for (const r of [...newlyPublished, ...pendingBroadcasts]) {
+      const id = asString(r.blog_id);
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        rows.push(r);
+      }
+    }
   } catch (err: unknown) {
     const msg = errorMessage(err);
     // Quietly tolerate pre-migration rolling deploy before migration 134 is applied

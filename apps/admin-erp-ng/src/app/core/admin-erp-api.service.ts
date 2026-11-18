@@ -1469,6 +1469,20 @@ export interface AdminManualRefundInput {
   transferredAt: string;
   imageProof: string;
   adminNote?: string;
+  /** Mandatory >=15-char super_admin override justification when AI Box Forensics froze auto-refund. */
+  forensicsOverrideReason?: string;
+}
+
+/** Calibrated CSKH & Review sentiment decision returned by `gemini-decision-1`. */
+export interface AdminReviewSentimentDecision {
+  sentiment: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+  urgency: 'LOW' | 'MEDIUM' | 'CRITICAL';
+  intent: string;
+  routing_branch: 'NURTURE_AND_UPSELL' | 'EDUCATE_AND_LOYALTY_HOOK' | 'STANDARDIZED_DEESCALATION';
+  confidence_score: number;
+  escalate_to_human: boolean;
+  requires_human_review: boolean;
+  response_guidelines?: readonly string[];
 }
 
 /** CSKH asks the customer to complete their payout details; the return keeps its state. */
@@ -2132,10 +2146,18 @@ export class AdminErpApiService {
   }
 
   /**
-   * Requests AI reply suggestions for one review.
+   * Requests AI reply suggestions for one review, including `gemini-decision-1` sentiment routing diagnostics.
    */
-  suggestReviewReply(reviewId: string): Observable<{ replies?: string[]; source?: string }> {
-    return this.http.post<{ replies?: string[]; source?: string }>(
+  suggestReviewReply(reviewId: string): Observable<{
+    replies?: string[];
+    source?: string;
+    decision?: AdminReviewSentimentDecision;
+  }> {
+    return this.http.post<{
+      replies?: string[];
+      source?: string;
+      decision?: AdminReviewSentimentDecision;
+    }>(
       `${this.baseUrl}/api/v1/admin/reviews/${encodeURIComponent(reviewId)}/suggest-reply`,
       {},
     );
@@ -2443,6 +2465,15 @@ export class AdminErpApiService {
   }
 
   /**
+   * Lists persisted `gemini-decision-1` return parcel forensics history for a return request.
+   */
+  getReturnBoxForensics(returnId: string): Observable<{ rows?: AdminReturnBoxForensicsResult[] }> {
+    return this.http.get<{ rows?: AdminReturnBoxForensicsResult[] }>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/ai-box-forensics`,
+    );
+  }
+
+  /**
    * Runs `gemini-decision-1` 2-axis return parcel forensics (box structural condition + shipper pickup vs warehouse QA anti-swap comparison).
    */
   analyzeReturnBoxForensics(
@@ -2468,7 +2499,7 @@ export class AdminErpApiService {
    */
   triggerStripeRefund(
     returnId: string,
-    body: { expectedVersion: number; returnItemId: string },
+    body: { expectedVersion: number; returnItemId: string; forensicsOverrideReason?: string },
   ): Observable<AdminGatewayRefundResult> {
     return this.http.post<AdminGatewayRefundResult>(
       `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/trigger-stripe-refund`,

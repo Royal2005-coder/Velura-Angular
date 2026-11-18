@@ -259,9 +259,9 @@ export function blogRequestBody(draft: BlogDraft, expectedVersion?: number): Adm
     author: draft.author.trim() || 'Velura Editorial',
     readMinutes: draft.readMinutes,
     isFeatured: draft.isFeatured,
-    ...(scheduledIso ? { scheduledAt: scheduledIso } : {}),
-    ...(promoId ? { promoId } : {}),
-    ...(voucherCode ? { voucherCode } : {}),
+    ...(scheduledIso ? { scheduledAt: scheduledIso } : expectedVersion != null ? { scheduledAt: null } : {}),
+    ...(promoId ? { promoId } : expectedVersion != null ? { promoId: null } : {}),
+    ...(voucherCode ? { voucherCode } : expectedVersion != null ? { voucherCode: null } : {}),
     ...(draft.socialCaptions ? { socialCaptions: draft.socialCaptions } : {}),
     ...(expectedVersion == null ? {} : { expectedVersion }),
   };

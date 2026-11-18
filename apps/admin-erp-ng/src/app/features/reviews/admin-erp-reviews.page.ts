@@ -2,7 +2,12 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signa
 import { ActivatedRoute, type ParamMap } from '@angular/router';
 import { catchError, finalize, forkJoin, of } from 'rxjs';
 import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
-import { AdminAuditRow, AdminErpApiService, AdminReviewRow } from '../../core/admin-erp-api.service';
+import {
+  AdminAuditRow,
+  AdminErpApiService,
+  AdminReviewRow,
+  AdminReviewSentimentDecision,
+} from '../../core/admin-erp-api.service';
 import { adminDateTime, adminStars } from '../../core/admin-erp-format';
 import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import {
@@ -118,6 +123,7 @@ export class AdminErpReviewsPage {
   readonly aiLoading = signal(false);
   readonly aiError = signal<string | null>(null);
   readonly aiSource = signal<string | null>(null);
+  readonly aiDecision = signal<AdminReviewSentimentDecision | null>(null);
   readonly detectedRestrictedWords = signal<string[]>([]);
   readonly sentiment = signal<{ label: string; tone: string; score: number } | null>(null);
   readonly lightboxImage = signal<string | null>(null);
@@ -500,6 +506,7 @@ export class AdminErpReviewsPage {
     this.replyDraft.set('');
     this.aiSuggestions.set([]);
     this.aiError.set(null);
+    this.aiDecision.set(null);
     this.detectedRestrictedWords.set([]);
     this.sentiment.set(null);
     this.dirty.set(false);
@@ -582,6 +589,7 @@ export class AdminErpReviewsPage {
     this.aiError.set(null);
     this.aiSuggestions.set([]);
     this.aiSource.set(null);
+    this.aiDecision.set(null);
     const stillCurrent = () => this.selected()?.review_id === reviewId && this.actionType() === 'reply';
     this.api.suggestReviewReply(reviewId).subscribe({
       next: (result) => {
@@ -589,6 +597,22 @@ export class AdminErpReviewsPage {
         this.aiLoading.set(false);
         this.aiSuggestions.set(result.replies || []);
         this.aiSource.set(result.source || null);
+        if (result.decision) {
+          this.aiDecision.set(result.decision);
+          const sentLabel =
+            result.decision.sentiment === 'POSITIVE'
+              ? 'Tích cực'
+              : result.decision.sentiment === 'NEGATIVE'
+                ? 'Tiêu cực'
+                : 'Trung tính';
+          const sentTone =
+            result.decision.sentiment === 'POSITIVE'
+              ? 'positive'
+              : result.decision.sentiment === 'NEGATIVE'
+                ? 'negative'
+                : 'neutral';
+          this.sentiment.set({ label: sentLabel, tone: sentTone, score: Math.round(result.decision.confidence_score * 100) });
+        }
         if (!(result.replies || []).length) {
           this.aiError.set('AI không trả về câu phản hồi. Viết tay trong ô bên dưới.');
         }
@@ -597,9 +621,23 @@ export class AdminErpReviewsPage {
         if (!stillCurrent()) return;
         this.aiLoading.set(false);
         this.aiSuggestions.set([]);
+        this.aiDecision.set(null);
         this.aiError.set(adminErrorMessage(error, 'Không lấy được gợi ý AI. Viết phản hồi tay.'));
       },
     });
+  }
+
+  routingBranchLabel(branch: AdminReviewSentimentDecision['routing_branch']): string {
+    switch (branch) {
+      case 'NURTURE_AND_UPSELL':
+        return 'Nhánh Tích cực · Khích lệ & Đồng hành';
+      case 'EDUCATE_AND_LOYALTY_HOOK':
+        return 'Nhánh Trung tính · Giải đáp & Gắn kết Loyalty';
+      case 'STANDARDIZED_DEESCALATION':
+        return 'Nhánh Tiêu cực · Chuẩn hóa Xoa dịu CSKH (Không Upsell)';
+      default:
+        return branch;
+    }
   }
 
   /**

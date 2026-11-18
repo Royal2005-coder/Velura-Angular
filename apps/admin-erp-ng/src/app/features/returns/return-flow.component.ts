@@ -119,6 +119,8 @@ export class ReturnFlowComponent {
   readonly forensicsLoading = signal(false);
   readonly forensicsError = signal<string | null>(null);
   readonly boxForensics = signal<AdminReturnBoxForensicsResult | null>(null);
+  readonly forensicsOverrideReason = signal('');
+  readonly forensicsFrozen = computed(() => Boolean(this.boxForensics()?.freeze_auto_refund));
   readonly copiedClaimReport = signal(false);
   readonly isGreyZoneRisk = computed(() => {
     const score = this.boxForensics()?.tampering_risk_score ?? 0;
@@ -167,6 +169,7 @@ export class ReturnFlowComponent {
     // hand transfer only exists for COD or for an order whose gateway already refused.
     if (this.isMoney()) {
       if (!this.canFinance() || !itemRefundAllowed(line) || this.refundable() <= 0) return false;
+      if (this.forensicsFrozen() && this.forensicsOverrideReason().trim().length < 15) return false;
       if (flow === 'stripe') return isGatewayRefundChannel(record.payment_kind);
       if (!this.canReconcileByHand(record)) return false;
       return !refundReceiverBlocked(record)
@@ -209,7 +212,11 @@ export class ReturnFlowComponent {
       }
       this.qaFailed.set([]); this.disposition.set('restock');
       this.forensicsLoading.set(false); this.forensicsError.set(null);
-      this.boxForensics.set(null); this.copiedClaimReport.set(false);
+      this.boxForensics.set(null); this.forensicsOverrideReason.set(''); this.copiedClaimReport.set(false);
+      const rec = this.record();
+      if ((flow === 'stripe' || flow === 'manual' || flow === 'receive') && rec?.return_id) {
+        untracked(() => this.loadPersistedForensics(rec.return_id));
+      }
       const isManual = flow === 'manual';
       const autoRef = isManual ? this.newTransferRef() : '';
       if (isManual) { this.createDigitalReceiptFile(autoRef).then((f) => this.proofFile.set(f)); } else { this.proofFile.set(null); }
@@ -460,8 +467,28 @@ export class ReturnFlowComponent {
   }
 
   /** Stores ordinary text without silently coercing malformed quantities into valid ones. */
-  setText(field: 'note' | 'replacementVariantId' | 'tracking' | 'carrier' | 'transferReference' | 'transferredAt' | 'contactResult' | 'pickedUpAt' | 'pickedUpBy', event: Event): void {
+  setText(field: 'note' | 'replacementVariantId' | 'tracking' | 'carrier' | 'transferReference' | 'transferredAt' | 'contactResult' | 'pickedUpAt' | 'pickedUpBy' | 'forensicsOverrideReason', event: Event): void {
     this[field].set((event.target as HTMLInputElement).value);
+  }
+
+  private loadPersistedForensics(returnId: string): void {
+    const req$ = this.api.getReturnBoxForensics?.(returnId);
+    if (!req$) return;
+    req$.subscribe({
+      next: (res: { rows?: AdminReturnBoxForensicsResult[] }) => {
+        const latest = res.rows?.[0] || null;
+        if (latest) {
+          this.boxForensics.set({
+            ...latest,
+            diff_factors: latest.diff_factors || [],
+            discrepancy_evidence: latest.discrepancy_evidence || latest.diff_factors || [],
+            suggested_qa_failed_codes: latest.suggested_qa_failed_codes || [],
+            suggested_disposition: latest.suggested_disposition || 'restock',
+          });
+        }
+      },
+      error: () => {},
+    });
   }
 
   /** Processing fewer units creates an independent remainder on the server. */
@@ -689,7 +716,12 @@ export class ReturnFlowComponent {
     const line = this.line()!;
     const version = Number(line.version);
     const itemId = line.return_item_id!;
-    if (flow === 'stripe') return this.api.triggerStripeRefund(record.return_id, { expectedVersion: version, returnItemId: itemId }).pipe(map((result) => {
+    const overrideReason = this.forensicsOverrideReason().trim();
+    if (flow === 'stripe') return this.api.triggerStripeRefund(record.return_id, {
+      expectedVersion: version,
+      returnItemId: itemId,
+      ...(overrideReason ? { forensicsOverrideReason: overrideReason } : {}),
+    }).pipe(map((result) => {
       // Cổng từ chối là lỗi của thao tác, không phải thành công: giữ hộp thoại mở để người vận hành đọc lý do.
       if (result.refund?.status === 'failed') throw new Error(gatewayNote(result.refund));
       return plain(gatewayNote(result.refund));
@@ -705,6 +737,7 @@ export class ReturnFlowComponent {
       if (flow === 'manual') return this.api.recordManualRefund(record.return_id, {
         returnItemId: itemId, expectedVersion: version, transferReference: this.transferReference().trim(),
         amount: this.refundable(), transferredAt: new Date(this.transferredAt()).toISOString(), imageProof: proofRef!, adminNote: note,
+        ...(overrideReason ? { forensicsOverrideReason: overrideReason } : {}),
       }).pipe(map(() => plain('Đã ghi nhận đối soát phần hàng.')));
       const body: AdminReturnItemActionInput = { action: flow, expectedVersion: version,
         ...(this.canSplit() ? { quantity: this.quantity() } : {}), ...(note ? { reason: note } : {}) };

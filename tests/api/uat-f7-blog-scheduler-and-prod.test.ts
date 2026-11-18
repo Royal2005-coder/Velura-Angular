@@ -35,8 +35,7 @@ test("F7.1: ContentAdminService enforces scheduledAt when status='scheduled' and
   const svc = createContentAdminService({
     repository: {
       listBlogs: async () => ({ rows: [], count: 0 }),
-      listBlogProducts: async () => [],
-      listProductCandidates: async () => [],
+      listCandidateProducts: async () => [],
       upsertBlog: async (draft) => {
         upserted.push(draft);
         return {
@@ -232,14 +231,20 @@ test("F7.3: NewsletterService.broadcastBlog deduplicates already-queued recipien
   assert.ok(stampedAt !== null);
 });
 
-test("F7.4: SQL migrations 134 & 135 enforce RLS, SKIP LOCKED scheduler RPC, and `published -> failed_retry` state transition", () => {
+test("F7.4: SQL migrations 134, 135 & 136 enforce RLS, SKIP LOCKED scheduler RPC, non-unpublishing broadcast retry, and v3 null clearing", () => {
   const root = resolve(process.cwd());
   const mig134 = readFileSync(resolve(root, "database/migrations/134_ai_blog_scheduler_and_decision_engine.sql"), "utf8");
   const mig135 = readFileSync(resolve(root, "database/migrations/135_scheduler_retry_and_forensics_guard.sql"), "utf8");
+  const mig136 = readFileSync(resolve(root, "database/migrations/136_blog_v3_clear_and_broadcast_retry.sql"), "utf8");
+  const schedulerTs = readFileSync(resolve(root, "apps/api/src/content/blog-scheduler.ts"), "utf8");
 
   assert.ok(/for update skip locked/i.test(mig134));
   assert.ok(/alter table public\.product_ai_qa enable row level security/i.test(mig134));
   assert.ok(/alter table public\.return_box_forensics enable row level security/i.test(mig134));
   assert.ok(/alter table public\.ai_decision_log enable row level security/i.test(mig134));
   assert.ok(/when p_from = 'published' then p_to in \('draft', 'failed_retry', 'archived'\)/i.test(mig135));
+  assert.ok(/velura_claim_pending_blog_broadcasts/i.test(mig136));
+  assert.ok(/promo_id = p_promo_id/i.test(mig136));
+  // Live published article MUST keep status = "published" on transient broadcast error so Storefront URLs never 404!
+  assert.ok(schedulerTs.includes('const retryStatus = "published";'));
 });

@@ -1,47 +1,85 @@
 <main class="offers-page">
   <section class="offers-hero container">
-    <p class="offers-hero__eyebrow">Ưu đãi Velura</p>
-    <h1 class="offers-hero__title">Ưu đãi tháng này</h1>
+    <p class="offers-hero__eyebrow">Đặc quyền Velura</p>
+    <h1 class="offers-hero__title">Chiến dịch &amp; Ưu đãi tháng này</h1>
     <p class="offers-hero__desc">
-      Những món quà nhỏ, mã freeship và combo phối đồ được Velura tuyển chọn để bạn mua sắm nhẹ nhàng hơn.
+      Khám phá các chiến dịch thời trang đang diễn ra và lưu nhanh mã ưu đãi dành riêng cho đơn hàng của bạn.
     </p>
   </section>
 
   @if (!loading() && !loadError()) {
-  @if (birthdayPrompt(); as prompt) {
-    <section class="container offers-prompt">
-      <div class="offers-prompt__card" [style.border-color]="prompt.is_birthday_month ? '#7D562D' : ''" [style.background]="prompt.is_birthday_month ? '#FAF6F2' : ''">
-        <div>
-          @if (prompt.is_birthday_month) {
-            <span class="u-inline-a86d4ea94e">
-              ĐẶC QUYỀN SINH NHẬT THÁNG NÀY
-            </span>
-          }
-          <h2 class="offers-prompt__title">{{ prompt.title }}</h2>
-          <p class="offers-prompt__desc">{{ prompt.description }}</p>
-          @if (prompt.voucher_code) {
-            <div class="u-inline-be096e4253">
-              <small class="u-inline-89fd459c59">Mã quà tặng:</small>
-              <strong class="u-inline-100298eddf">{{ prompt.voucher_code }}</strong>
-            </div>
-          }
+    @if (birthdayPrompt(); as prompt) {
+      <section class="container offers-prompt">
+        <div class="offers-prompt__card" [class.offers-prompt__card--birthday]="prompt.is_birthday_month">
+          <div class="offers-prompt__body">
+            @if (prompt.is_birthday_month) {
+              <span class="offers-prompt__badge">Đặc quyền sinh nhật tháng này</span>
+            }
+            <h2 class="offers-prompt__title">{{ prompt.title }}</h2>
+            <p class="offers-prompt__desc">{{ prompt.description }}</p>
+            @if (prompt.voucher_code) {
+              <div class="offers-prompt__code-row">
+                <span class="offers-prompt__code-label">Mã quà tặng</span>
+                <button
+                  type="button"
+                  class="offers-prompt__code-pill"
+                  (click)="copyVoucherCode(prompt.voucher_code, $event)"
+                  [attr.aria-label]="'Sao chép mã ' + prompt.voucher_code"
+                >
+                  <strong>{{ prompt.voucher_code }}</strong>
+                  <span>{{ copiedCode() === prompt.voucher_code ? 'Đã chép' : 'Sao chép' }}</span>
+                </button>
+              </div>
+            }
+          </div>
+          <a class="btn-primary offers-prompt__cta" [routerLink]="prompt.action_route">{{ prompt.action_label }}</a>
         </div>
-        <a class="btn-primary" [routerLink]="prompt.action_route">{{ prompt.action_label }}</a>
-      </div>
-    </section>
-  }
+      </section>
+    }
   }
 
   <section class="offer-list-section container" aria-labelledby="offer-list-title">
-    <div class="offer-list-section__header">
-      <span class="hot-banner-section__eyebrow">Đặc quyền tháng này</span>
-      <h2 class="hot-banner-section__title" id="offer-list-title">Bộ sưu tập ưu đãi</h2>
+    <div class="offer-section-head">
+      <div>
+        <span class="hot-banner-section__eyebrow">Chiến dịch tâm điểm</span>
+        <h2 class="hot-banner-section__title" id="offer-list-title">Bộ sưu tập ưu đãi</h2>
+      </div>
+      @if (!loading() && !loadError() && campaigns().length > 1) {
+        <div class="campaign-stage-meta">
+          <span class="campaign-stage-meta__count">
+            Chiến dịch {{ slideNumber(activeSlideIndex()) }} / {{ slideNumber(campaigns().length - 1) }}
+          </span>
+          <button
+            type="button"
+            class="campaign-stage-meta__pause"
+            (click)="toggleManualPause()"
+            [attr.aria-pressed]="manualPaused()"
+            [attr.aria-label]="manualPaused() ? 'Tiếp tục tự động trượt banner' : 'Tạm dừng tự động trượt banner'"
+          >
+            @if (manualPaused()) {
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+              <span>Tiếp tục</span>
+            } @else {
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
+              <span>Tự trượt 5s</span>
+            }
+          </button>
+        </div>
+      }
     </div>
 
     @if (loading()) {
-      <p class="offers-state">Đang tải ưu đãi…</p>
+      <div class="campaign-skeleton" aria-hidden="true">
+        <div class="campaign-skeleton__copy">
+          <span class="campaign-skeleton__bar campaign-skeleton__bar--sm"></span>
+          <span class="campaign-skeleton__bar campaign-skeleton__bar--lg"></span>
+          <span class="campaign-skeleton__bar campaign-skeleton__bar--md"></span>
+          <span class="campaign-skeleton__pill"></span>
+        </div>
+        <div class="campaign-skeleton__media"></div>
+      </div>
     } @else if (loadError()) {
-      <div class="offers-state offers-state--error">
+      <div class="offers-state offers-state--error" role="alert">
         <p>{{ loadError() }}</p>
         <button type="button" class="btn-outline" (click)="load()">Thử lại</button>
       </div>
@@ -51,137 +89,339 @@
         <a class="btn-outline" routerLink="/products">Khám phá sản phẩm</a>
       </div>
     } @else {
-      <div class="offer-banner-list" aria-label="Danh sách ưu đãi Velura">
-        @for (campaign of pagedCampaigns(); track campaign.promo_id; let i = $index) {
-          <article class="offer-banner-row" [class.offer-banner-row--reverse]="i % 2 === 1"
-                   [class.offer-banner-row--focused]="focusedOffer() === campaign.promo_id">
-            <div class="offer-banner-row__copy">
-              <span class="offer-banner-row__index">{{ campaignIndex(i) }}</span>
-              @if (campaign.highlight_label) {
-                <span class="offer-banner-row__eyebrow">{{ campaign.highlight_label }}</span>
-              }
-              <h3 class="offer-banner-row__title">{{ cleanTitle(campaign.title) }}</h3>
-              @if (campaign.description) {
-                <p class="offer-banner-row__desc">{{ campaign.description }}</p>
-              }
-              @if (campaign.days_left !== null) {
-                <p class="offer-banner-row__condition">
-                  @if (campaign.days_left === 0) {
-                    Kết thúc hôm nay
-                  } @else {
-                    Còn {{ campaign.days_left }} ngày · đến {{ expiryLabel(campaign.end_date) }}
+      <div
+        class="campaign-carousel"
+        role="region"
+        aria-roledescription="carousel"
+        aria-label="Banner chiến dịch khuyến mãi tự động trượt"
+        tabindex="0"
+        (mouseenter)="onCarouselPause(true)"
+        (mouseleave)="onCarouselPause(false)"
+        (focusin)="onCarouselPause(true)"
+        (focusout)="onCarouselPause(false)"
+        (keydown)="onCarouselKeydown($event)"
+        (pointerdown)="onStagePointerDown($event)"
+        (pointerup)="onStagePointerUp($event)"
+      >
+        <div
+          class="campaign-carousel__track"
+          [class.is-instant]="trackInstant()"
+          [style.--track-pos]="trackPosition()"
+          (transitionend)="onTrackTransitionEnd($event)"
+        >
+          @for (slide of renderedSlides(); track slide.key) {
+            @let campaign = slide.campaign;
+            @let framing = bannerFraming(campaign);
+            @let count = voucherCount(campaign);
+            @let previews = campaignVoucherPreview(campaign);
+            @let isActive = !slide.isClone && slide.realIndex === activeSlideIndex();
+            <article
+              class="campaign-slide"
+              [class.is-active]="isActive"
+              [class.is-focused]="focusedOffer() === campaign.promo_id"
+              [attr.aria-hidden]="!isActive"
+              [attr.inert]="slide.isClone ? '' : null"
+            >
+              <div class="campaign-slide__copy">
+                <div class="campaign-slide__badges">
+                  <span class="campaign-slide__index">{{ slideNumber(slide.realIndex) }}</span>
+                  <span class="campaign-slide__tag">
+                    {{ campaign.highlight_label || campaignTypeLabel(campaign.type) }}
+                  </span>
+                  @if (campaign.days_left !== null) {
+                    <span class="campaign-slide__countdown" [class.is-urgent]="campaign.days_left <= 3">
+                      @if (campaign.days_left === 0) {
+                        Kết thúc hôm nay
+                      } @else {
+                        Còn {{ campaign.days_left }} ngày · hết {{ expiryLabel(campaign.end_date) }}
+                      }
+                    </span>
                   }
-                </p>
-              }
-              @if (voucherCount(campaign) > 0) {
-                <button type="button" class="offer-banner-row__cta" (click)="focus(campaign)">
-                  Xem {{ voucherCount(campaign) }} mã của chương trình →
-                </button>
-              } @else {
-                <a class="offer-banner-row__cta" routerLink="/products">Mua sắm ngay →</a>
-              }
-            </div>
-            @if (campaign.banner_image_url && !failedImages()[campaign.promo_id]) {
-              <a class="offer-banner-row__image-link" routerLink="/products" [attr.aria-label]="cleanTitle(campaign.title)">
-                <img
-                  class="offer-banner-row__image"
-                  [src]="campaign.banner_image_url"
-                  [alt]="cleanTitle(campaign.title)"
-                  loading="lazy"
-                  decoding="async"
-                  (error)="onImageError(campaign.promo_id)"
-                />
-              </a>
-            } @else {
-              <a class="offer-banner-row__image-link" routerLink="/products" [attr.aria-label]="cleanTitle(campaign.title)">
-                <div class="offer-banner-fallback">
-                  <span class="offer-banner-fallback__eyebrow">VELURA SPECIAL</span>
-                  <strong class="offer-banner-fallback__title">{{ cleanTitle(campaign.title) }}</strong>
-                  <span class="offer-banner-fallback__badge">Đặc Quyền Tháng Này</span>
                 </div>
-              </a>
+
+                <h3 class="campaign-slide__title">{{ cleanTitle(campaign.title) }}</h3>
+
+                <p class="campaign-slide__desc">
+                  {{ campaign.description || campaignFallbackDescription(campaign) }}
+                </p>
+
+                @if (previews.length > 0) {
+                  <div class="campaign-slide__vouchers" aria-label="Mã giảm giá tiêu biểu của chiến dịch">
+                    @for (v of previews; track v.voucher_id) {
+                      <button
+                        type="button"
+                        class="campaign-voucher-chip"
+                        [tabIndex]="isActive ? 0 : -1"
+                        (click)="copyVoucherCode(v.code, $event)"
+                        [title]="'Bấm để sao chép mã ' + v.code"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path>
+                          <path d="M13 5v2M13 11v2M13 17v2"></path>
+                        </svg>
+                        <strong class="campaign-voucher-chip__code">{{ v.code }}</strong>
+                        <span class="campaign-voucher-chip__desc">{{ v.description }}</span>
+                      </button>
+                    }
+                  </div>
+                }
+
+                <div class="campaign-slide__actions">
+                  @if (count > 0) {
+                    <button
+                      type="button"
+                      class="campaign-slide__cta campaign-slide__cta--primary"
+                      [tabIndex]="isActive ? 0 : -1"
+                      (click)="focus(campaign)"
+                    >
+                      <span>Nhận {{ count }} mã ưu đãi</span>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 5v14M19 12l-7 7-7-7"></path>
+                      </svg>
+                    </button>
+                    <a
+                      class="campaign-slide__cta campaign-slide__cta--secondary"
+                      routerLink="/products"
+                      [tabIndex]="isActive ? 0 : -1"
+                    >
+                      <span>Mua sắm ngay</span>
+                    </a>
+                  } @else {
+                    <a
+                      class="campaign-slide__cta campaign-slide__cta--primary"
+                      routerLink="/products"
+                      [tabIndex]="isActive ? 0 : -1"
+                    >
+                      <span>Mua sắm ngay</span>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M5 12h14M13 5l7 7-7 7"></path>
+                      </svg>
+                    </a>
+                  }
+                </div>
+              </div>
+
+              <div class="campaign-slide__visual">
+                @if (framing.cleanUrl && !failedImages()[campaign.promo_id]) {
+                  <a
+                    class="campaign-slide__media-frame"
+                    routerLink="/products"
+                    [tabIndex]="isActive ? 0 : -1"
+                    [attr.aria-label]="cleanTitle(campaign.title)"
+                  >
+                    @if (framing.mediaType === 'video') {
+                      <video
+                        class="campaign-slide__media"
+                        [src]="framing.cleanUrl"
+                        autoplay
+                        muted
+                        loop
+                        playsinline
+                        [style.object-position]="framing.objectPosition"
+                        [style.transform-origin]="framing.transformOrigin"
+                        [style.transform]="framing.transform"
+                        (error)="onImageError(campaign.promo_id)"
+                      ></video>
+                    } @else {
+                      <img
+                        class="campaign-slide__media"
+                        [src]="framing.cleanUrl"
+                        [alt]="cleanTitle(campaign.title)"
+                        [loading]="slide.realIndex === 0 ? 'eager' : 'lazy'"
+                        decoding="async"
+                        [style.object-position]="framing.objectPosition"
+                        [style.transform-origin]="framing.transformOrigin"
+                        [style.transform]="framing.transform"
+                        (error)="onImageError(campaign.promo_id)"
+                      />
+                    }
+                    <span class="campaign-slide__scrim" aria-hidden="true"></span>
+                  </a>
+                } @else {
+                  <a
+                    class="campaign-slide__media-frame campaign-slide__media-frame--fallback"
+                    routerLink="/products"
+                    [tabIndex]="isActive ? 0 : -1"
+                    [attr.aria-label]="cleanTitle(campaign.title)"
+                  >
+                    <div class="offer-banner-fallback">
+                      <span class="offer-banner-fallback__eyebrow">{{ campaignTypeLabel(campaign.type) }}</span>
+                      <strong class="offer-banner-fallback__title">{{ cleanTitle(campaign.title) }}</strong>
+                      <span class="offer-banner-fallback__badge">Đặc quyền Velura Atelier</span>
+                    </div>
+                  </a>
+                }
+              </div>
+            </article>
+          }
+        </div>
+
+        @if (campaigns().length > 1) {
+          <button
+            type="button"
+            class="campaign-carousel__arrow campaign-carousel__arrow--prev"
+            (click)="prevSlide()"
+            aria-label="Chiến dịch trước"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m15 18-6-6 6-6"></path>
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="campaign-carousel__arrow campaign-carousel__arrow--next"
+            (click)="nextSlide()"
+            aria-label="Chiến dịch kế tiếp"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m9 18 6-6-6-6"></path>
+            </svg>
+          </button>
+
+          <div class="campaign-carousel__indicators" role="tablist" aria-label="Tiến trình chuyển chiến dịch">
+            @for (item of campaigns(); track item.promo_id; let idx = $index) {
+              <button
+                type="button"
+                role="tab"
+                class="campaign-indicator"
+                [class.is-active]="activeSlideIndex() === idx"
+                [class.is-paused]="isCarouselPaused()"
+                [attr.aria-selected]="activeSlideIndex() === idx"
+                [attr.aria-label]="'Xem chiến dịch ' + cleanTitle(item.title)"
+                (click)="goToSlide(idx)"
+              >
+                @if (activeSlideIndex() === idx) {
+                  @for (tick of [slideTick()]; track tick) {
+                    <span class="campaign-indicator__fill" aria-hidden="true"></span>
+                  }
+                }
+              </button>
             }
-          </article>
-        }
-        @if (campaignTotalPages() > 1) {
-          <nav class="campaign-pagination" aria-label="Phân trang chương trình ưu đãi">
-            <button
-              type="button"
-              class="campaign-page-btn"
-              [disabled]="campaignPage() <= 1"
-              (click)="setCampaignPage(campaignPage() - 1)"
-            >
-              &larr; Trang trước
-            </button>
-            <div class="campaign-page-numbers">
-              @for (p of campaignPageList(); track p) {
-                <button
-                  type="button"
-                  class="campaign-page-num"
-                  [class.is-active]="campaignPage() === p"
-                  (click)="setCampaignPage(p)"
-                >
-                  {{ p }}
-                </button>
-              }
-            </div>
-            <button
-              type="button"
-              class="campaign-page-btn"
-              [disabled]="campaignPage() >= campaignTotalPages()"
-              (click)="setCampaignPage(campaignPage() + 1)"
-            >
-              Trang sau &rarr;
-            </button>
-          </nav>
+          </div>
         }
       </div>
+
+      @if (campaigns().length > 1) {
+        <nav class="campaign-quick-strip" aria-label="Chọn nhanh chiến dịch ưu đãi">
+          @for (item of campaigns(); track item.promo_id; let idx = $index) {
+            <button
+              type="button"
+              class="campaign-quick-pill"
+              [class.is-active]="activeSlideIndex() === idx"
+              (click)="goToSlide(idx)"
+            >
+              <span class="campaign-quick-pill__num">{{ slideNumber(idx) }}</span>
+              <span class="campaign-quick-pill__name">{{ cleanTitle(item.title) }}</span>
+              @if (voucherCount(item) > 0) {
+                <span class="campaign-quick-pill__count">{{ voucherCount(item) }} mã</span>
+              }
+            </button>
+          }
+        </nav>
+      }
     }
   </section>
 
   @if (!loading() && !loadError() && vouchers().length > 0) {
-    <section class="offer-list-section container" aria-labelledby="offer-voucher-title">
-      <div class="offer-list-section__header">
-        <span class="hot-banner-section__eyebrow">Ví Voucher</span>
-        <h2 class="hot-banner-section__title" id="offer-voucher-title">Mã giảm giá của bạn</h2>
-        <p class="offers-state">
-          Bấm "Dùng mã" để chuyển đến danh mục sản phẩm và mua sắm thỏa điều kiện áp dụng mã.
-        </p>
-        @if (!isMember()) {
-          <p class="offers-state">Đăng nhập để thấy thêm mã dành riêng cho thành viên.</p>
-        }
+    <section class="offer-list-section offer-wallet-section container" aria-labelledby="offer-voucher-title">
+      <div class="offer-wallet-head">
+        <div>
+          <span class="hot-banner-section__eyebrow">Ví Voucher</span>
+          <h2 class="hot-banner-section__title" id="offer-voucher-title">Mã giảm giá của bạn</h2>
+          <p class="offer-wallet-head__sub">
+            Sao chép mã hoặc bấm "Dùng mã" để chuyển thẳng đến danh mục sản phẩm thỏa điều kiện áp dụng.
+          </p>
+          @if (!isMember()) {
+            <p class="offer-wallet-head__guest">
+              Đăng nhập tài khoản thành viên để mở khóa thêm ưu đãi cá nhân và quà sinh nhật.
+            </p>
+          }
+        </div>
+
+        <div class="offer-wallet-filters" role="group" aria-label="Bộ lọc nhanh mã giảm giá">
+          <button
+            type="button"
+            class="offer-wallet-filter"
+            [class.is-active]="walletFilter() === 'all'"
+            (click)="setWalletFilter('all')"
+          >
+            Tất cả mã ({{ vouchers().length }})
+          </button>
+          <button
+            type="button"
+            class="offer-wallet-filter"
+            [class.is-active]="walletFilter() === 'usable'"
+            (click)="setWalletFilter('usable')"
+          >
+            Dùng được ngay ({{ usableVoucherCount() }})
+          </button>
+        </div>
       </div>
 
       @if (focusedCampaign(); as campaign) {
-        <div class="offer-voucher-group" id="offer-focused">
-          <h3 class="offer-voucher-group__title">Mã của {{ cleanTitle(campaign.title) }}</h3>
+        <div class="offer-voucher-group offer-voucher-group--focused" id="offer-focused">
+          <div class="offer-voucher-group__bar">
+            <h3 class="offer-voucher-group__title">Mã thuộc chiến dịch: {{ cleanTitle(campaign.title) }}</h3>
+            <button type="button" class="offer-voucher-group__clear" (click)="clearFocusedCampaign()">
+              Xem chung toàn bộ mã
+            </button>
+          </div>
           @if (focusedVouchers().length === 0) {
-            <p class="offers-state">Chương trình này chưa có mã nào dùng được cho bạn.</p>
+            <p class="offers-state">Chiến dịch này hiện chưa có mã giảm giá riêng khả dụng.</p>
           } @else {
             <ul class="offer-voucher-grid">
               @for (voucher of focusedVouchers(); track voucher.voucher_id) {
+                @let stub = voucherStub(voucher);
+                @let lockCta = lockedVoucherAction(voucher);
                 <li>
-            <article class="voucher-card" [class.voucher-card--disabled]="!voucher.usable">
-              <div class="voucher-card__main">
-                <p class="voucher-card__code">
-                  {{ voucher.code }}
-                  @if (voucher.remaining_uses !== null) {
-                    <span class="voucher-card__remaining">(Còn {{ voucher.remaining_uses }})</span>
-                  }
-                </p>
-                <p class="voucher-card__name">{{ voucher.description }}</p>
-                <p class="voucher-card__meta">{{ voucher.condition_text }}</p>
-                <p class="voucher-card__meta">HSD: {{ expiryLabel(voucher.end_date) }}</p>
-                @if (voucher.blocked_reason) {
-                  <p class="voucher-card__reason">{{ voucher.blocked_reason }}</p>
-                }
-              </div>
-              @if (voucher.usable) {
-                <div class="voucher-card__side">
-                  <a class="btn-outline voucher-card__use" [routerLink]="['/products']" [queryParams]="useVoucherParams(voucher)" (click)="onUseVoucher(voucher)">Dùng mã</a>
-                </div>
-              }
-            </article>
+                  <article class="voucher-card couture-ticket" [class.voucher-card--disabled]="!voucher.usable">
+                    <div class="couture-ticket__stub" [attr.data-kind]="stub.kind">
+                      <span class="couture-ticket__value">{{ stub.headline }}</span>
+                      <span class="couture-ticket__caption">{{ stub.caption }}</span>
+                    </div>
+
+                    <div class="voucher-card__main couture-ticket__body">
+                      <div class="couture-ticket__top">
+                        <span class="voucher-card__code">{{ voucher.code }}</span>
+                        <button
+                          type="button"
+                          class="couture-ticket__copy"
+                          (click)="copyVoucherCode(voucher.code, $event)"
+                          [attr.aria-label]="'Sao chép mã ' + voucher.code"
+                        >
+                          {{ copiedCode() === voucher.code ? 'Đã chép' : 'Sao chép' }}
+                        </button>
+                        @if (voucher.remaining_uses !== null) {
+                          <span class="voucher-card__remaining">Còn {{ voucher.remaining_uses }} lượt</span>
+                        }
+                      </div>
+                      <p class="voucher-card__name">{{ voucher.description }}</p>
+                      <p class="voucher-card__meta">{{ voucher.condition_text }}</p>
+                      <p class="voucher-card__meta">Hạn dùng: {{ expiryLabel(voucher.end_date) }}</p>
+                      @if (voucher.blocked_reason) {
+                        <p class="voucher-card__reason">{{ voucher.blocked_reason }}</p>
+                      }
+                    </div>
+
+                    <div class="voucher-card__side couture-ticket__side">
+                      @if (voucher.usable) {
+                        <a
+                          class="couture-ticket__use-btn"
+                          [routerLink]="['/products']"
+                          [queryParams]="useVoucherParams(voucher)"
+                          (click)="onUseVoucher(voucher)"
+                        >
+                          Dùng mã
+                        </a>
+                      } @else if (lockCta) {
+                        <a class="couture-ticket__unlock-btn" [routerLink]="lockCta.route">
+                          {{ lockCta.label }}
+                        </a>
+                      } @else {
+                        <span class="couture-ticket__locked-tag">Tạm khóa</span>
+                      }
+                    </div>
+                  </article>
                 </li>
               }
             </ul>
@@ -189,33 +429,65 @@
         </div>
       }
 
-      @for (group of voucherGroups(); track group.key) {
+      @for (group of visibleVoucherGroups(); track group.key) {
         <div class="offer-voucher-group">
-          <h3 class="offer-voucher-group__title">{{ group.title }}</h3>
+          <div class="offer-voucher-group__bar">
+            <h3 class="offer-voucher-group__title">{{ group.title }}</h3>
+            <span class="offer-voucher-group__count">{{ group.items.length }} mã</span>
+          </div>
           <ul class="offer-voucher-grid">
             @for (voucher of group.items; track voucher.voucher_id) {
+              @let stub = voucherStub(voucher);
+              @let lockCta = lockedVoucherAction(voucher);
               <li>
-            <article class="voucher-card" [class.voucher-card--disabled]="!voucher.usable">
-              <div class="voucher-card__main">
-                <p class="voucher-card__code">
-                  {{ voucher.code }}
-                  @if (voucher.remaining_uses !== null) {
-                    <span class="voucher-card__remaining">(Còn {{ voucher.remaining_uses }})</span>
-                  }
-                </p>
-                <p class="voucher-card__name">{{ voucher.description }}</p>
-                <p class="voucher-card__meta">{{ voucher.condition_text }}</p>
-                <p class="voucher-card__meta">HSD: {{ expiryLabel(voucher.end_date) }}</p>
-                @if (voucher.blocked_reason) {
-                  <p class="voucher-card__reason">{{ voucher.blocked_reason }}</p>
-                }
-              </div>
-              @if (voucher.usable) {
-                <div class="voucher-card__side">
-                  <a class="btn-outline voucher-card__use" [routerLink]="['/products']" [queryParams]="useVoucherParams(voucher)" (click)="onUseVoucher(voucher)">Dùng mã</a>
-                </div>
-              }
-            </article>
+                <article class="voucher-card couture-ticket" [class.voucher-card--disabled]="!voucher.usable">
+                  <div class="couture-ticket__stub" [attr.data-kind]="stub.kind">
+                    <span class="couture-ticket__value">{{ stub.headline }}</span>
+                    <span class="couture-ticket__caption">{{ stub.caption }}</span>
+                  </div>
+
+                  <div class="voucher-card__main couture-ticket__body">
+                    <div class="couture-ticket__top">
+                      <span class="voucher-card__code">{{ voucher.code }}</span>
+                      <button
+                        type="button"
+                        class="couture-ticket__copy"
+                        (click)="copyVoucherCode(voucher.code, $event)"
+                        [attr.aria-label]="'Sao chép mã ' + voucher.code"
+                      >
+                        {{ copiedCode() === voucher.code ? 'Đã chép' : 'Sao chép' }}
+                      </button>
+                      @if (voucher.remaining_uses !== null) {
+                        <span class="voucher-card__remaining">Còn {{ voucher.remaining_uses }} lượt</span>
+                      }
+                    </div>
+                    <p class="voucher-card__name">{{ voucher.description }}</p>
+                    <p class="voucher-card__meta">{{ voucher.condition_text }}</p>
+                    <p class="voucher-card__meta">Hạn dùng: {{ expiryLabel(voucher.end_date) }}</p>
+                    @if (voucher.blocked_reason) {
+                      <p class="voucher-card__reason">{{ voucher.blocked_reason }}</p>
+                    }
+                  </div>
+
+                  <div class="voucher-card__side couture-ticket__side">
+                    @if (voucher.usable) {
+                      <a
+                        class="couture-ticket__use-btn"
+                        [routerLink]="['/products']"
+                        [queryParams]="useVoucherParams(voucher)"
+                        (click)="onUseVoucher(voucher)"
+                      >
+                        Dùng mã
+                      </a>
+                    } @else if (lockCta) {
+                      <a class="couture-ticket__unlock-btn" [routerLink]="lockCta.route">
+                        {{ lockCta.label }}
+                      </a>
+                    } @else {
+                      <span class="couture-ticket__locked-tag">Tạm khóa</span>
+                    }
+                  </div>
+                </article>
               </li>
             }
           </ul>

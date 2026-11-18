@@ -138,154 +138,1025 @@
   .offers-center__hero { padding-top: 36px; }
 }
 
-/* Live campaign page uses the same global tokens as the account wallet. */
-.offers-page { width: 100%; padding-bottom: 64px; }
-.offers-page .offers-hero { padding: 56px 24px 28px; }
-.offers-page .offer-banner-list { max-width: none; }
-.offers-prompt { margin: 16px auto 36px; }
+/* ============================================================
+   Trang Ưu đãi (/offers) — Rounded 5s Infinite Campaign Carousel
+   & Couture Perforated Ticket-Stub Voucher Wallet
+   ============================================================ */
+
+.offers-page {
+  width: 100%;
+  padding-bottom: 84px;
+  color: var(--ink, #2a2024);
+  background:
+    radial-gradient(ellipse at 10% 18%, rgba(248, 211, 222, 0.3), transparent 36rem),
+    radial-gradient(ellipse at 92% 72%, rgba(242, 224, 230, 0.24), transparent 34rem),
+    transparent;
+}
+
+.page-offers .hot-offer-widget { display: none; }
+.page-shell:has(.chatbot-widget--open) ~ .hot-offer-widget,
+app-site-shell:has(.chatbot-widget--open) .hot-offer-widget { visibility: hidden; }
+
+.offers-page .offers-hero {
+  padding: 44px 24px 20px;
+  max-width: 780px;
+}
+
+.offers-page .offers-hero__eyebrow,
+.offers-page .hot-banner-section__eyebrow {
+  color: var(--velura-maroon, #7a283c);
+}
+
+.offers-page .offers-hero__title,
+.offers-page .hot-banner-section__title {
+  color: var(--velura-maroon, #7a283c);
+}
+
+.offers-page .offers-hero__desc {
+  color: var(--text-secondary, #5f5055);
+  max-width: 58ch;
+}
+
+/* Birthday / Member Privilege Prompt */
+.offers-prompt {
+  margin: 8px auto 28px;
+}
+
 .offers-prompt__card {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 24px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--tab-bg);
-}
-.offers-prompt__title { margin: 0 0 6px; color: var(--ink); font: 600 1.1rem "Inter", sans-serif; }
-.offers-prompt__desc { margin: 0; color: var(--text-body); font-size: .9rem; line-height: 1.6; }
-.offers-prompt__card .btn-primary { flex-shrink: 0; text-decoration: none; }
-.offers-page .offer-banner-row { grid-template-columns: minmax(0, .9fr) minmax(0, 1.35fr); }
-.offers-page .offer-banner-row--reverse { grid-template-columns: minmax(0, 1.35fr) minmax(0, .9fr); }
-.offers-page .offer-banner-row__copy { min-width: 0; overflow-wrap: anywhere; }
-.offers-page .offer-banner-row__image-link { width: 100%; }
-.offers-page .offer-banner-fallback { height: 100%; min-height: 0; padding: 24px; }
-.offers-page .offer-banner-row__cta { margin-top: 12px; line-height: 1.5; padding: 10px 18px; text-align: center; }
-.offers-page .offer-list-section__header { max-width: 760px; }
-.page-offers .hot-offer-widget { display: none; }
-.page-shell:has(.chatbot-widget--open) ~ .hot-offer-widget,
-app-site-shell:has(.chatbot-widget--open) .hot-offer-widget { visibility: hidden; }
-@media (max-width: 760px) {
-  .offers-page .offers-hero { padding-top: 36px; }
-  .offers-prompt__card { align-items: stretch; flex-direction: column; gap: 16px; padding: 20px; }
-  .offers-page .offer-banner-row,
-  .offers-page .offer-banner-row--reverse { grid-template-columns: minmax(0, 1fr); }
-  .offers-page .offer-banner-row--reverse .offer-banner-row__copy,
-  .offers-page .offer-banner-row--reverse .offer-banner-row__image-link { grid-column: auto; grid-row: auto; text-align: left; align-items: flex-start; }
+  padding: 22px 26px;
+  border: 1px solid rgba(226, 178, 193, 0.72);
+  border-radius: 24px;
+  background: linear-gradient(120deg, #fff9fb 0%, #f9ebf0 100%);
+  box-shadow: 0 12px 30px rgba(122, 40, 60, 0.06);
 }
 
-.campaign-pagination {
+.offers-prompt__card--birthday {
+  border-color: rgba(122, 40, 60, 0.34);
+  background: linear-gradient(120deg, #fff8f4 0%, #faecee 100%);
+}
+
+.offers-prompt__body {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.offers-prompt__badge {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: rgba(122, 40, 60, 0.1);
+  color: var(--velura-maroon, #7a283c);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.offers-prompt__title {
+  margin: 0;
+  color: var(--velura-maroon, #7a283c);
+  font: 700 1.08rem/1.35 var(--velura-font-ui, "Inter", sans-serif);
+}
+
+.offers-prompt__desc {
+  margin: 0;
+  color: var(--text-secondary, #5f5055);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  max-width: 62ch;
+}
+
+.offers-prompt__code-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin: 32px 0 16px;
+  gap: 10px;
+  margin-top: 4px;
   flex-wrap: wrap;
 }
-.campaign-page-btn {
-  padding: 8px 16px;
-  border: 1px solid var(--velura-border, #f2c2cf);
+
+.offers-prompt__code-label {
+  font-size: 0.78rem;
+  color: var(--text-secondary, #5f5055);
+}
+
+.offers-prompt__code-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border: 1px dashed rgba(122, 40, 60, 0.45);
   border-radius: 999px;
   background: #ffffff;
   color: var(--velura-maroon, #7a283c);
-  font-size: 0.8125rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.offers-prompt__code-pill:hover {
+  background: #fdf2f5;
+  transform: translateY(-1px);
+}
+
+.offers-prompt__cta {
+  flex-shrink: 0;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+/* Section Headers */
+.offers-page .offer-list-section {
+  padding-block: 14px 36px;
+}
+
+.offer-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.campaign-stage-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.campaign-stage-meta__count {
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, #5f5055);
+}
+
+.campaign-stage-meta__pause {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid rgba(122, 40, 60, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--velura-maroon, #7a283c);
+  font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
 }
-.campaign-page-btn:hover:not(:disabled) {
-  background: var(--velura-blush, #fbeff3);
+
+.campaign-stage-meta__pause:hover {
+  background: #ffffff;
   border-color: var(--velura-maroon, #7a283c);
   transform: translateY(-1px);
 }
-.campaign-page-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+
+/* Skeleton Loader for Campaign Stage */
+.campaign-skeleton {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 28px;
+  min-height: 360px;
+  padding: 28px;
+  border-radius: 28px;
+  border: 1px solid rgba(226, 178, 193, 0.55);
+  background: rgba(255, 255, 255, 0.92);
 }
-.campaign-page-numbers {
+
+.campaign-skeleton__copy {
   display: flex;
-  gap: 6px;
-  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
 }
-.campaign-page-num {
-  width: 36px;
-  height: 36px;
+
+.campaign-skeleton__bar,
+.campaign-skeleton__pill,
+.campaign-skeleton__media {
+  border-radius: 16px;
+  background: linear-gradient(90deg, #f6e9ed 25%, #fff8fa 50%, #f6e9ed 75%);
+  background-size: 200% 100%;
+  animation: offers-shimmer 1.4s ease infinite;
+}
+
+.campaign-skeleton__bar--sm { width: 36%; height: 22px; border-radius: 999px; }
+.campaign-skeleton__bar--lg { width: 82%; height: 44px; }
+.campaign-skeleton__bar--md { width: 68%; height: 20px; }
+.campaign-skeleton__pill { width: 168px; height: 42px; border-radius: 999px; margin-top: 8px; }
+.campaign-skeleton__media { width: 100%; min-height: 280px; border-radius: 20px; }
+
+@keyframes offers-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* ============================================================
+   5-Second Rounded Infinite-Loop Campaign Banner Stage
+   ============================================================ */
+
+.campaign-carousel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid rgba(224, 174, 190, 0.72);
+  background: linear-gradient(135deg, #fffcfd 0%, #fcf1f4 52%, #f8e6ec 100%);
+  box-shadow:
+    0 20px 48px rgba(122, 40, 60, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  touch-action: pan-y;
+}
+
+.campaign-carousel:focus-visible {
+  outline: 3px solid var(--velura-maroon, #7a283c);
+  outline-offset: 4px;
+}
+
+.campaign-carousel__track {
+  display: flex;
+  width: 100%;
+  will-change: transform;
+  transform: translate3d(calc(-100% * var(--track-pos, 0)), 0, 0);
+  transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.campaign-carousel__track.is-instant {
+  transition: none !important;
+}
+
+.campaign-slide {
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.18fr);
+  align-items: center;
+  gap: clamp(20px, 3vw, 40px);
+  padding: clamp(24px, 3.4vw, 40px) clamp(24px, 4.2vw, 56px) clamp(46px, 4.4vw, 54px);
+  box-sizing: border-box;
+}
+
+.campaign-slide__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  opacity: 0.76;
+  transform: translate3d(0, 8px, 0);
+  transition: opacity 420ms ease, transform 480ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.campaign-slide.is-active .campaign-slide__copy {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.campaign-slide__badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.campaign-slide__index {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--velura-border, #f2c2cf);
-  border-radius: 50%;
-  background: #ffffff;
-  color: var(--velura-ink, #2a2522);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  min-width: 32px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--velura-maroon, #7a283c);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
-.campaign-page-num:hover {
+
+.campaign-slide__tag {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 40, 60, 0.22);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--velura-maroon, #7a283c);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.campaign-slide__countdown {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: rgba(122, 40, 60, 0.08);
+  color: var(--text-secondary, #5a484e);
+  font-size: 0.74rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.campaign-slide__countdown.is-urgent {
+  background: #fde8ec;
+  color: #9f1239;
+}
+
+.campaign-slide__title {
+  margin: 2px 0 0;
+  color: var(--velura-maroon, #7a283c);
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  overflow-wrap: break-word;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding-bottom: 2px;
+}
+
+.campaign-slide__desc {
+  margin: 0;
+  color: var(--text-secondary, #5a484e);
+  font-size: 0.94rem;
+  line-height: 1.6;
+  max-width: 52ch;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Inline Campaign Voucher Preview Chips */
+.campaign-slide__vouchers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.campaign-voucher-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px dashed rgba(122, 40, 60, 0.38);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--velura-maroon, #7a283c);
+  font-size: 0.76rem;
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.campaign-voucher-chip:hover {
+  background: #ffffff;
   border-color: var(--velura-maroon, #7a283c);
+  transform: translateY(-1px);
+}
+
+.campaign-voucher-chip__code {
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.campaign-voucher-chip__desc {
+  color: var(--text-secondary, #5a484e);
+  font-weight: 500;
+}
+
+/* Slide Action CTAs — Strict Single-Line & WCAG AA+ Contrast */
+.campaign-slide__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.campaign-slide__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 22px;
+  border-radius: 999px;
+  font-family: var(--velura-font-ui, "Inter", sans-serif);
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.campaign-slide__cta:active {
+  transform: scale(0.98);
+}
+
+.campaign-slide__cta--primary {
+  border: 1px solid var(--velura-maroon, #7a283c);
+  background: var(--velura-maroon, #7a283c);
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(122, 40, 60, 0.22);
+}
+
+.campaign-slide__cta--primary:hover {
+  background: #611e2f;
+  border-color: #611e2f;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(122, 40, 60, 0.28);
+}
+
+.campaign-slide__cta--secondary {
+  border: 1px solid rgba(122, 40, 60, 0.36);
+  background: rgba(255, 255, 255, 0.92);
   color: var(--velura-maroon, #7a283c);
 }
-.campaign-page-num.is-active {
+
+.campaign-slide__cta--secondary:hover {
+  background: #ffffff;
+  border-color: var(--velura-maroon, #7a283c);
+  color: var(--velura-maroon, #7a283c);
+  transform: translateY(-1px);
+}
+
+/* Framed Media Stage */
+.campaign-slide__visual {
+  min-width: 0;
+  width: 100%;
+}
+
+.campaign-slide__media-frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9.4;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #24161b;
+  box-shadow: 0 16px 36px rgba(42, 22, 29, 0.16);
+  text-decoration: none;
+}
+
+.campaign-slide__media {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: 50% 32%;
+  transition: transform 720ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.campaign-slide__media-frame:hover .campaign-slide__media {
+  transform: scale(1.03);
+}
+
+.campaign-slide__scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(24, 12, 16, 0.02) 55%, rgba(24, 12, 16, 0.22) 100%);
+  pointer-events: none;
+}
+
+.campaign-slide__media-frame--fallback .offer-banner-fallback {
+  width: 100%;
+  height: 100%;
+  min-height: 250px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #7a283c 0%, #461723 100%);
+  box-sizing: border-box;
+}
+
+/* Carousel Prev / Next Arrows */
+.campaign-carousel__arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(8px);
+  color: var(--velura-maroon, #7a283c);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(42, 22, 29, 0.14);
+  transition: transform 180ms ease, background-color 180ms ease;
+}
+
+.campaign-carousel__arrow:hover {
+  background: #ffffff;
+  transform: translateY(-50%) scale(1.06);
+}
+
+.campaign-carousel__arrow--prev { left: 14px; }
+.campaign-carousel__arrow--next { right: 14px; }
+
+/* 5-Second GPU `scaleX` Progress Indicators */
+.campaign-carousel__indicators {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(224, 174, 190, 0.55);
+}
+
+.campaign-indicator {
+  position: relative;
+  width: 10px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(122, 40, 60, 0.22);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 180ms ease, background-color 180ms ease;
+}
+
+.campaign-indicator.is-active {
+  width: 42px;
+  background: rgba(122, 40, 60, 0.18);
+}
+
+.campaign-indicator__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--velura-maroon, #7a283c);
+  transform-origin: left center;
+  transform: scaleX(0);
+  animation: campaign-progress-5s 5000ms linear forwards;
+}
+
+.campaign-indicator.is-paused .campaign-indicator__fill {
+  animation-play-state: paused;
+}
+
+@keyframes campaign-progress-5s {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Quick-Jump Campaign Pill Strip */
+.campaign-quick-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.campaign-quick-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(224, 174, 190, 0.65);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink, #2a2024);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.campaign-quick-pill:hover {
+  background: #ffffff;
+  border-color: var(--velura-maroon, #7a283c);
+  transform: translateY(-1px);
+}
+
+.campaign-quick-pill.is-active {
   background: var(--velura-maroon, #7a283c);
   border-color: var(--velura-maroon, #7a283c);
   color: #ffffff;
 }
 
-/* Live campaign content uses the storefront palette without changing eligibility or links. */
-.offers-page {
-  color: var(--ink);
-  background:
-    radial-gradient(ellipse at 8% 28%, rgba(248, 211, 222, .28), transparent 34rem),
-    radial-gradient(ellipse at 94% 76%, rgba(230, 236, 213, .18), transparent 32rem),
-    transparent;
+.campaign-quick-pill__num {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.78;
 }
-.offers-page .offers-hero__eyebrow,
-.offers-page .hot-banner-section__eyebrow { color: var(--velura-maroon); }
-.offers-page .offers-hero__title,
-.offers-page .hot-banner-section__title,
-.offers-page .offers-prompt__title { color: var(--velura-maroon); }
-.offers-page .offers-hero__desc,
-.offers-page .offers-prompt__desc { color: var(--text-secondary); }
-.offers-page .offers-prompt__card {
-  border-color: rgba(242, 194, 207, .7);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(115deg, #fff6f8, #f8e8ed);
-  box-shadow: 0 8px 25px rgba(122, 40, 60, .07);
-}
-.offers-page .offer-list-section { padding-block: 16px 40px; }
-.offers-page .offer-list-section__header { margin-bottom: 24px; }
-.offers-page .offer-banner-row {
+
+.campaign-quick-pill__name {
+  max-width: 220px;
   overflow: hidden;
-  border: 1px solid rgba(242, 194, 207, .68);
-  border-radius: var(--radius-lg);
-  background: rgba(255,255,255,.9);
-  box-shadow: 0 8px 25px rgba(122, 40, 60, .08);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.offers-page .offer-banner-row__title { color: var(--velura-maroon); }
-.offers-page .offer-banner-row__eyebrow,
-.offers-page .offer-banner-row__index,
-.offers-page .offer-banner-row__condition { color: var(--text-secondary); }
-.offers-page .offer-banner-row__cta {
-  border: 1px solid var(--velura-maroon);
+
+.campaign-quick-pill__count {
+  padding: 2px 8px;
   border-radius: 999px;
-  background: #fff;
-  color: var(--velura-maroon);
+  background: rgba(122, 40, 60, 0.1);
+  color: var(--velura-maroon, #7a283c);
+  font-size: 0.7rem;
+  font-weight: 700;
 }
-.offers-page .offer-banner-row__cta:hover { color: #fff; background: var(--velura-maroon); }
-.offers-page .offer-banner-fallback { color: #fff; background: linear-gradient(135deg, var(--velura-maroon), var(--velura-footer)); }
-.offers-page .offer-banner-row--focused { outline-color: var(--velura-rose); }
-.offers-page .offer-voucher-group__title { color: var(--velura-maroon); }
+
+.campaign-quick-pill.is-active .campaign-quick-pill__count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+/* ============================================================
+   Couture Perforated Ticket-Stub Voucher Wallet
+   ============================================================ */
+
+.offer-wallet-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+
+.offer-wallet-head__sub {
+  margin: 8px 0 0;
+  color: var(--text-secondary, #5a484e);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.offer-wallet-head__guest {
+  margin: 6px 0 0;
+  color: var(--velura-maroon, #7a283c);
+  font-size: 0.83rem;
+  font-weight: 600;
+}
+
+.offer-wallet-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(224, 174, 190, 0.65);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.offer-wallet-filter {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary, #5a484e);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.offer-wallet-filter.is-active {
+  background: var(--velura-maroon, #7a283c);
+  color: #ffffff;
+}
+
+.offer-voucher-group--focused {
+  padding: 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(122, 40, 60, 0.28);
+  background: linear-gradient(135deg, rgba(255, 250, 252, 0.96), rgba(252, 238, 243, 0.92));
+}
+
+.offer-voucher-group__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.offers-page .offer-voucher-group__title {
+  margin: 0;
+  color: var(--velura-maroon, #7a283c);
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+.offer-voucher-group__count {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(122, 40, 60, 0.08);
+  color: var(--velura-maroon, #7a283c);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.offer-voucher-group__clear {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 40, 60, 0.3);
+  background: #ffffff;
+  color: var(--velura-maroon, #7a283c);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.offer-voucher-group__clear:hover {
+  background: #fdf2f5;
+  transform: translateY(-1px);
+}
+
+/* Couture Ticket Card */
+.offers-page .offer-voucher-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  gap: 16px;
+}
+
+.offers-page .couture-ticket {
+  position: relative;
+  display: grid;
+  grid-template-columns: 98px minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border-radius: 16px;
+  border: 1px solid rgba(224, 174, 190, 0.75);
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(122, 40, 60, 0.06);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.offers-page .couture-ticket:hover:not(.voucher-card--disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(122, 40, 60, 0.42);
+  box-shadow: 0 14px 30px rgba(122, 40, 60, 0.11);
+}
+
+.offers-page .couture-ticket.voucher-card--disabled {
+  opacity: 0.78;
+  background: #fcfafb;
+}
+
+.couture-ticket__stub {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 16px 10px;
+  background: linear-gradient(160deg, #7a283c 0%, #5c1c2c 100%);
+  color: #ffffff;
+  text-align: center;
+  border-right: 1.5px dashed rgba(255, 255, 255, 0.45);
+}
+
+.couture-ticket__stub[data-kind="freeship"] {
+  background: linear-gradient(160deg, #8b334a 0%, #632032 100%);
+}
+
+.couture-ticket.voucher-card--disabled .couture-ticket__stub {
+  background: linear-gradient(160deg, #8e7b81 0%, #6e5d63 100%);
+}
+
+/* Perforated Ticket Notches */
+.couture-ticket__stub::before,
+.couture-ticket__stub::after {
+  content: "";
+  position: absolute;
+  right: -7px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fdf6f8;
+  border: 1px solid rgba(224, 174, 190, 0.65);
+  z-index: 2;
+}
+
+.couture-ticket__stub::before { top: -7px; }
+.couture-ticket__stub::after { bottom: -7px; }
+
+.couture-ticket__value {
+  font-family: var(--velura-font-ui, "Inter", sans-serif);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.couture-ticket__caption {
+  font-size: 0.68rem;
+  font-weight: 600;
+  opacity: 0.88;
+}
+
+.couture-ticket__body {
+  padding: 15px 16px;
+  gap: 4px;
+  justify-content: center;
+}
+
+.couture-ticket__top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.couture-ticket__copy {
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 40, 60, 0.25);
+  background: #fdf3f6;
+  color: var(--velura-maroon, #7a283c);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.couture-ticket__copy:hover {
+  background: var(--velura-maroon, #7a283c);
+  color: #ffffff;
+}
+
+.couture-ticket__side {
+  padding: 14px 16px 14px 12px;
+  border-left: 1px dashed rgba(201, 79, 112, 0.28);
+  justify-content: center;
+  align-items: center;
+}
+
+.couture-ticket__use-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: var(--velura-maroon, #7a283c);
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.couture-ticket__use-btn:hover {
+  background: #611e2f;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.couture-ticket__unlock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 40, 60, 0.35);
+  background: #ffffff;
+  color: var(--velura-maroon, #7a283c);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.couture-ticket__unlock-btn:hover {
+  background: #fdf2f5;
+}
+
+.couture-ticket__locked-tag {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(95, 80, 85, 0.1);
+  color: var(--text-secondary, #5f5055);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .offers-page .offers-state {
-  border-color: rgba(122, 40, 60, .24);
-  border-radius: var(--radius-lg);
-  background: rgba(255,255,255,.82);
+  padding: 24px;
+  border: 1px dashed rgba(122, 40, 60, 0.24);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
 }
-.offers-page .offers-state--error { color: var(--danger); }
-.offers-page :is(button, a):focus-visible { outline: 3px solid var(--velura-rose); outline-offset: 3px; }
+
+.offers-page .offers-state--error {
+  color: var(--danger, #b4233e);
+}
+
+.offers-page :is(button, a):focus-visible {
+  outline: 3px solid var(--velura-rose, #c94f70);
+  outline-offset: 2px;
+}
+
+/* Responsive Layout & Reduced Motion */
+@media (max-width: 920px) {
+  .campaign-skeleton,
+  .campaign-slide {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 20px 20px 52px;
+  }
+
+  .campaign-slide__visual {
+    order: -1;
+  }
+
+  .campaign-carousel__arrow {
+    top: 32%;
+    width: 36px;
+    height: 36px;
+  }
+}
 
 @media (max-width: 640px) {
-  .offers-page .offers-hero { padding-inline: 16px; }
-  .offers-page .offer-list-section { padding-block: 12px 28px; }
+  .offers-page .offers-hero {
+    padding: 32px 16px 14px;
+  }
+
+  .offers-prompt__card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 18px;
+  }
+
+  .offers-prompt__cta {
+    text-align: center;
+  }
+
+  .offers-page .couture-ticket {
+    grid-template-columns: 82px minmax(0, 1fr);
+  }
+
+  .couture-ticket__side {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px dashed rgba(201, 79, 112, 0.25);
+    padding: 10px 14px;
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .campaign-carousel__track,
+  .campaign-slide__copy,
+  .campaign-slide__media,
+  .campaign-slide__cta,
+  .couture-ticket {
+    transition: none !important;
+  }
+
+  .campaign-indicator__fill,
+  .campaign-skeleton__bar,
+  .campaign-skeleton__pill,
+  .campaign-skeleton__media {
+    animation: none !important;
+  }
+
+  .campaign-indicator.is-active .campaign-indicator__fill {
+    transform: scaleX(1);
+  }
 }

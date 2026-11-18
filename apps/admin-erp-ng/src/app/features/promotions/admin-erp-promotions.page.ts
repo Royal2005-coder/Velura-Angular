@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { catchError, finalize, forkJoin, of, timeout } from 'rxjs';
 import {
   AdminAuditRow,
@@ -24,6 +24,7 @@ import { AdminErpDataTable, AdminTableColumn, AdminTableRowAction } from '../../
 import { AdminErpFilterBar } from '../../shared/ui/admin-filter-bar';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
 import { AdminErpIcon } from '../../shared/ui/admin-erp-icon';
+import { AdminErpImageCropper, AdminMediaFraming } from '../../shared/ui/admin-image-cropper';
 import { AdminErpKpiCard } from '../../shared/ui/admin-kpi-card';
 import { AdminErpModal } from '../../shared/ui/admin-modal';
 import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
@@ -32,6 +33,35 @@ import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 
 type PromoView = 'campaigns' | 'vouchers' | 'logs' | 'stats';
+type CampaignLayoutMode = 'table' | 'banners';
+
+const DEFAULT_BANNER_FRAMING: AdminMediaFraming = { posX: 50, posY: 32, zoom: 1 };
+
+/** Tách URL gốc và tọa độ căn khung `#focal=x,y,zoom` của banner chiến dịch. */
+function splitBannerFraming(rawUrl: string | null | undefined): { baseUrl: string; framing: AdminMediaFraming } {
+  const trimmed = String(rawUrl || '').trim();
+  if (!trimmed) return { baseUrl: '', framing: DEFAULT_BANNER_FRAMING };
+  const [base = '', hash = ''] = trimmed.split('#');
+  const match = /(?:^|&)focal=([0-9.]+),([0-9.]+)(?:,([0-9.]+))?/i.exec(hash);
+  if (!match) return { baseUrl: base, framing: DEFAULT_BANNER_FRAMING };
+  const clamp = (val: string | undefined, fallback: number, min: number, max: number): number => {
+    const n = Number(val);
+    return Number.isFinite(n) ? Math.round(Math.min(max, Math.max(min, n)) * 100) / 100 : fallback;
+  };
+  return {
+    baseUrl: base,
+    framing: {
+      posX: clamp(match[1], 50, 0, 100),
+      posY: clamp(match[2], 32, 0, 100),
+      zoom: clamp(match[3], 1, 1, 2.4),
+    },
+  };
+}
+
+function isVideoMediaUrl(url: string | null | undefined): boolean {
+  const path = String(url || '').split('#')[0]?.split('?')[0]?.toLowerCase() ?? '';
+  return path.endsWith('.mp4') || path.endsWith('.webm');
+}
 const EMPTY_CAMPAIGNS = { rows: [] as AdminPromotionRow[], count: 0, summary: undefined as AdminPromotionSummary | undefined };
 const EMPTY_VOUCHERS = { rows: [] as AdminVoucherRow[], count: 0 };
 const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
@@ -53,6 +83,7 @@ const CODE_PATTERN = /^[A-Z0-9_-]{3,30}$/;
     AdminErpModal,
     AdminErpStatusBadge,
     AdminErpIcon,
+    AdminErpImageCropper,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-erp-promotions.page.html',
@@ -63,8 +94,14 @@ export class AdminErpPromotionsPage {
   private readonly session = inject(AdminErpSessionService);
   private readonly confirm = inject(AdminErpConfirmService);
   private readonly toast = inject(AdminErpToastService);
+  private readonly destroyRef = inject(DestroyRef);
+  private previewSlideTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly view = signal<PromoView>('campaigns');
+  readonly campaignLayout = signal<CampaignLayoutMode>('table');
+  readonly previewSlideIndex = signal(0);
+  readonly previewPaused = signal(false);
+  readonly highlightPresets = ['Đặc quyền tháng này', 'Flash Sale 48H', 'Ưu đãi thành viên', 'Bộ sưu tập mùa mới'] as const;
   readonly query = signal('');
   readonly activeFilter = signal('');
   /** Voucher tab: narrow by parent campaign; "none" keeps only standalone vouchers. */
@@ -97,7 +134,31 @@ export class AdminErpPromotionsPage {
   readonly saving = signal(false);
   readonly actionSaving = signal(false);
   readonly campaignBannerUrl = signal('');
+  readonly campaignFraming = signal<AdminMediaFraming>(DEFAULT_BANNER_FRAMING);
+  readonly campaignHighlightLabel = signal('');
+  readonly campaignDisplayOrder = signal(0);
+  readonly campaignIsFeatured = signal(false);
   readonly bannerUploading = signal(false);
+  readonly cleanBannerSrc = computed(() => splitBannerFraming(this.campaignBannerUrl()).baseUrl);
+  readonly bannerMediaType = computed<'image' | 'video'>(() => (isVideoMediaUrl(this.cleanBannerSrc()) ? 'video' : 'image'));
+
+  /** Chiến dịch sắp xếp đúng thứ tự trượt trên trang `/offers` để mô phỏng trực tiếp. */
+  readonly sortedBannerCampaigns = computed<readonly AdminPromotionRow[]>(() =>
+    [...this.campaigns()].sort((a, b) => {
+      const featDiff = (b.is_featured === true ? 1 : 0) - (a.is_featured === true ? 1 : 0);
+      if (featDiff !== 0) return featDiff;
+      const orderDiff = Number(a.display_order ?? 0) - Number(b.display_order ?? 0);
+      if (orderDiff !== 0) return orderDiff;
+      return String(b.start_date || '').localeCompare(String(a.start_date || ''));
+    }),
+  );
+
+  readonly activePreviewCampaign = computed<AdminPromotionRow | null>(() => {
+    const list = this.sortedBannerCampaigns();
+    if (!list.length) return null;
+    const idx = Math.min(Math.max(0, this.previewSlideIndex()), list.length - 1);
+    return list[idx] ?? list[0] ?? null;
+  });
   readonly selectedVoucherPromoId = signal('');
   readonly selectedCampaignBudgetInfo = computed(() => {
     const promoId = this.selectedVoucherPromoId();
@@ -240,6 +301,7 @@ export class AdminErpPromotionsPage {
       label: 'Chiến dịch',
       icon: 'megaphone',
       value: (row) => this.campaignName(row as AdminPromotionRow),
+      subtext: (row) => this.campaignPresentationSubtext(row as AdminPromotionRow),
       image: (row) => this.campaignBanner(row as AdminPromotionRow),
       imageRatio: '16:9',
       truncate: '270px',
@@ -305,6 +367,7 @@ export class AdminErpPromotionsPage {
   ];
 
   constructor() {
+    this.destroyRef.onDestroy(() => this.stopPreviewTimer());
     this.reload();
     this.loadCampaignOptions();
     this.loadInitialTabCounts();
@@ -446,18 +509,104 @@ export class AdminErpPromotionsPage {
   }
 
   /**
-   * Resolves a sharp 16:9 banner image URL for the campaign row, with brand fallback.
+   * Switches between the enterprise data table and the 5s Banner Slider Studio.
+   */
+  setCampaignLayout(mode: CampaignLayoutMode): void {
+    this.campaignLayout.set(mode);
+    if (mode === 'banners') {
+      this.previewSlideIndex.set(0);
+      this.syncPreviewTimer();
+    } else {
+      this.stopPreviewTimer();
+    }
+  }
+
+  /**
+   * Steps or jumps the live 5s storefront banner preview in Admin ERP.
+   */
+  stepPreviewSlide(delta: number): void {
+    const total = this.sortedBannerCampaigns().length;
+    if (total <= 1) return;
+    this.previewSlideIndex.update((i) => (i + delta + total) % total);
+    this.syncPreviewTimer();
+  }
+
+  setPreviewSlide(index: number): void {
+    const total = this.sortedBannerCampaigns().length;
+    if (index < 0 || index >= total) return;
+    this.previewSlideIndex.set(index);
+    this.syncPreviewTimer();
+  }
+
+  setPreviewPaused(paused: boolean): void {
+    this.previewPaused.set(paused);
+    this.syncPreviewTimer();
+  }
+
+  private syncPreviewTimer(): void {
+    this.stopPreviewTimer();
+    if (this.view() !== 'campaigns' || this.campaignLayout() !== 'banners' || this.previewPaused() || this.sortedBannerCampaigns().length <= 1) {
+      return;
+    }
+    this.previewSlideTimer = setInterval(() => {
+      const total = this.sortedBannerCampaigns().length;
+      if (total > 1) {
+        this.previewSlideIndex.update((i) => (i + 1) % total);
+      }
+    }, 5000);
+  }
+
+  private stopPreviewTimer(): void {
+    if (this.previewSlideTimer !== null) {
+      clearInterval(this.previewSlideTimer);
+      this.previewSlideTimer = null;
+    }
+  }
+
+  /**
+   * Resolves a sharp 16:9 banner image URL for the campaign table row, falling back safely for video banners.
    */
   campaignBanner(row: AdminPromotionRow): string {
-    const raw = String(row.banner_image_url || '').trim();
-    if (raw) {
-      return raw.startsWith('/src/assets/') ? raw.slice(4) : raw;
+    const clean = splitBannerFraming(row.banner_image_url).baseUrl;
+    if (clean && !isVideoMediaUrl(clean)) {
+      return clean.startsWith('/src/assets/') ? clean.slice(4) : clean;
     }
     const type = String(row.promo_type || row.type || '').toLowerCase();
     if (type.includes('flash')) return '/assets/images/collections/weekend-escape-decor.png';
     if (type.includes('heritage') || type.includes('di_san')) return '/assets/images/collections/midnight-mirage-decor.png';
     if (type.includes('combo')) return '/assets/images/collections/the-urban-rhythm-decor.png';
     return '/assets/images/collections/the-afterglow-decor.png';
+  }
+
+  /**
+   * Resolves raw media URL + framing for the Banner Slider Studio and detail drawer.
+   */
+  campaignMediaPreview(row: AdminPromotionRow): { src: string; isVideo: boolean; objectPosition: string; transform: string | null } {
+    const { baseUrl, framing } = splitBannerFraming(row.banner_image_url);
+    const src = baseUrl
+      ? baseUrl.startsWith('/src/assets/')
+        ? baseUrl.slice(4)
+        : baseUrl
+      : this.campaignBanner(row);
+    const pos = `${framing.posX}% ${framing.posY}%`;
+    return {
+      src,
+      isVideo: isVideoMediaUrl(baseUrl),
+      objectPosition: pos,
+      transform: framing.zoom > 1.001 ? `scale(${framing.zoom})` : null,
+    };
+  }
+
+  /**
+   * Concise second-line metadata in the campaign table showing carousel order, featured pin, and highlight label.
+   */
+  campaignPresentationSubtext(row: AdminPromotionRow): string {
+    const parts: string[] = [];
+    if (row.is_featured) parts.push('Ghim đầu Slider');
+    parts.push(`Slide #${Number(row.display_order ?? 0) + 1}`);
+    if (row.highlight_label) parts.push(row.highlight_label);
+    if (isVideoMediaUrl(row.banner_image_url)) parts.push('Banner Video');
+    return parts.join(' · ');
   }
 
   /**
@@ -603,13 +752,40 @@ export class AdminErpPromotionsPage {
   }
 
   /**
-   * Opens the campaign create/edit form.
+   * Opens a clean create-campaign modal directly from the header or Banner Studio.
+   */
+  openCreateCampaign(): void {
+    if (!this.canMutate()) return;
+    this.selectedCampaign.set(null);
+    this.openCampaignFormFor(null);
+  }
+
+  /**
+   * Opens the campaign edit modal directly for a given campaign row.
+   */
+  openEditCampaign(campaign: AdminPromotionRow, event?: Event): void {
+    event?.stopPropagation();
+    if (!this.canMutate()) return;
+    this.selectedCampaign.set(campaign);
+    this.openCampaignFormFor(campaign);
+  }
+
+  /**
+   * Opens the campaign create/edit form from the currently selected campaign (or blank when none).
    */
   openCampaignForm(): void {
     if (!this.canMutate()) return;
-    const current = this.selectedCampaign();
+    this.openCampaignFormFor(this.selectedCampaign());
+  }
+
+  private openCampaignFormFor(current: AdminPromotionRow | null): void {
     this.editingCampaign.set(current);
-    this.campaignBannerUrl.set(current?.banner_image_url || '');
+    const parsed = splitBannerFraming(current?.banner_image_url);
+    this.campaignBannerUrl.set(parsed.baseUrl);
+    this.campaignFraming.set(parsed.framing);
+    this.campaignHighlightLabel.set(current?.highlight_label || '');
+    this.campaignDisplayOrder.set(Number(current?.display_order ?? 0));
+    this.campaignIsFeatured.set(Boolean(current?.is_featured));
     this.campaignFormOpen.set(true);
     this.formError.set(null);
     this.dirty.set(false);
@@ -625,21 +801,75 @@ export class AdminErpPromotionsPage {
       next: (res) => {
         this.bannerUploading.set(false);
         this.campaignBannerUrl.set(res.url);
+        this.campaignFraming.set(DEFAULT_BANNER_FRAMING);
         this.dirty.set(true);
       },
       error: (err: unknown) => {
         this.bannerUploading.set(false);
-        this.formError.set(adminErrorMessage(err, 'Không tải được ảnh banner chiến dịch.'));
+        this.formError.set(adminErrorMessage(err, 'Không tải được media banner chiến dịch.'));
       },
     });
   }
 
   /**
-   * Updates the campaign banner image URL from text input.
+   * Updates the campaign banner image/video URL from text input.
    */
   onBannerUrlInput(event: Event): void {
-    this.campaignBannerUrl.set((event.target as HTMLInputElement).value);
+    const parsed = splitBannerFraming((event.target as HTMLInputElement).value);
+    this.campaignBannerUrl.set(parsed.baseUrl);
+    if ((event.target as HTMLInputElement).value.includes('#focal=')) {
+      this.campaignFraming.set(parsed.framing);
+    }
     this.dirty.set(true);
+  }
+
+  /**
+   * Clears the campaign banner media so saving an edit removes the stored banner cleanly.
+   */
+  clearCampaignBanner(): void {
+    this.campaignBannerUrl.set('');
+    this.campaignFraming.set(DEFAULT_BANNER_FRAMING);
+    this.dirty.set(true);
+  }
+
+  /**
+   * Updates focal-point and zoom coordinates from `<app-erp-image-cropper>`.
+   */
+  onBannerFramingChange(framing: AdminMediaFraming): void {
+    this.campaignFraming.set(framing);
+    this.dirty.set(true);
+  }
+
+  onHighlightInput(event: Event): void {
+    this.campaignHighlightLabel.set((event.target as HTMLInputElement).value);
+    this.dirty.set(true);
+  }
+
+  applyHighlightPreset(preset: string): void {
+    this.campaignHighlightLabel.set(preset);
+    this.dirty.set(true);
+  }
+
+  onDisplayOrderInput(event: Event): void {
+    const num = Math.max(0, Math.floor(Number((event.target as HTMLInputElement).value || 0)));
+    this.campaignDisplayOrder.set(Number.isFinite(num) ? num : 0);
+    this.dirty.set(true);
+  }
+
+  onFeaturedChange(event: Event): void {
+    this.campaignIsFeatured.set((event.target as HTMLInputElement).checked);
+    this.dirty.set(true);
+  }
+
+  /**
+   * Serializes the clean banner URL with `#focal=x,y,zoom` when non-default framing is chosen.
+   */
+  serializedCampaignBannerUrl(): string {
+    const base = this.cleanBannerSrc();
+    if (!base) return '';
+    const f = this.campaignFraming();
+    const isDefault = Math.abs(f.posX - 50) < 0.05 && Math.abs(f.posY - 32) < 0.05 && Math.abs(f.zoom - 1) < 0.005;
+    return isDefault ? base : `${base}#focal=${f.posX},${f.posY},${f.zoom}`;
   }
 
   /**
@@ -822,12 +1052,29 @@ export class AdminErpPromotionsPage {
       this.formError.set(`Ngân sách không được nhỏ hơn số tiền đã sử dụng thực tế (${this.money(issued)}).`);
       return;
     }
+    const highlightRaw = (this.field(form, 'highlightLabel') || this.campaignHighlightLabel()).trim();
+    if (highlightRaw.length > 60) {
+      this.formError.set('Nhãn nổi bật trên banner tối đa 60 ký tự.');
+      return;
+    }
+    const orderRaw = this.field(form, 'displayOrder');
+    const displayOrder = orderRaw !== '' ? Math.max(0, Math.floor(Number(orderRaw))) : this.campaignDisplayOrder();
+    if (!Number.isInteger(displayOrder) || displayOrder < 0) {
+      this.formError.set('Thứ tự trượt trên banner phải là số nguyên không âm.');
+      return;
+    }
+    const serializedBanner = this.serializedCampaignBannerUrl();
     const payload: Record<string, unknown> = {
       name,
       startDate: new Date(start).toISOString(),
       endDate: new Date(end).toISOString(),
       budgetLimit: budget,
-      bannerImageUrl: this.campaignBannerUrl().trim() || null,
+      // Empty string on update explicitly clears the stored column via normalizePromotionPresentation;
+      // null on create leaves the column unset.
+      bannerImageUrl: current ? serializedBanner : serializedBanner || null,
+      highlightLabel: current ? highlightRaw : highlightRaw || null,
+      displayOrder,
+      isFeatured: this.campaignIsFeatured(),
       description: this.field(form, 'description'),
     };
     this.saving.set(true);

@@ -86,11 +86,16 @@ export interface ReturnService {
  */
 export function createReturnService({
   repository,
-  refunds
+  refunds,
+  listForensics,
+  runForensics = executeReturnBoxForensics,
 }: {
   repository: ReturnRepository;
   refunds?: ReturnRefundGateway;
+  listForensics?: typeof listStoredReturnBoxForensics;
+  runForensics?: typeof executeReturnBoxForensics;
 }): ReturnService {
+  const readForensics = listForensics ?? (repository.listBoxForensics ? (id: string) => repository.listBoxForensics!(id) : undefined);
   /** Linked chatbot cases use exclusive ownership, filtered replies and audited lifecycle actions. */
   async function requireStandaloneTicket(
     context: ReturnContext & { authUser: AuthUser },
@@ -158,6 +163,20 @@ export function createReturnService({
         Number(item.received_quantity) !== Number(item.quantity) ||
         !["matches_product", "tags_intact", "condition_acceptable", "package_match"].every(key => item[key] === true)) {
       throw new HttpError(422, "WAREHOUSE_QA_REQUIRED", "Phần hàng phải được nhận và kiểm tra trước khi hoàn tiền.");
+    }
+    const forensicsRows = readForensics ? await readForensics(returnId).catch(() => [] as JsonObject[]) : [];
+    const latestForensics = forensicsRows.find(
+      row => !row.return_item_id || asString(row.return_item_id) === returnItemId
+    );
+    if (latestForensics?.freeze_auto_refund === true) {
+      const overrideReason = asString(body.forensicsOverrideReason).trim();
+      if (context.roleCode !== "super_admin" || overrideReason.length < 15) {
+        throw new HttpError(
+          409,
+          "RETURN_REFUND_FROZEN_BY_FORENSICS",
+          "Hoàn tiền tự động đang tạm khóa do AI Giám định kiện hàng phát hiện rủi ro. Cần Quản trị cấp cao xác nhận lý do ghi đè (>= 15 ký tự)."
+        );
+      }
     }
     return { current, item, returnItemId, version };
   }
@@ -539,7 +558,7 @@ export function createReturnService({
       const shipments = repository.listReturnShipments
         ? await repository.listReturnShipments(returnId).catch(() => [])
         : [];
-      const decision = await executeReturnBoxForensics({
+      const decision = await runForensics({
         returnRow: current,
         shipments,
         body,
@@ -552,7 +571,7 @@ export function createReturnService({
       requireReturnReader(context);
       const current = await repository.getReturn(returnId, context.accessToken);
       if (!current) throw new HttpError(404, "RETURN_NOT_FOUND", "Không tìm thấy phiếu đổi trả.");
-      const rows = await listStoredReturnBoxForensics(returnId);
+      const rows = await (readForensics ?? listStoredReturnBoxForensics)(returnId);
       return { rows };
     },
 

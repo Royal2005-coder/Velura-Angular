@@ -153,6 +153,7 @@ export interface SkinOpticalMeasurement {
   readonly yellowBlueB: number;
   readonly whiteBalanceShift: "BALANCED" | "WARM_CAST" | "COOL_CAST" | "EXTREME_CAST";
   readonly measuredBaseDepth: BaseSkinDepth;
+  readonly isBlankSolid?: boolean;
 }
 
 /** Output of Use-Case 1: Personal Color Scientific Decision Engine. */
@@ -163,7 +164,7 @@ export interface PersonalColorDecision {
   readonly skin_depth: DetailedSkinDepth;
   readonly undertone: SkinUndertone;
   readonly contrast_level: ContrastLevel;
-  readonly season: FourSeason;
+  readonly season: FourSeason | null;
   readonly recommended_palette_ids: readonly string[];
   readonly avoid_palette_ids: readonly string[];
   readonly recommended_hex_palette: readonly string[];

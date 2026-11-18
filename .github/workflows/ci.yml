@@ -106,6 +106,7 @@ jobs:
       - run: npm run typecheck:api
       - run: npm run test:api
       - run: npm run eval:ai-decisions
+      - run: npm run test:mutate:ai
       - run: node --test tools/ops/velura-ops.test.mjs
       - run: node --test scripts/supabase-project.test.mjs
   test-angular:

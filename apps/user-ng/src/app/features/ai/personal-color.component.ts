@@ -291,7 +291,13 @@ export class PersonalColorComponent {
           this.clearFile();
           this.consent.set(false);
           const season = profile.personal_color?.season || analysis.result?.season || 'Spring';
-          const undertone = ['Spring', 'Autumn'].includes(season) ? 'Warm' : 'Cool';
+          const diagUndertone = analysis.diagnostics?.undertone;
+          const undertone =
+            diagUndertone === 'NEUTRAL_OLIVE'
+              ? 'Neutral-Olive'
+              : ['Spring', 'Autumn'].includes(season)
+                ? 'Warm'
+                : 'Cool';
           this.seasonConfirmed.emit({ season, undertone });
         }
       },

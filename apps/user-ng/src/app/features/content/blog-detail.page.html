@@ -31,8 +31,20 @@
 
         <div class="article-layout" [class.article-layout--single]="!article.products?.length">
           <div class="article-content">
+            @if (article.voucherCode; as code) {
+              <section class="article-voucher-card" aria-label="Ưu đãi độc quyền trong bài viết">
+                <div class="article-voucher-card__info">
+                  <span class="article-voucher-card__eyebrow">✦ ƯU ĐÃI CHIẾN DỊCH VELURA</span>
+                  <strong class="article-voucher-card__code">{{ code }}</strong>
+                  <span class="article-voucher-card__hint">Áp dụng mã tại bước thanh toán cho các thiết kế tuyển chọn trong bài.</span>
+                </div>
+                <button type="button" class="article-voucher-card__btn" (click)="copyVoucher(code)">
+                  {{ copiedVoucher() ? '✓ Đã sao chép mã' : 'Sao chép mã ưu đãi' }}
+                </button>
+              </section>
+            }
             @if (article.contentHtml) {
-              <div class="article-rich" [innerHTML]="article.contentHtml | safeHtml"></div>
+              <div class="article-rich" [innerHTML]="article.contentHtml | safeHtml" (click)="onRichContentClick($event)"></div>
             } @else if (paragraphs(article.content).length) {
               <div class="article-rich">
                 @for (paragraph of paragraphs(article.content); track $index) {

@@ -142,9 +142,16 @@
             }
           </div>
         }
+        @if (tax.actionable_fix.length) {
+          <ul class="gallery-tips" style="margin-top: 8px;">
+            @for (fix of tax.actionable_fix; track fix) {
+              <li>{{ fix }}</li>
+            }
+          </ul>
+        }
       </div>
     }
-    @if (report.recommendations.length) {
+    @if (!report.decisionTaxonomy?.actionable_fix?.length && report.recommendations.length) {
       <ul class="gallery-tips">
         @for (tip of report.recommendations; track tip) {
           <li>{{ tip }}</li>

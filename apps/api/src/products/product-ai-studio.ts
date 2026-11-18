@@ -415,7 +415,17 @@ export async function analyzeProductImageQuality(
       );
       if (resolveRolloutMode(productId || "product_image_qa").activeForRequest) {
         analysis.decisionTaxonomy = taxonomy;
-        if (taxonomy.actionable_fix.length > 0 && !analysis.passed) {
+        if (taxonomy.final_verdict === "REJECTED" || taxonomy.final_verdict === "NEEDS_EDIT") {
+          analysis.passed = false;
+          analysis.needsEnhancement = true;
+          analysis.grade = taxonomy.final_verdict === "REJECTED" ? "D" : "C";
+          analysis.overallScore = Math.min(analysis.overallScore, Math.round(taxonomy.average_taxonomy_score * 20));
+          analysis.statusLabel =
+            taxonomy.final_verdict === "REJECTED"
+              ? "Không đạt chuẩn thương mại (Decision Gate)"
+              : "Cần chỉnh sửa Studio trước khi đăng";
+        }
+        if (taxonomy.actionable_fix.length > 0) {
           analysis.recommendations = [...taxonomy.actionable_fix];
         }
         if (productId && /^[0-9a-f-]{36}$/i.test(productId)) {
@@ -462,7 +472,10 @@ export async function analyzeProductImageQuality(
           .filter((r) => r.length > 8)
           .slice(0, 4);
         if (aiRecs.length > 0) {
-          analysis.recommendations = aiRecs;
+          const taxFixes = analysis.decisionTaxonomy?.actionable_fix || [];
+          analysis.recommendations = taxFixes.length > 0
+            ? Array.from(new Set([...taxFixes, ...aiRecs])).slice(0, 5)
+            : aiRecs;
         }
       }
     }

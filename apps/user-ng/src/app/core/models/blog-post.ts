@@ -28,6 +28,8 @@ export interface BlogPost {
   canonicalUrl?: string;
   ogImage?: string;
   tags?: string[];
+  voucherCode?: string | null;
+  promoId?: string | null;
   publishedAt?: string;
   products?: BlogProductSummary[];
 }

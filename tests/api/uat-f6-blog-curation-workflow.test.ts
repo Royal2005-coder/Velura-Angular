@@ -17,7 +17,7 @@ import { UnifiedDecisionService } from "../../apps/api/src/decision/decision-ser
 import { HttpError } from "../../apps/api/src/http.js";
 import { accessForRole } from "../../apps/api/src/rbac.js";
 import type { AuthContext } from "../../apps/api/src/types.js";
-import { choice, mockDecisionResult, noul, withScrubbedAiEnv } from "./helpers/decision-test-kit.js";
+import { choice, mockDecisionResult, noul, score, withScrubbedAiEnv } from "./helpers/decision-test-kit.js";
 
 const superAccess = accessForRole("super_admin");
 const adminCtx: AuthContext = {
@@ -173,6 +173,52 @@ test("F6.1: decideAutoBlogProductCuration short-circuits OOS/REJECTED with 0 API
     imageQaScore: 4.8,
   });
   assert.equal(hero.publish_mode, "AUTO_BLOG_PUBLISH");
+
+  // 5. Batch SKU curation (`decideAutoBlogProductCurationBatch`): 3 SKUs (1 OOS + 1 HERO + 1 STANDARD) execute in ONE single Decision API call!
+  let batchApiCalls = 0;
+  const batchSvc = new UnifiedDecisionService(async (req) => {
+    batchApiCalls += 1;
+    const answers: Record<string, ReturnType<typeof choice> | ReturnType<typeof score>> = {};
+    for (const key of Object.keys(req.questions)) {
+      if (key.endsWith("_mode")) answers[key] = choice("AUTO_BLOG_PUBLISH", ["AUTO_BLOG_PUBLISH", "SEMI_AUTO_REVIEW", "EXCLUDE"], 0.9);
+      else if (key.endsWith("_fit")) answers[key] = choice("HERO_PRODUCT", ["HERO_PRODUCT", "BUNDLE_ADDON", "CLEARANCE"], 0.88);
+      else answers[key] = score(2.8, 4, 0.9);
+    }
+    return mockDecisionResult(answers);
+  });
+  const batchOut = await batchSvc.decideAutoBlogProductCurationBatch([
+    {
+      productId: "oos-1",
+      name: "Đầm Hết Hàng",
+      availableStock: 0,
+      basePrice: 1_500_000,
+      salePrice: null,
+      imageQaVerdict: "APPROVED_HERO",
+      imageQaScore: 4.8,
+    },
+    {
+      productId: "hero-1",
+      name: "Đầm Lụa Hero",
+      availableStock: 12,
+      basePrice: 2_000_000,
+      salePrice: 1_600_000,
+      imageQaVerdict: "APPROVED_HERO",
+      imageQaScore: 4.9,
+    },
+    {
+      productId: "std-2",
+      name: "Áo Sơ Mi Standard",
+      availableStock: 8,
+      basePrice: 980_000,
+      salePrice: null,
+      imageQaVerdict: "APPROVED_STANDARD",
+      imageQaScore: 3.9,
+    },
+  ]);
+  assert.equal(batchApiCalls, 1, "Batch curation MUST issue exactly 1 /v1beta/decisions call for all active SKUs");
+  assert.equal(batchOut[0]?.publish_mode, "EXCLUDE");
+  assert.equal(batchOut[1]?.publish_mode, "AUTO_BLOG_PUBLISH");
+  assert.equal(batchOut[2]?.publish_mode, "SEMI_AUTO_REVIEW", "APPROVED_STANDARD ceiling enforced in batch mode too");
 });
 
 test("F6.2: matchSemanticInventoryProducts returns [] (never unfiltered pool!) when 0 items match filters and drops EXCLUDE verdicts", async () => {

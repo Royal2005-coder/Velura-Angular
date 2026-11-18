@@ -60,8 +60,11 @@ function cleanStyle(raw: string): string {
 function safeUrl(value: string, kind: 'link' | 'image'): string | null {
   const url = value.trim();
   if (!url) return null;
-  if (kind === 'image') return /^https:\/\//i.test(url) ? url : null;
+  if (kind === 'image') {
+    return /^https:\/\//i.test(url) || /^\/assets\/[a-zA-Z0-9/_\-.]+$/.test(url) ? url : null;
+  }
   if (url.startsWith('#')) return url;
+  if (/^\/(?!\/)[a-zA-Z0-9/_\-?=&%#.]*$/.test(url)) return url;
   return /^(https?:\/\/|mailto:)/i.test(url) ? url : null;
 }
 

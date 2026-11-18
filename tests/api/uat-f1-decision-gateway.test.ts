@@ -167,6 +167,7 @@ test("F1.2: evaluateGeminiDecisions fails over Tier-1 (429/503) -> Tier-2 fallba
       );
       assert.equal(first.transport, "fallback_decisions_api");
       assert.equal(first.usedFallbackKey, true);
+      assert.equal(first.inputTokens, 64, "Must parse usage.input_tokens from /v1beta/decisions wire payload");
       assert.equal(callLog.length, 2);
 
       // Second call within 60s cooldown MUST skip PRIMARY_TEST_KEY_429 immediately (only 1 fetch!)
@@ -382,7 +383,93 @@ test("F1.5: Admin Decision Router enforces RBAC, blocks SSRF internal URLs on pr
         }),
       (err: unknown) => err instanceof HttpError && err.status === 422 && err.code === "SSRF_HOST_BLOCKED",
     );
+
+    // Module-level RBAC gate (`P0-04`): read-only `admin_viewer` MUST be denied (`403 RBAC_DENIED`) on mutating `/product-qa` & `/blog-curate`!
+    const viewerAccess = accessForRole("admin_viewer");
+    const viewerCtx: AuthContext = {
+      ...superAdminCtx,
+      roleCode: "admin_viewer",
+      roleName: "admin_viewer",
+      allowedPages: viewerAccess.allowedPages,
+      allowedModules: viewerAccess.allowedModules,
+      capabilities: viewerAccess.capabilities,
+    } as AuthContext;
+
+    const viewerQaHttp = createMockHttp("POST", { imageBase64: "AAAA" });
+    await assert.rejects(
+      () =>
+        handleDecisionAdminRoute({
+          req: viewerQaHttp.req,
+          res: viewerQaHttp.res,
+          parts: ["api", "v1", "admin", "ai-decisions", "product-qa"],
+          context: viewerCtx,
+          headers: {},
+        }),
+      (err: unknown) => err instanceof HttpError && err.status === 403 && err.code === "RBAC_DENIED",
+    );
+
+    const viewerBlogHttp = createMockHttp("POST", {
+      products: [{ productId: "p1", name: "Đầm", availableStock: 5, basePrice: 1000000, salePrice: null }],
+    });
+    await assert.rejects(
+      () =>
+        handleDecisionAdminRoute({
+          req: viewerBlogHttp.req,
+          res: viewerBlogHttp.res,
+          parts: ["api", "v1", "admin", "ai-decisions", "blog-curate"],
+          context: viewerCtx,
+          headers: {},
+        }),
+      (err: unknown) => err instanceof HttpError && err.status === 403 && err.code === "RBAC_DENIED",
+    );
   });
+});
+
+test("F1.7: Direct Google failover strips K3s LiteLLM virtual aliases (`commerce-text`, `commerce-embedding`) with zero wasted 404s", async () => {
+  await withScrubbedAiEnv(
+    {
+      GEMINI_PRIMARY_KEY: "DIRECT_GOOGLE_KEY",
+      GEMINI_MODEL: "commerce-text",
+      GEMINI_EMBEDDING_MODEL: "commerce-embedding",
+    },
+    async () => {
+      resetDecisionClientStateForTest();
+      const observedUrls: string[] = [];
+      const mockDirectFetch: typeof fetch = async (input) => {
+        const url = String(input);
+        observedUrls.push(url);
+        if (url.includes("commerce-text") || url.includes("commerce-embedding")) {
+          return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
+        }
+        if (url.includes(":embedContent")) {
+          return new Response(
+            JSON.stringify({ embedding: { values: new Array(1536).fill(0.05) } }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ ok: true }) }] } }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      };
+
+      const genRes = await generateFallbackAwareJson(
+        "Test alias stripping",
+        { type: "object", required: ["ok"], properties: { ok: { type: "boolean" } } },
+        { model: "commerce-text", customFetch: mockDirectFetch },
+      );
+      assert.equal(genRes.data.ok, true);
+      assert.equal(observedUrls.length, 1, "Must succeed on first direct Google model without calling commerce-text");
+      assert.ok(observedUrls[0]?.includes("gemini-flash-lite-latest"));
+
+      const embRes = await generateFallbackAwareEmbedding("Đầm lụa Mulberry", { customFetch: mockDirectFetch });
+      assert.equal(embRes.embedding.length, 1536);
+      assert.equal(observedUrls.length, 2, "Must succeed on first direct Google embedding model without calling commerce-embedding");
+      assert.ok(observedUrls[1]?.includes("gemini-embedding-2-preview"));
+    },
+  );
 });
 
 test("F1.6: Static source hygiene — zero leaked GEMINI_/AIza/AQ. secrets and zero `as any` in touched Angular/AI files", () => {

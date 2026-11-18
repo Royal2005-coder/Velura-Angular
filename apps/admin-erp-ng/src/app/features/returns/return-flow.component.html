@@ -198,7 +198,7 @@
           <div class="flow-forensics-card__head">
             <div>
               <span class="flow-payout-badge">✦ GEMINI DECISION 1 · VISUAL FORENSICS QA</span>
-              <strong>Ngoại quan: {{ boxConditionLabel(fx.box_condition) }} · {{ matchVerdictLabel(fx.match_verdict) }}</strong>
+              <strong>Ngoại quan: {{ boxConditionLabel(fx.box_condition) }} · {{ matchVerdictLabel(fx.match_verdict, !!fx.single_image_mode) }}</strong>
             </div>
             <div class="flow-forensics-card__scores">
               <span class="flow-risk-pill" [class.is-high]="fx.tampering_risk_score > 75" [class.is-grey]="isGreyZoneRisk()">

@@ -623,7 +623,7 @@ export class ReturnFlowComponent {
     this.qaFailed.set(suggested);
     this.disposition.set(res.suggested_disposition);
     const summary = res.carrier_claim_report?.summary_vi
-      || `[AI QA Gemini Decision] Ngoại quan: ${this.boxConditionLabel(res.box_condition)} · Đối chiếu kiện hàng: ${this.matchVerdictLabel(res.match_verdict)} (Rủi ro ${res.tampering_risk_score}/100).`;
+      || `[AI QA Gemini Decision] Ngoại quan: ${this.boxConditionLabel(res.box_condition)} · Đối chiếu kiện hàng: ${this.matchVerdictLabel(res.match_verdict, Boolean(res.single_image_mode))} (Rủi ro ${res.tampering_risk_score}/100).`;
     const currentNote = this.note().trim();
     if (!currentNote.includes(summary)) {
       this.note.set(currentNote ? `${currentNote}\n${summary}` : summary);
@@ -650,7 +650,10 @@ export class ReturnFlowComponent {
     return labels[verdict] || verdict;
   }
 
-  matchVerdictLabel(verdict: AdminReturnBoxForensicsResult['match_verdict']): string {
+  matchVerdictLabel(verdict: AdminReturnBoxForensicsResult['match_verdict'], singleImageMode = false): string {
+    if (singleImageMode && verdict === 'MATCHED') {
+      return 'Kiểm tra đơn ảnh tại kho (chưa có ảnh Shipper)';
+    }
     const labels: Readonly<Record<AdminReturnBoxForensicsResult['match_verdict'], string>> = {
       MATCHED: 'Khớp ảnh Shipper lấy hàng',
       SUSPICIOUS_DIFF: 'Có điểm khác biệt nghi vấn',

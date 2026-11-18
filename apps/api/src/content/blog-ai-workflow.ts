@@ -17,7 +17,9 @@ import {
   evaluateGeminiDecisions,
   generateFallbackAwareEmbedding,
   generateFallbackAwareJson,
+  isDecisionEngineConfigured,
   recordDecisionAuditLog,
+  resolveRolloutMode,
 } from "../decision/gemini-decision-client.js";
 import { unifiedDecisionService } from "../decision/decision-service.js";
 import type { AutoBlogPublishMode, CampaignProductFit, DecisionNoulAnswer, ImageQaVerdict } from "../decision/decision-types.js";
@@ -155,7 +157,7 @@ export async function loadGroundedBlogInventory(limit = 48): Promise<RawCatalogC
             (sum, v) => sum + Math.max(0, (asNumber(v.stock_quantity) || 0) - (asNumber(v.reserved_quantity) || 0)),
             0,
           )
-        : 10;
+        : 0;
       if (availableStock <= 0) continue;
 
       const images = Array.isArray(row.images) ? row.images.map((img) => asString(img)).filter(Boolean) : [];
@@ -259,6 +261,8 @@ export async function matchSemanticInventoryProducts(
     heroImagesOnly?: boolean;
     candidatesOverride?: RawCatalogCandidate[];
     actorId?: string | null;
+    decisionService?: Pick<typeof unifiedDecisionService, "decideAutoBlogProductCuration">;
+    generateEmbedding?: typeof generateFallbackAwareEmbedding;
   } = {},
 ): Promise<SemanticBlogProductMatch[]> {
   const limit = Math.max(1, Math.min(12, options.limit ?? 6));
@@ -271,12 +275,14 @@ export async function matchSemanticInventoryProducts(
     if (options.heroImagesOnly && item.image_qa_verdict !== "APPROVED_HERO") return false;
     return true;
   });
-  const workingPool = filteredPool.length ? filteredPool : pool;
+  if (!filteredPool.length) return [];
+  const workingPool = filteredPool;
 
   const vectorSimilarities = new Map<string, number>();
+  const embedFn = options.generateEmbedding ?? generateFallbackAwareEmbedding;
   if (config.supabaseUrl && config.supabaseServiceRoleKey && !options.candidatesOverride) {
     try {
-      const emb = await generateFallbackAwareEmbedding(`task: search result | query: ${queryText.slice(0, 3000)}`);
+      const emb = await embedFn(`task: search result | query: ${queryText.slice(0, 3000)}`);
       const vectorRows = await callRpc(
         "match_products",
         {
@@ -331,16 +337,18 @@ export async function matchSemanticInventoryProducts(
     .sort((a, b) => b.totalRank - a.totalRank)
     .slice(0, limit);
 
+  const curationService = options.decisionService ?? unifiedDecisionService;
   const curated: SemanticBlogProductMatch[] = [];
   for (const entry of ranked) {
     const p = entry.candidate;
     let publishMode: AutoBlogPublishMode =
-      p.image_qa_verdict === "APPROVED_HERO" && p.available_stock >= 5 ? "AUTO_BLOG_PUBLISH" : "SEMI_AUTO_REVIEW";
+      p.image_qa_verdict === "APPROVED_HERO" && p.available_stock >= 3 ? "AUTO_BLOG_PUBLISH" : "SEMI_AUTO_REVIEW";
     let campaignFit: CampaignProductFit =
       entry.discountPct >= 15 ? "CLEARANCE" : p.image_qa_verdict === "APPROVED_HERO" ? "HERO_PRODUCT" : "BUNDLE_ADDON";
 
+    const rollout = resolveRolloutMode(p.product_id);
     try {
-      const decision = await unifiedDecisionService.decideAutoBlogProductCuration({
+      const decision = await curationService.decideAutoBlogProductCuration({
         productId: p.product_id,
         name: p.name,
         availableStock: p.available_stock,
@@ -351,8 +359,13 @@ export async function matchSemanticInventoryProducts(
         campaignGoal: queryText.slice(0, 200),
         actorId: options.actorId,
       });
-      publishMode = decision.publish_mode === "EXCLUDE" ? "SEMI_AUTO_REVIEW" : decision.publish_mode;
-      campaignFit = decision.campaign_fit;
+      if (rollout.activeForRequest) {
+        if (decision.publish_mode === "EXCLUDE") {
+          continue;
+        }
+        publishMode = decision.publish_mode;
+        campaignFit = decision.campaign_fit;
+      }
     } catch {
       // Keep deterministic curation classification if Decision API is throttled during bulk loop
     }
@@ -386,7 +399,12 @@ export async function matchSemanticInventoryProducts(
 export async function discoverInteractiveBlogTopics(
   context: AuthContext,
   body: JsonObject,
-  deps: { candidates?: RawCatalogCandidate[]; categories?: string[] } = {},
+  deps: {
+    candidates?: RawCatalogCandidate[];
+    categories?: string[];
+    promos?: Awaited<ReturnType<typeof loadActivePromotionsAndVouchers>>;
+    generateJson?: typeof generateFallbackAwareJson;
+  } = {},
 ): Promise<{
   topics: BlogTopicProposal[];
   activePromotions: Awaited<ReturnType<typeof loadActivePromotionsAndVouchers>>["promotions"];
@@ -396,7 +414,7 @@ export async function discoverInteractiveBlogTopics(
   const campaignKind = asString(body.campaignType).trim() || "editorial_promo";
   const [inventory, promoData, catRes] = await Promise.all([
     deps.candidates ? Promise.resolve(deps.candidates) : loadGroundedBlogInventory(24),
-    loadActivePromotionsAndVouchers(),
+    deps.promos ? Promise.resolve(deps.promos) : loadActivePromotionsAndVouchers(),
     deps.categories
       ? Promise.resolve({ rows: deps.categories.map((slug) => ({ slug })) })
       : selectRows("content_category", { select: "slug,name", content_type: "eq.blog", limit: "20" }).catch(() => ({
@@ -465,7 +483,8 @@ export async function discoverInteractiveBlogTopics(
       "Hãy đề xuất đúng 5 chủ đề Blog kết hợp Bán hàng/Khuyến mãi chuẩn SEO tiếng Việt, sang trọng, thực tế.",
     ].join("\n");
 
-    const generated = await generateFallbackAwareJson(prompt, schema, { temperature: 0.35, timeoutMs: 18_000 });
+    const generateJson = deps.generateJson ?? generateFallbackAwareJson;
+    const generated = await generateJson(prompt, schema, { temperature: 0.35, timeoutMs: 18_000 });
     const rawTopics = Array.isArray(generated.data.topics) ? generated.data.topics : [];
     const topics: BlogTopicProposal[] = rawTopics.slice(0, 5).map((item, index) => {
       const obj = asJsonObject(item);
@@ -559,6 +578,205 @@ export async function discoverInteractiveBlogTopics(
   };
 }
 
+export interface BlogEditorialGateInput {
+  readonly title: string;
+  readonly excerpt: string;
+  readonly metaTitle: string;
+  readonly metaDescription: string;
+  readonly verifiedVoucherCode: string | null;
+  readonly verifiedProductNames: readonly string[];
+  readonly articlePlain: string;
+  readonly socialCaptions: SocialChannelCaptions;
+  readonly actorId?: string | null;
+}
+
+export interface BlogEditorialGateResult {
+  readonly passed: boolean;
+  readonly recommendedStatus: "ai_reviewed" | "draft";
+  readonly confidence: number;
+  readonly seoReadyProb: number;
+  readonly brandToneProb: number;
+  readonly zeroHallucinationProb: number;
+  readonly requiresHumanReview: boolean;
+}
+
+const BENIGN_UPPERCASE_TOKENS = new Set([
+  "VELURA",
+  "SALE",
+  "HTTP",
+  "HTTPS",
+  "HTML",
+  "UTF8",
+  "ZALO",
+  "VIP",
+  "COD",
+  "VND",
+  "SEO",
+]);
+
+/**
+ * Detects fabricated coupon or voucher codes across article body, excerpt, and social captions.
+ */
+function findUnauthorizedVoucherTokens(text: string, verifiedVoucherCode: string | null): string[] {
+  const allowed = verifiedVoucherCode ? verifiedVoucherCode.trim().toUpperCase() : null;
+  const pattern = /(?:nhập\s+mã|mã\s+(?:giảm\s+giá|ưu\s+đãi|voucher|code)|voucher|coupon|code)\s*[:=-]?\s*([A-Za-z0-9_-]{4,24})\b/giu;
+  const unauthorized: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    const rawToken = match[1] || "";
+    if (rawToken !== rawToken.toUpperCase()) continue;
+    if (!/[A-Z]/.test(rawToken)) continue;
+    if (BENIGN_UPPERCASE_TOKENS.has(rawToken)) continue;
+    if (allowed && rawToken === allowed) continue;
+    unauthorized.push(rawToken);
+  }
+  return unauthorized;
+}
+
+/**
+ * Evaluates generated blog + social campaign copy through `gemini-decision-1` Editorial & Brand Safety Gate.
+ * Fails closed (`recommendedStatus = "draft"`, `requiresHumanReview = true`) on unauthorized coupon codes or API outages.
+ */
+export async function decideBlogEditorialGate(
+  input: BlogEditorialGateInput,
+  deps: {
+    evaluateDecisions?: typeof evaluateGeminiDecisions;
+    recordAudit?: typeof recordDecisionAuditLog;
+  } = {},
+): Promise<BlogEditorialGateResult> {
+  const evaluate = deps.evaluateDecisions ?? evaluateGeminiDecisions;
+  const recordAudit = deps.recordAudit ?? recordDecisionAuditLog;
+
+  const combinedText = [
+    input.title,
+    input.excerpt,
+    input.articlePlain,
+    input.socialCaptions.facebookPage,
+    input.socialCaptions.zaloOa,
+    input.socialCaptions.instagram,
+  ].join("\n");
+  const unauthorizedCoupons = findUnauthorizedVoucherTokens(combinedText, input.verifiedVoucherCode);
+
+  if (!deps.evaluateDecisions && !isDecisionEngineConfigured()) {
+    const localZeroProb = unauthorizedCoupons.length === 0 ? 0.96 : 0.15;
+    const localSeoProb = input.title.trim().length >= 10 && input.articlePlain.trim().length >= 80 ? 0.88 : 0.45;
+    const localToneProb = 0.90;
+    return {
+      passed: false,
+      recommendedStatus: "draft",
+      confidence: 0.72,
+      seoReadyProb: localSeoProb,
+      brandToneProb: localToneProb,
+      zeroHallucinationProb: localZeroProb,
+      requiresHumanReview: true,
+    };
+  }
+
+  try {
+    const gateRes = await evaluate({
+      useCase: "blog_editorial_gate",
+      entityType: "blog_draft",
+      actorId: input.actorId ?? null,
+      input: JSON.stringify({
+        title: input.title,
+        excerpt: input.excerpt,
+        meta_title: input.metaTitle,
+        meta_description: input.metaDescription,
+        verified_voucher_code: input.verifiedVoucherCode,
+        verified_product_names: input.verifiedProductNames,
+        article_plain_excerpt: input.articlePlain.slice(0, 3500),
+        social_captions: input.socialCaptions,
+      }),
+      questions: {
+        seo_structure_complete: {
+          type: "noul",
+          instructions:
+            "Does this fashion article have a compelling title, clear meta description, and coherent editorial depth?",
+        },
+        brand_tone_aligned: {
+          type: "noul",
+          instructions:
+            "Is the Vietnamese writing tone refined, trustworthy, and appropriate for a premium fashion house without spammy clickbait?",
+        },
+        zero_unverified_discounts: {
+          type: "noul",
+          instructions:
+            "Verify that neither the article nor `social_captions` invents fake coupon codes beyond `verified_voucher_code` (if null, no coupon code should be promised).",
+        },
+      },
+    });
+
+    const ansSeo = gateRes.answers.seo_structure_complete as DecisionNoulAnswer;
+    const ansTone = gateRes.answers.brand_tone_aligned as DecisionNoulAnswer;
+    const ansZero = gateRes.answers.zero_unverified_discounts as DecisionNoulAnswer;
+
+    const seoReadyProb = ansSeo.noul;
+    const brandToneProb = ansTone.noul;
+    const zeroHallucinationProb = unauthorizedCoupons.length > 0 ? Math.min(ansZero.noul, 0.2) : ansZero.noul;
+    const confidence = Number(((ansSeo.confidence + ansTone.confidence + ansZero.confidence) / 3).toFixed(4));
+    const passed =
+      unauthorizedCoupons.length === 0 &&
+      seoReadyProb >= 0.70 &&
+      brandToneProb >= 0.70 &&
+      zeroHallucinationProb >= 0.70 &&
+      confidence >= 0.75;
+    const requiresHumanReview = !passed || confidence < 0.75 || zeroHallucinationProb < 0.70;
+
+    void recordAudit({
+      useCase: "blog_editorial_gate",
+      entityType: "blog_draft",
+      rolloutMode: gateRes.rolloutMode,
+      modelUsed: gateRes.modelUsed,
+      transport: gateRes.transport,
+      usedFallbackKey: gateRes.usedFallbackKey,
+      latencyMs: gateRes.latencyMs,
+      inputTokens: gateRes.inputTokens,
+      confidenceScore: confidence,
+      requiresHumanReview,
+      verdictCode: passed ? "AI_REVIEWED_PASS" : "DRAFT_NEEDS_EDITOR",
+      rawAnswers: JSON.parse(JSON.stringify(gateRes.answers)) as JsonObject,
+      downstreamAction: passed ? "MARK_AI_REVIEWED" : "KEEP_DRAFT",
+      actorId: input.actorId ?? null,
+    });
+
+    return {
+      passed,
+      recommendedStatus: passed ? "ai_reviewed" : "draft",
+      confidence,
+      seoReadyProb: Number(seoReadyProb.toFixed(4)),
+      brandToneProb: Number(brandToneProb.toFixed(4)),
+      zeroHallucinationProb: Number(zeroHallucinationProb.toFixed(4)),
+      requiresHumanReview,
+    };
+  } catch (err: unknown) {
+    if (err instanceof HttpError && err.code === "AI_NOT_CONFIGURED") {
+      // Unconfigured local/offline environment: run deterministic structural & coupon audit, keeping draft + HITL
+      const localZeroProb = unauthorizedCoupons.length === 0 ? 0.96 : 0.15;
+      const localSeoProb = input.title.trim().length >= 10 && input.articlePlain.trim().length >= 80 ? 0.88 : 0.45;
+      const localToneProb = 0.90;
+      return {
+        passed: false,
+        recommendedStatus: "draft",
+        confidence: 0.72,
+        seoReadyProb: localSeoProb,
+        brandToneProb: localToneProb,
+        zeroHallucinationProb: localZeroProb,
+        requiresHumanReview: true,
+      };
+    }
+    // Fail closed to human editorial review when Decision API is unreachable or errors
+    return {
+      passed: false,
+      recommendedStatus: "draft",
+      confidence: 0,
+      seoReadyProb: 0,
+      brandToneProb: 0,
+      zeroHallucinationProb: 0,
+      requiresHumanReview: true,
+    };
+  }
+}
+
 /**
  * Interactive Step 2 & 3: Generates complete SEO Blog HTML, embeds verified real catalog SKUs,
  * generates Fanpage/Zalo/Instagram copy, and validates via `gemini-decision-1` Editorial Gate.
@@ -566,7 +784,15 @@ export async function discoverInteractiveBlogTopics(
 export async function generateEndToEndBlogWorkflow(
   context: AuthContext,
   body: JsonObject,
-  deps: { candidates?: RawCatalogCandidate[] } = {},
+  deps: {
+    candidates?: RawCatalogCandidate[];
+    categories?: string[];
+    promos?: Awaited<ReturnType<typeof loadActivePromotionsAndVouchers>>;
+    generateJson?: typeof generateFallbackAwareJson;
+    evaluateDecisions?: typeof evaluateGeminiDecisions;
+    decisionService?: Pick<typeof unifiedDecisionService, "decideAutoBlogProductCuration">;
+    recordAudit?: typeof recordDecisionAuditLog;
+  } = {},
 ): Promise<EndToEndBlogWorkflowResult> {
   const topicTitle = asString(body.title || body.topic).trim();
   if (topicTitle.length < 4) {
@@ -585,10 +811,12 @@ export async function generateEndToEndBlogWorkflow(
 
   const [pool, promoData, catRes] = await Promise.all([
     deps.candidates ? Promise.resolve(deps.candidates) : loadGroundedBlogInventory(60),
-    loadActivePromotionsAndVouchers(),
-    selectRows("content_category", { select: "slug", content_type: "eq.blog", limit: "20" }).catch(() => ({
-      rows: [{ slug: "xu-huong" }],
-    })),
+    deps.promos ? Promise.resolve(deps.promos) : loadActivePromotionsAndVouchers(),
+    deps.categories
+      ? Promise.resolve({ rows: deps.categories.map((slug) => ({ slug })) })
+      : selectRows("content_category", { select: "slug", content_type: "eq.blog", limit: "20" }).catch(() => ({
+          rows: [{ slug: "xu-huong" }],
+        })),
   ]);
 
   const validCategories = (catRes.rows || []).map((r) => asString(asJsonObject(r).slug)).filter(Boolean);
@@ -611,11 +839,13 @@ export async function generateEndToEndBlogWorkflow(
       limit: 6,
       candidatesOverride: pool,
       actorId: context.profile?.user_id || context.authUser?.id || null,
+      decisionService: deps.decisionService,
     },
   );
 
   const poolById = new Map(semanticMatches.map((m) => [m.product_id, m]));
   for (const raw of pool) {
+    if (raw.available_stock <= 0 || raw.image_qa_verdict === "REJECTED") continue;
     if (!poolById.has(raw.product_id)) {
       const discountPct =
         raw.sale_price !== null && raw.sale_price < raw.base_price && raw.base_price > 0
@@ -635,7 +865,7 @@ export async function generateEndToEndBlogWorkflow(
         semantic_similarity: 0.65,
         image_qa_verdict: raw.image_qa_verdict,
         image_qa_score: raw.image_qa_score,
-        publish_mode: raw.image_qa_verdict === "APPROVED_HERO" ? "AUTO_BLOG_PUBLISH" : "SEMI_AUTO_REVIEW",
+        publish_mode: raw.image_qa_verdict === "APPROVED_HERO" && raw.available_stock >= 3 ? "AUTO_BLOG_PUBLISH" : "SEMI_AUTO_REVIEW",
         campaign_fit: discountPct >= 15 ? "CLEARANCE" : "HERO_PRODUCT",
         match_reason: `Sản phẩm sẵn kho (${raw.available_stock} SP) được chọn cho chiến dịch.`,
       });
@@ -715,7 +945,8 @@ export async function generateEndToEndBlogWorkflow(
       .filter(Boolean)
       .join("\n");
 
-    const generated = await generateFallbackAwareJson(prompt, generationSchema, {
+    const generateJson = deps.generateJson ?? generateFallbackAwareJson;
+    const generated = await generateJson(prompt, generationSchema, {
       temperature: 0.3,
       maxOutputTokens: 4096,
       timeoutMs: 25_000,
@@ -786,68 +1017,24 @@ export async function generateEndToEndBlogWorkflow(
   const readMinutes = Math.max(2, Math.min(20, Math.round(wordCount / 190) || 4));
 
   // Step 4: Run `gemini-decision-1` Editorial Quality & Zero-Hallucination Gate
-  let seoReadyProb = 0.92;
-  let brandToneProb = 0.94;
-  let zeroHallucinationProb = 0.96;
-  let confidence = 0.92;
-
-  try {
-    const gateRes = await evaluateGeminiDecisions({
-      useCase: "blog_editorial_gate",
-      entityType: "blog_draft",
+  const gate = await decideBlogEditorialGate(
+    {
+      title: finalTitle,
+      excerpt,
+      metaTitle,
+      metaDescription,
+      verifiedVoucherCode: verifiedVoucher?.code || null,
+      verifiedProductNames: chosenProducts.map((p) => p.name),
+      articlePlain: plain,
+      socialCaptions,
       actorId: context.profile?.user_id || context.authUser?.id || null,
-      input: JSON.stringify({
-        title: finalTitle,
-        meta_title: metaTitle,
-        meta_description: metaDescription,
-        verified_voucher_code: verifiedVoucher?.code || null,
-        verified_product_names: chosenProducts.map((p) => p.name),
-        article_plain_excerpt: plain.slice(0, 3500),
-      }),
-      questions: {
-        seo_structure_complete: {
-          type: "noul",
-          instructions:
-            "Does this fashion article have a compelling title, clear meta description, and coherent editorial depth?",
-        },
-        brand_tone_aligned: {
-          type: "noul",
-          instructions:
-            "Is the Vietnamese writing tone refined, trustworthy, and appropriate for a premium fashion house without spammy clickbait?",
-        },
-        zero_unverified_discounts: {
-          type: "noul",
-          instructions:
-            "Verify that the article does NOT invent fake coupon codes beyond `verified_voucher_code` (if null, no coupon code should be promised).",
-        },
-      },
-    });
-    seoReadyProb = (gateRes.answers.seo_structure_complete as DecisionNoulAnswer).noul;
-    brandToneProb = (gateRes.answers.brand_tone_aligned as DecisionNoulAnswer).noul;
-    zeroHallucinationProb = (gateRes.answers.zero_unverified_discounts as DecisionNoulAnswer).noul;
-    confidence = Number(((seoReadyProb + brandToneProb + zeroHallucinationProb) / 3).toFixed(4));
+    },
+    {
+      evaluateDecisions: deps.evaluateDecisions,
+      recordAudit: deps.recordAudit,
+    },
+  );
 
-    void recordDecisionAuditLog({
-      useCase: "blog_editorial_gate",
-      entityType: "blog_draft",
-      rolloutMode: gateRes.rolloutMode,
-      modelUsed: gateRes.modelUsed,
-      transport: gateRes.transport,
-      usedFallbackKey: gateRes.usedFallbackKey,
-      latencyMs: gateRes.latencyMs,
-      inputTokens: gateRes.inputTokens,
-      confidenceScore: confidence,
-      requiresHumanReview: confidence < 0.75 || zeroHallucinationProb < 0.70,
-      verdictCode: confidence >= 0.75 && zeroHallucinationProb >= 0.70 ? "AI_REVIEWED_PASS" : "DRAFT_NEEDS_EDITOR",
-      rawAnswers: JSON.parse(JSON.stringify(gateRes.answers)) as JsonObject,
-      downstreamAction: confidence >= 0.75 ? "MARK_AI_REVIEWED" : "KEEP_DRAFT",
-      actorId: context.profile?.user_id || context.authUser?.id || null,
-    });
-  } catch {
-    // Keep verified local structural check if Decision API is unreachable
-  }
-
-  const gatePassed = seoReadyProb >= 0.70 && brandToneProb >= 0.70 && zeroHallucinationProb >= 0.70;
   return {
     title: finalTitle,
     slug: slugifyBlogTitle(finalTitle),
@@ -859,7 +1046,7 @@ export async function generateEndToEndBlogWorkflow(
     metaDescription: metaDescription.slice(0, 320),
     tags,
     readMinutes,
-    recommendedStatus: gatePassed ? "ai_reviewed" : "draft",
+    recommendedStatus: gate.recommendedStatus,
     promoId: verifiedPromo?.promo_id || null,
     promoStartAt: verifiedPromo?.start_date || null,
     voucherCode: verifiedVoucher?.code || null,
@@ -867,12 +1054,12 @@ export async function generateEndToEndBlogWorkflow(
     productIds: chosenProducts.map((p) => p.product_id),
     socialCaptions,
     editorialGate: {
-      passed: gatePassed,
-      confidence,
-      seoReadyProb: Number(seoReadyProb.toFixed(4)),
-      brandToneProb: Number(brandToneProb.toFixed(4)),
-      zeroHallucinationProb: Number(zeroHallucinationProb.toFixed(4)),
-      requiresHumanReview: !gatePassed || confidence < 0.75,
+      passed: gate.passed,
+      confidence: gate.confidence,
+      seoReadyProb: gate.seoReadyProb,
+      brandToneProb: gate.brandToneProb,
+      zeroHallucinationProb: gate.zeroHallucinationProb,
+      requiresHumanReview: gate.requiresHumanReview,
     },
   };
 }
@@ -888,7 +1075,7 @@ function renderGroundedProductCalloutHtml(product: SemanticBlogProductMatch, vou
   const safeHref = `/products/${encodeURIComponent(product.slug || product.product_id)}`;
   return (
     `<div class="velura-blog-product-card" style="margin:18px 0;padding:16px;border-radius:12px;">` +
-    `<p><strong>Thiết kế gợi ý: ${escapeHtml(product.name)}</strong> (${escapeHtml(product.sku)})</p>` +
+    `<h3>Thiết kế gợi ý: ${escapeHtml(product.name)} (${escapeHtml(product.sku)})</h3>` +
     `<p>Giá niêm yết: <strong>${formattedPrice}</strong>${discountBadge}${voucherHint}</p>` +
     `<p><a href="${safeHref}">Xem chi tiết &amp; Mua nhanh thiết kế này tại Velura →</a></p>` +
     `</div>`

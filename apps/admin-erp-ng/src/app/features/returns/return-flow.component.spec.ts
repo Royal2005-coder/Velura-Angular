@@ -374,4 +374,10 @@ describe('ReturnFlowComponent per-item operations', () => {
     expect(component.disposition()).toBe('scrap');
     expect(component.note()).toContain('DSP-20261118-A1B2C3');
   });
+
+  it('displays explicit single-image warehouse inspection label when shipper pickup photo is absent', () => {
+    const { component } = boot('receive');
+    expect(component.matchVerdictLabel('MATCHED', true)).toBe('Kiểm tra đơn ảnh tại kho (chưa có ảnh Shipper)');
+    expect(component.matchVerdictLabel('MATCHED', false)).toBe('Khớp ảnh Shipper lấy hàng');
+  });
 });

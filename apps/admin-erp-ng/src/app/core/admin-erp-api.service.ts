@@ -296,6 +296,30 @@ export interface AdminImageCriterion {
   detail: string;
 }
 
+/** Phân loại chất lượng ảnh 4 trục khoa học từ `gemini-decision-1` (thang điểm 1–5). */
+export interface AdminImageDecisionTaxonomy {
+  final_verdict: 'APPROVED_HERO' | 'APPROVED_STANDARD' | 'NEEDS_EDIT' | 'REJECTED';
+  average_taxonomy_score: number;
+  axes: {
+    sharpness_focus: number;
+    lighting_exposure: number;
+    composition_framing: number;
+    background_cleanliness: number;
+  };
+  defect_tags: ReadonlyArray<'BLURRY' | 'WATERMARK' | 'CLUTTERED_BG' | 'CROP_CUTOFF' | 'POOR_EXPOSURE' | 'LOW_RESOLUTION'>;
+  failed_taxonomy_codes: readonly string[];
+  actionable_fix: readonly string[];
+  blog_auto_eligible: boolean;
+  confidence_score: number;
+  requires_human_review: boolean;
+  telemetry?: {
+    model_used: string;
+    transport: string;
+    used_fallback_key: boolean;
+    latency_ms: number;
+  };
+}
+
 /** Studio quality measurement of exactly one image URL or upload. */
 export interface AdminImageQualityAnalysis {
   overallScore: number;
@@ -315,6 +339,7 @@ export interface AdminImageQualityAnalysis {
   criteria: AdminImageCriterion[];
   recommendations: string[];
   uploadedUrl?: string;
+  decisionTaxonomy?: AdminImageDecisionTaxonomy;
 }
 
 export interface AdminImageEnhanceResult {
@@ -682,7 +707,7 @@ export interface AdminBlogProductSuggestionPayload {
   reasoning: string;
 }
 
-/** Một bài viết CMS. `status` là nháp/đã công bố/đã lưu trữ; bản nháp chỉ admin thấy. */
+/** Một bài viết CMS. `status` là nháp/duyệt AI/hẹn giờ/đã công bố/lỗi chờ thử lại/đã lưu trữ. */
 export interface AdminBlogRow {
   blog_id: string;
   slug: string;
@@ -703,6 +728,16 @@ export interface AdminBlogRow {
   read_minutes?: number;
   is_featured?: boolean;
   status?: string;
+  scheduled_at?: string | null;
+  promo_id?: string | null;
+  voucher_code?: string | null;
+  social_captions?: {
+    facebookPage: string;
+    zaloOa: string;
+    instagram: string;
+  } | null;
+  publish_attempts?: number;
+  last_publish_error?: string | null;
   published_at?: string;
   created_at?: string;
   updated_at?: string;
@@ -738,6 +773,14 @@ export interface AdminBlogInput {
   author?: string;
   readMinutes?: number;
   isFeatured?: boolean;
+  scheduledAt?: string | null;
+  promoId?: string | null;
+  voucherCode?: string | null;
+  socialCaptions?: {
+    facebookPage: string;
+    zaloOa: string;
+    instagram: string;
+  } | null;
   expectedVersion?: number;
 }
 
@@ -747,6 +790,125 @@ export interface AdminBlogSeoSuggestion {
   metaDescription: string;
   tags: string[];
   summary: string;
+}
+
+/** Chủ đề chiến dịch Blog & Khuyến mãi do AI gợi ý dựa trên tồn kho thật và voucher đang mở. */
+export interface AdminBlogTopicProposal {
+  topicId: string;
+  title: string;
+  slugSuggestion: string;
+  angle: string;
+  campaignType: 'clearance' | 'collection_launch' | 'double_day_sale' | 'styling_guide' | 'personal_color';
+  primaryKeyword: string;
+  secondaryKeywords: string[];
+  estimatedSearchIntent: 'transactional' | 'commercial' | 'informational';
+  recommendedCategorySlug: string;
+  matchedPromoId: string | null;
+  matchedPromotionName: string | null;
+  matchedVoucherCode: string | null;
+  heroProductIds: string[];
+}
+
+export interface AdminBlogDiscoverPayload {
+  topics: AdminBlogTopicProposal[];
+  activePromotions: Array<{
+    promo_id: string;
+    name: string;
+    type: string;
+    discount_value: number;
+    start_date: string;
+    end_date: string;
+    is_active: boolean;
+  }>;
+  activeVouchers: Array<{
+    voucher_id: string;
+    code: string;
+    name: string;
+    discount_type: string;
+    discount_value: number;
+    start_date: string;
+    end_date: string;
+  }>;
+}
+
+/** Kết quả tạo bài viết Blog & Chiến dịch Khuyến mãi End-to-End kèm cổng kiểm duyệt `gemini-decision-1`. */
+export interface AdminBlogWorkflowPayload {
+  title: string;
+  slug: string;
+  categorySlug: string;
+  excerpt: string;
+  contentHtml: string;
+  contentPlain: string;
+  metaTitle: string;
+  metaDescription: string;
+  tags: string[];
+  readMinutes: number;
+  recommendedStatus: 'ai_reviewed' | 'draft';
+  promoId: string | null;
+  promoStartAt: string | null;
+  voucherCode: string | null;
+  matchedProducts: Array<
+    AdminBlogProductMatch & {
+      sku?: string;
+      discount_percent?: number;
+      available_stock?: number;
+      semantic_similarity?: number;
+      image_qa_verdict?: string;
+      image_qa_score?: number;
+      publish_mode?: string;
+      campaign_fit?: string;
+    }
+  >;
+  productIds: string[];
+  socialCaptions: {
+    facebookPage: string;
+    zaloOa: string;
+    instagram: string;
+  };
+  editorialGate: {
+    passed: boolean;
+    confidence: number;
+    seoReadyProb: number;
+    brandToneProb: number;
+    zeroHallucinationProb: number;
+    requiresHumanReview: boolean;
+  };
+}
+
+/** Kết quả giám định thùng hàng đổi trả & đối chiếu chống tráo hàng ĐVVC từ `gemini-decision-1`. */
+export interface AdminReturnBoxForensicsResult {
+  forensics_id?: string;
+  box_condition: 'INTACT' | 'MINOR_DENT' | 'SEVERE_CRUSH' | 'TORN_WET';
+  seal_intact: boolean;
+  carrier_claim_recommended: boolean;
+  match_verdict: 'MATCHED' | 'SUSPICIOUS_DIFF' | 'MISMATCHED';
+  diff_factors: ReadonlyArray<'TAPE_COLOR' | 'LABEL_POS' | 'BOX_RATIO' | 'SEAL_BROKEN'>;
+  tampering_risk_score: number;
+  confidence_score: number;
+  requires_human_review: boolean;
+  freeze_auto_refund: boolean;
+  suggested_qa_failed_codes: readonly string[];
+  suggested_disposition: AdminReturnDisposition;
+  discrepancy_evidence: readonly string[];
+  carrier_claim_report: {
+    report_code: string;
+    generated_at: string;
+    return_code: string | null;
+    tracking_code: string | null;
+    carrier_name: string | null;
+    box_condition: string;
+    match_verdict: string;
+    tampering_risk_score: number;
+    discrepancy_factors: readonly string[];
+    recommended_claim_action: string;
+    summary_vi: string;
+  } | null;
+  telemetry?: {
+    model_used: string;
+    transport: string;
+    used_fallback_key: boolean;
+    latency_ms: number;
+  };
 }
 
 /**
@@ -2156,7 +2318,7 @@ export class AdminErpApiService {
   /**
    * Measures studio quality of an uploaded or saved product image.
    */
-  analyzeProductImage(body: { imageBase64?: string; imageUrl?: string; mimeType?: string; productName?: string }): Observable<AdminImageQualityAnalysis> {
+  analyzeProductImage(body: { imageBase64?: string; imageUrl?: string; mimeType?: string; productName?: string; productId?: string }): Observable<AdminImageQualityAnalysis> {
     return this.http.post<AdminImageQualityAnalysis>(`${this.baseUrl}/api/v1/admin/products/ai-image-analyze`, body);
   }
 
@@ -2276,6 +2438,25 @@ export class AdminErpApiService {
       `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/evidence`,
       form,
       { params },
+    );
+  }
+
+  /**
+   * Runs `gemini-decision-1` 2-axis return parcel forensics (box structural condition + shipper pickup vs warehouse QA anti-swap comparison).
+   */
+  analyzeReturnBoxForensics(
+    returnId: string,
+    body: {
+      warehouseImageBase64?: string;
+      pickupImageBase64?: string;
+      returnItemId?: string;
+      trackingCode?: string;
+      carrier?: string;
+    },
+  ): Observable<AdminReturnBoxForensicsResult> {
+    return this.http.post<AdminReturnBoxForensicsResult>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/ai-box-forensics`,
+      body,
     );
   }
 
@@ -2664,6 +2845,48 @@ export class AdminErpApiService {
    */
   suggestBlogProducts(body: { title: string; excerpt?: string; contentHtml: string; limit?: number }): Observable<AdminBlogProductSuggestionPayload> {
     return this.http.post<AdminBlogProductSuggestionPayload>(`${this.baseUrl}/api/v1/admin/content/blogs/ai-suggest-products`, body);
+  }
+
+  /**
+   * Interactive Step 1: Discovers 5 SEO & Promotion campaign topics grounded on live stock & active promos/vouchers.
+   */
+  discoverBlogTopics(body: { campaignGoal?: string; campaignType?: string }): Observable<AdminBlogDiscoverPayload> {
+    return this.http.post<AdminBlogDiscoverPayload>(
+      `${this.baseUrl}/api/v1/admin/content/blogs/ai-discover-topics`,
+      body,
+    );
+  }
+
+  /**
+   * Interactive Step 2: Generates full End-to-End SEO Blog + Semantic SKU Matching + Multi-Channel Social Captions + Decision Gate.
+   */
+  generateBlogWorkflow(body: {
+    topic?: string;
+    title?: string;
+    angle?: string;
+    primaryKeyword?: string;
+    secondaryKeywords?: string[];
+    categorySlug?: string;
+    promoId?: string | null;
+    voucherCode?: string | null;
+    discountOnly?: boolean;
+    heroImagesOnly?: boolean;
+    limit?: number;
+  }): Observable<AdminBlogWorkflowPayload> {
+    return this.http.post<AdminBlogWorkflowPayload>(
+      `${this.baseUrl}/api/v1/admin/content/blogs/ai-generate-workflow`,
+      body,
+    );
+  }
+
+  /**
+   * Triggers one immediate idempotent Smart Blog Scheduler publish cycle (`scheduled` -> `published`).
+   */
+  triggerBlogScheduler(): Observable<{ publishedCount: number; publishedIds: string[]; broadcastErrors: number }> {
+    return this.http.post<{ publishedCount: number; publishedIds: string[]; broadcastErrors: number }>(
+      `${this.baseUrl}/api/v1/admin/content/blogs/run-scheduler`,
+      {},
+    );
   }
 
   /**

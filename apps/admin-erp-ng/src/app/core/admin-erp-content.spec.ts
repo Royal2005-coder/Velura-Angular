@@ -59,10 +59,15 @@ describe('admin CMS blog rules', () => {
   });
 
   it('follows the server transition table', () => {
-    expect(blogStatusChoices(undefined, true)).toEqual(['draft', 'published']);
-    expect(blogStatusChoices('draft', false)).toEqual(['draft', 'published', 'archived']);
+    expect(blogStatusChoices(undefined, true)).toEqual(['draft', 'ai_reviewed', 'scheduled', 'published']);
+    expect(blogStatusChoices('draft', false)).toEqual(['draft', 'ai_reviewed', 'scheduled', 'published', 'archived']);
     expect(blogStatusChoices('published', false)).toEqual(['published', 'draft', 'archived']);
     expect(blogStatusChoices('archived', false)).toEqual(['archived', 'draft']);
+  });
+
+  it('requires scheduledAt when status is scheduled', () => {
+    expect(validateBlogDraft(draft({ status: 'scheduled', scheduledAt: '' }), false)['scheduledAt']).toBeTruthy();
+    expect(validateBlogDraft(draft({ status: 'scheduled', scheduledAt: '2027-11-11T09:00' }), false)['scheduledAt']).toBeUndefined();
   });
 
   it('labels and tones the three states for badges', () => {

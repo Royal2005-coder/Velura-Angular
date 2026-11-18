@@ -11,8 +11,20 @@ export interface ColorCapabilities { enabled: boolean; reason?: string; policy_v
 export interface PersonalColorResult { season: string; subtype: string; palette: string[]; avoided: string[]; confidence: number; policy_version: string; }
 /** Only this value may appear as effective Personal Color inside Style Profile. */
 export interface ConfirmedPersonalColor extends PersonalColorResult { status: 'CONFIRMED'; analysis_id: string; confirmed_at: string; }
+/** Scientific CIE L*a*b* ITA° and Sclera-calibrated skin depth diagnostics from `gemini-decision-1`. */
+export interface PersonalColorDiagnostics {
+  base_skin_depth: 'LIGHT_TONE' | 'DARK_TONE';
+  skin_depth: 'FAIR' | 'LIGHT' | 'MEDIUM' | 'TAN' | 'DEEP';
+  undertone: 'COOL' | 'WARM' | 'NEUTRAL_OLIVE';
+  contrast_level: 'LOW' | 'MEDIUM' | 'HIGH';
+  ita_angle: number;
+  white_balance_shift: 'BALANCED' | 'WARM_CAST' | 'COOL_CAST' | 'EXTREME_CAST';
+  recommended_hex_palette: string[];
+  avoid_hex_palette: string[];
+  requires_human_review: boolean;
+}
 /** Owner-private analysis state, independent of the last confirmed result. */
-export interface PersonalColorAnalysis { id: string; status: 'RUNNING' | 'SUCCESS' | 'LOW_CONFIDENCE' | 'VALIDATION_FAILED' | 'FAILED' | 'TIMEOUT' | 'CANCELLED' | 'CONFIRMED'; profile_version: number; policy_version: string; expires_at: string; result?: PersonalColorResult; error?: string; }
+export interface PersonalColorAnalysis { id: string; status: 'RUNNING' | 'SUCCESS' | 'LOW_CONFIDENCE' | 'VALIDATION_FAILED' | 'FAILED' | 'TIMEOUT' | 'CANCELLED' | 'CONFIRMED'; profile_version: number; policy_version: string; expires_at: string; result?: PersonalColorResult; diagnostics?: PersonalColorDiagnostics; error?: string; }
 /** Current version protects profile edits and simultaneous confirmation. */
 export interface PersonalColorProfile { version: number; personal_color: ConfirmedPersonalColor | null; }
 

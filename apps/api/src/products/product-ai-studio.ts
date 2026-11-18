@@ -5,6 +5,10 @@ import { join, resolve } from "node:path";
 import sharp from "sharp";
 import { config, getSupabaseServiceKey } from "../config.js";
 import { generateGeminiText } from "../gemini-client.js";
+import { isDecisionEngineConfigured } from "../decision/gemini-decision-client.js";
+import { unifiedDecisionService } from "../decision/decision-service.js";
+import { persistProductAiQa } from "../decision/decision-router.js";
+import type { ProductImageQaDecision } from "../decision/decision-types.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 
@@ -34,6 +38,8 @@ export interface ProductImageQualityAnalysis {
   criteria: ImageCriterionEvaluation[];
   recommendations: string[];
   uploadedUrl?: string;
+  /** Scientific 4-Axis Visual QA Taxonomy from `gemini-decision-1` when AI runtime is active. */
+  decisionTaxonomy?: ProductImageQaDecision;
 }
 
 export interface ProductImageEnhanceResult {
@@ -398,6 +404,28 @@ export async function analyzeProductImageQuality(body: JsonObject): Promise<Prod
   // If the caller uploaded a new base64 image file, stage its original URL so the admin can use it directly if desired
   if (asString(body.imageBase64).trim()) {
     analysis.uploadedUrl = await uploadToProductImagesBucket(bytes, mime, "uploads");
+  }
+
+  // Evaluate scientific 4-axis Visual QA Taxonomy & Blog Eligibility via `gemini-decision-1` when AI is enabled
+  if (process.env.AI_DISABLE !== "true" && isDecisionEngineConfigured()) {
+    try {
+      const productId = asString(body.productId).trim() || undefined;
+      const taxonomy = await unifiedDecisionService.decideProductImageQa(
+        bytes,
+        (mime === "image/png" || mime === "image/webp" ? mime : "image/jpeg"),
+        { productId, productName },
+      );
+      analysis.decisionTaxonomy = taxonomy;
+      if (taxonomy.actionable_fix.length > 0 && !analysis.passed) {
+        analysis.recommendations = [...taxonomy.actionable_fix];
+      }
+      if (productId && /^[0-9a-f-]{36}$/i.test(productId)) {
+        const targetUrl = analysis.uploadedUrl || asString(body.imageUrl).trim();
+        await persistProductAiQa(productId, targetUrl, bytes, taxonomy).catch(() => undefined);
+      }
+    } catch {
+      // Preserve measured Sharp technical analysis if Decision Engine is temporarily offline
+    }
   }
 
   // Enrich with Gemini Vision expert critique if available

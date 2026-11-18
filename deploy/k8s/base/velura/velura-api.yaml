@@ -72,6 +72,9 @@ spec:
             name: velura-api-config
         - secretRef:
             name: velura-api-secrets
+        - secretRef:
+            name: velura-api-gemini
+            optional: true
         env:
         - name: PRODUCTION_VERIFY_TOKEN
           valueFrom:

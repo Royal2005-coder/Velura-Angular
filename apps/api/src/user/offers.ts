@@ -60,9 +60,10 @@ export async function handleOffersRoute(
         selectRows("promotion", { limit: 100 }),
         loadCategoryTree().catch(() => ({ pathById: new Map(), nameById: {} }))
       ]);
-      promotions = (promoResult.rows || [])
-        .filter((row) => row.is_active === true || (row.start_date && !row.paused_at && String(row.start_date) <= now.toISOString() && String(row.end_date) >= now.toISOString()))
-        .sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0));
+      promotions = sortOfferCampaignRows(
+        (promoResult.rows || [])
+          .filter((row) => row.is_active === true || (row.start_date && !row.paused_at && String(row.start_date) <= now.toISOString() && String(row.end_date) >= now.toISOString()))
+      );
       tree = treeResult;
     } catch (err: unknown) {
       console.warn("[OFFERS] Failed to load promotions or categories:", err);
@@ -184,17 +185,41 @@ export async function handleOffersRoute(
   }
 }
 
+/**
+ * Sắp xếp chiến dịch trên carousel trang Ưu đãi: ghim nổi bật (`is_featured`) lên đầu,
+ * sau đó theo `display_order` tăng dần, rồi chiến dịch mới nhất trước.
+ */
+export function sortOfferCampaignRows<T extends JsonObject>(rows: readonly T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const featDiff = (b.is_featured === true ? 1 : 0) - (a.is_featured === true ? 1 : 0);
+    if (featDiff !== 0) return featDiff;
+    const orderDiff = Number(a.display_order ?? 0) - Number(b.display_order ?? 0);
+    if (orderDiff !== 0) return orderDiff;
+    return String(b.start_date || "").localeCompare(String(a.start_date || ""));
+  });
+}
+
+/** Nhận diện đường dẫn banner động dạng video (`.mp4`/`.webm`), bỏ qua query/fragment `#focal=`. */
+export function inferCampaignMediaType(url: string | null | undefined): "image" | "video" {
+  if (!url) return "image";
+  const clean = url.split("#")[0]?.split("?")[0]?.toLowerCase() || "";
+  return clean.endsWith(".mp4") || clean.endsWith(".webm") ? "video" : "image";
+}
+
 function toCampaignCard(promotion: JsonObject, now: Date): JsonObject {
   const type = asString(promotion.promo_type) || "product_discount";
   const end = promotion.end_date ? new Date(String(promotion.end_date)) : null;
   const daysLeft = end ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86400000)) : null;
+  const bannerUrl = asString(promotion.banner_image_url) || DEFAULT_BANNER_BY_TYPE[type] || null;
 
   return {
     promo_id: promotion.promo_id,
     title: asString(promotion.promo_name),
     description: asString(promotion.description) || null,
     type,
-    banner_image_url: asString(promotion.banner_image_url) || DEFAULT_BANNER_BY_TYPE[type] || null,
+    banner_image_url: bannerUrl,
+    media_type: inferCampaignMediaType(bannerUrl),
+    display_order: Number(promotion.display_order ?? 0),
     // Nhãn do admin đặt được ưu tiên; nếu bỏ trống thì tự sinh nhãn đếm ngược khi
     // chiến dịch sắp kết thúc, để khách thấy được tính cấp thiết mà admin không phải sửa tay.
     highlight_label: asString(promotion.highlight_label)

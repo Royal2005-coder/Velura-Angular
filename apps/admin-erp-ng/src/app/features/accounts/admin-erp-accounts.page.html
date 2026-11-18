@@ -4,16 +4,16 @@
   subtitle="Danh bạ khách hàng, nhân sự vận hành và yêu cầu nâng quyền. Mọi thao tác ghi đều dùng expectedVersion và audit của API hiện tại."
 >
   <div actions>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
+    </button>
     @if (canMutate()) {
       <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCreate()">
         <app-erp-icon name="plus" [size]="'15'" />
         Tạo tài khoản
       </button>
     }
-    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
-      <app-erp-icon name="refresh" [size]="'15'" />
-      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
-    </button>
   </div>
 </app-erp-page-header>
 
@@ -24,19 +24,19 @@
   </div>
 }
 
-<section class="accounts-kpis" aria-label="Tóm tắt tài khoản">
-  <app-erp-kpi-card label="Tổng tài khoản" [value]="kpi(allCount())" hint="Toàn bộ danh bạ" tone="accent" icon="users" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Thành viên" [value]="kpi(memberCount())" hint="Khách hàng" icon="users" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Quản trị" [value]="kpi(adminCount())" hint="Nhân sự vận hành" tone="info" icon="lock" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Bị khóa" [value]="kpi(lockedCount())" hint="Có lock_type" tone="danger" icon="lock" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Chưa xác thực" [value]="kpi(unverifiedCount())" hint="Chưa hoàn tất OTP" tone="warning" icon="alert" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Chờ nâng quyền" [value]="kpi(pendingCount())" hint="Yêu cầu đang mở" tone="warning" icon="clock" [loading]="loading() && !hasLoadedOnce()" />
+<section class="erp-kpi-grid accounts-kpis" aria-label="Tóm tắt tài khoản">
+  <app-erp-kpi-card label="Tổng tài khoản" [value]="kpi(allCount())" hint="Toàn bộ danh bạ" tone="accent" icon="users" [interactive]="true" [active]="tab() === 'all'" [loading]="loading() && !hasLoadedOnce()" (selected)="setTab('all')" />
+  <app-erp-kpi-card label="Thành viên" [value]="kpi(memberCount())" hint="Khách hàng" icon="user" [interactive]="true" [active]="tab() === 'members'" [loading]="loading() && !hasLoadedOnce()" (selected)="setTab('members')" />
+  <app-erp-kpi-card label="Quản trị" [value]="kpi(adminCount())" hint="Nhân sự vận hành" tone="info" icon="shield-user" [interactive]="true" [active]="tab() === 'admins'" [loading]="loading() && !hasLoadedOnce()" (selected)="setTab('admins')" />
+  <app-erp-kpi-card label="Bị khóa" [value]="kpi(lockedCount())" hint="Có lock_type" tone="danger" icon="lock" [interactive]="true" [active]="tab() === 'locked'" [loading]="loading() && !hasLoadedOnce()" (selected)="setTab('locked')" />
+  <app-erp-kpi-card label="Chưa xác thực" [value]="kpi(unverifiedCount())" hint="Chưa hoàn tất OTP" tone="warning" icon="mail" [interactive]="true" [active]="tab() === 'unverified'" [loading]="loading() && !hasLoadedOnce()" (selected)="setTab('unverified')" />
+  <app-erp-kpi-card label="Chờ nâng quyền" [value]="kpi(pendingCount())" hint="Yêu cầu đang mở" tone="warning" icon="clock" [interactive]="true" [active]="tab() === 'promotions'" [loading]="loading() && !hasLoadedOnce()" (selected)="setTab('promotions')" />
 </section>
 
 <section class="erp-card accounts-panel" aria-labelledby="accounts-title">
-  <div class="accounts-tabs">
-    <div>
-      <span class="accounts-eyebrow">Directory</span>
+  <div class="erp-panel-head accounts-tabs">
+    <div class="erp-panel-head__title">
+      <span class="erp-panel-head__icon" aria-hidden="true"><app-erp-icon name="shield-user" [size]="'16'" /></span>
       <h2 id="accounts-title">Danh sách tài khoản</h2>
     </div>
     <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading() && !hasLoadedOnce()" (changed)="setTab($event)" />
@@ -72,33 +72,32 @@
       </label>
     </app-erp-filter-bar>
 
-    @if (loadError() && !rows().length) {
-      <app-erp-data-table
-        caption="Danh sách tài khoản"
-        [columns]="accountColumns"
-        [rows]="rows()"
-        [loading]="loading()"
-        [error]="loadError() || ''"
-        errorTitle="Không tải được tài khoản"
-        emptyTitle="Không có tài khoản phù hợp"
-        emptyMessage="Điều chỉnh bộ lọc hoặc tải lại."
-        [clickable]="true"
-        (retry)="reload()"
-        (rowSelected)="openDetail($event)"
-      />
-    } @else {
-      <app-erp-data-table
-        caption="Danh sách tài khoản"
-        [columns]="accountColumns"
-        [rows]="rows()"
-        [loading]="loading()"
-        emptyTitle="Không có tài khoản phù hợp"
-        emptyMessage="Điều chỉnh bộ lọc hoặc tải lại."
-        [clickable]="true"
-        (rowSelected)="openDetail($event)"
-      />
-    }
-    <app-erp-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+    <app-erp-data-table
+      caption="Danh sách tài khoản"
+      [columns]="accountColumns"
+      [rows]="rows()"
+      [rowId]="accountRowId"
+      [rowActions]="accountRowActions"
+      [loading]="loading()"
+      [error]="!rows().length ? loadError() || '' : ''"
+      errorTitle="Không tải được tài khoản"
+      emptyTitle="Không có tài khoản phù hợp"
+      emptyMessage="Điều chỉnh bộ lọc hoặc tải lại."
+      [emptyActionLabel]="hasFilters() ? 'Xoá bộ lọc' : ''"
+      [clickable]="true"
+      (emptyAction)="resetFilters()"
+      (retry)="reload()"
+      (rowSelected)="openDetail($event)"
+    />
+    <app-erp-pagination
+      [page]="page()"
+      [pageCount]="pageCount()"
+      [label]="rangeLabel()"
+      [pageSizes]="pageSizes"
+      [pageSize]="pageSize()"
+      (changed)="goPage($event)"
+      (pageSizeChanged)="setPageSize($event)"
+    />
   } @else if (tab() === 'promotions') {
     <app-erp-data-table
       caption="Yêu cầu nâng quyền đang chờ"
@@ -117,7 +116,10 @@
       [page]="requestPage()"
       [pageCount]="requestPageCount()"
       [label]="requestRangeLabel()"
+      [pageSizes]="pageSizes"
+      [pageSize]="pageSize()"
       (changed)="goRequestPage($event)"
+      (pageSizeChanged)="setPageSize($event)"
     />
   } @else {
     <app-erp-data-table
@@ -133,11 +135,29 @@
       (retry)="reload()"
       (rowSelected)="openLog($event)"
     />
-    <app-erp-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
+    <app-erp-pagination
+      [page]="logsPage()"
+      [pageCount]="logPageCount()"
+      [label]="logRangeLabel()"
+      [pageSizes]="pageSizes"
+      [pageSize]="pageSize()"
+      (changed)="goLogsPage($event)"
+      (pageSizeChanged)="setPageSize($event)"
+    />
   }
 </section>
 
-<app-erp-drawer [open]="selected() !== null" title="Chi tiết tài khoản" size="md" (closed)="closeOverlays()">
+<app-erp-drawer
+  [open]="selected() !== null"
+  title="Chi tiết tài khoản"
+  size="md"
+  [navigable]="true"
+  [hasPrev]="hasPrev()"
+  [hasNext]="hasNext()"
+  (prev)="openSibling(-1)"
+  (next)="openSibling(1)"
+  (closed)="closeOverlays()"
+>
   @if (selected(); as row) {
     <div class="account-detail">
       <div class="account-detail__head">

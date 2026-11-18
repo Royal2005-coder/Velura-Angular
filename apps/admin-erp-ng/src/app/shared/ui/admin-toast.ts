@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, Injectable, inject, signal } from '@angular/core';
+import { AdminErpIcon } from './admin-erp-icon';
 
 /** Visual meaning of a toast; errors stay longer and are announced assertively. */
 export type AdminToastTone = 'success' | 'error' | 'warning' | 'info';
@@ -57,12 +58,15 @@ export class AdminErpToastService {
 /** Renders the toast stack once, in the shell. */
 @Component({
   selector: 'app-erp-toast-host',
+  imports: [AdminErpIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="toast-stack" aria-live="polite">
       @for (toast of toasts.toasts(); track toast.id) {
         <div class="toast" [class]="'toast toast--' + toast.tone" [attr.role]="toast.tone === 'error' ? 'alert' : 'status'">
-          <span class="toast__dot" aria-hidden="true"></span>
+          <span class="toast__icon" aria-hidden="true">
+            <app-erp-icon [name]="iconFor(toast.tone)" [size]="'14'" />
+          </span>
           <span class="toast__message">{{ toast.message }}</span>
           <button type="button" class="toast__close" aria-label="Đóng thông báo" (click)="toasts.dismiss(toast.id)">×</button>
         </div>
@@ -78,50 +82,60 @@ export class AdminErpToastService {
         z-index: 1200;
         display: grid;
         gap: 8px;
-        width: min(380px, calc(100vw - 32px));
+        width: min(390px, calc(100vw - 32px));
         pointer-events: none;
       }
       .toast {
         display: grid;
         grid-template-columns: auto 1fr auto;
-        align-items: start;
+        align-items: center;
         gap: 10px;
-        padding: 12px 12px 12px 14px;
+        padding: 11px 12px 11px 13px;
         border: 1px solid var(--erp-line);
-        border-radius: var(--erp-radius-md);
+        border-radius: var(--erp-radius-lg);
         background: var(--erp-surface);
-        box-shadow: var(--erp-shadow-md);
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.12);
         color: var(--erp-text);
-        font-size: 13.5px;
+        font-size: 13px;
+        font-weight: 500;
         line-height: 1.45;
         pointer-events: auto;
         animation: toast-in 160ms ease-out;
       }
-      .toast__dot {
-        width: 8px;
-        height: 8px;
-        margin-top: 6px;
-        border-radius: 50%;
-        background: var(--erp-info);
+      .toast__icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 7px;
+        background: var(--erp-info-soft);
+        color: var(--erp-info);
       }
-      .toast--success .toast__dot { background: var(--erp-success); }
+      .toast--success { border-color: var(--erp-success-line); }
+      .toast--success .toast__icon { background: var(--erp-success-soft); color: var(--erp-success); }
       .toast--error { border-color: var(--erp-danger-line); }
-      .toast--error .toast__dot { background: var(--erp-danger); }
-      .toast--warning .toast__dot { background: var(--erp-warning); }
+      .toast--error .toast__icon { background: var(--erp-danger-soft); color: var(--erp-danger); }
+      .toast--warning { border-color: var(--erp-warning-line); }
+      .toast--warning .toast__icon { background: var(--erp-warning-soft); color: var(--erp-warning); }
+      .toast__message {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
       .toast__close {
-        width: 28px;
-        height: 28px;
+        width: 26px;
+        height: 26px;
         border: 0;
         border-radius: var(--erp-radius-sm);
         background: transparent;
         color: var(--erp-muted);
-        font-size: 18px;
+        font-size: 17px;
         line-height: 1;
         cursor: pointer;
       }
-      .toast__close:hover { background: var(--erp-surface-muted); }
+      .toast__close:hover { background: var(--erp-surface-muted); color: var(--erp-ink); }
       @keyframes toast-in {
-        from { transform: translateY(6px); opacity: 0; }
+        from { transform: translateY(8px); opacity: 0; }
       }
       @media (prefers-reduced-motion: reduce) {
         .toast { animation: none; }
@@ -131,4 +145,11 @@ export class AdminErpToastService {
 })
 export class AdminErpToastHost {
   protected readonly toasts = inject(AdminErpToastService);
+
+  protected iconFor(tone: AdminToastTone): string {
+    if (tone === 'success') return 'check';
+    if (tone === 'error') return 'x-circle';
+    if (tone === 'warning') return 'alert';
+    return 'sparkles';
+  }
 }

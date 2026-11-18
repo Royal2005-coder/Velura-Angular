@@ -390,25 +390,49 @@ export class AdminErpOrdersPage {
   readonly orderColumns: readonly AdminTableColumn[] = [
     {
       key: 'order',
-      label: 'Đơn hàng',
+      label: 'Mã đơn',
+      icon: 'hash',
+      mono: true,
+      minWidth: '135px',
       value: (row) => {
         const order = row as AdminOrderRow;
         return order.order_code || order.order_id.slice(0, 8);
+      },
+      copyValue: (row) => {
+        const order = row as AdminOrderRow;
+        return order.order_code || order.order_id;
       },
     },
     {
       key: 'customer',
       label: 'Khách hàng',
+      icon: 'user',
+      truncate: '220px',
       value: (row) => {
         const order = row as AdminOrderRow;
         return order.shipping_name || order.user?.full_name || order.shipping_phone || '—';
       },
+      subtext: (row) => {
+        const order = row as AdminOrderRow;
+        return (order.shipping_name || order.user?.full_name) && order.shipping_phone ? String(order.shipping_phone) : '';
+      },
+      copyValue: (row) => String((row as AdminOrderRow).shipping_phone || ''),
     },
-    { key: 'total', label: 'Tổng tiền', value: (row) => this.money((row as AdminOrderRow).total_amount), align: 'right', mono: true },
-    { key: 'payment', label: 'Thanh toán', value: (row) => this.paymentMethodLabel((row as AdminOrderRow).payment_method, row as AdminOrderRow) },
+    { key: 'total', label: 'Tổng tiền', icon: 'coins', value: (row) => this.money((row as AdminOrderRow).total_amount), align: 'right', mono: true },
+    {
+      key: 'payment',
+      label: 'Kênh TT',
+      icon: 'credit-card',
+      value: (row) => this.paymentMethodLabel((row as AdminOrderRow).payment_method, row as AdminOrderRow),
+      cellIcon: (row) => {
+        const method = String((row as AdminOrderRow).payment_method || '').toUpperCase();
+        return method === 'COD' ? { name: 'truck', tone: 'neutral' } : { name: 'credit-card', tone: 'info' };
+      },
+    },
     {
       key: 'paymentStatus',
       label: 'TT thanh toán',
+      icon: 'shield-check',
       value: (row) => (row as AdminOrderRow).payment_status_label || (row as AdminOrderRow).payment_status || '—',
       badge: (row) => {
         const status = (row as AdminOrderRow).payment_status;
@@ -418,10 +442,11 @@ export class AdminErpOrdersPage {
     {
       key: 'status',
       label: 'Trạng thái đơn',
+      icon: 'shopping-bag',
       value: (row) => this.orderLabel(row as AdminOrderRow),
       badge: (row) => ({ label: this.orderLabel(row as AdminOrderRow), tone: this.orderTone((row as AdminOrderRow).status) }),
     },
-    { key: 'date', label: 'Ngày đặt', value: (row) => this.dateTime((row as AdminOrderRow).order_date || (row as AdminOrderRow).created_at) },
+    { key: 'date', label: 'Ngày đặt', icon: 'calendar', mono: true, value: (row) => this.dateTime((row as AdminOrderRow).order_date || (row as AdminOrderRow).created_at) },
     {
       key: 'tags',
       label: 'Cờ',
@@ -436,10 +461,10 @@ export class AdminErpOrdersPage {
   ];
 
   readonly logColumns: readonly AdminTableColumn[] = [
-    { key: 'time', label: 'Thời gian', value: (row) => this.dateTime((row as AdminAuditRow).timestamp) },
-    { key: 'actor', label: 'Người thao tác', value: (row) => this.auditActor(row as AdminAuditRow) },
-    { key: 'action', label: 'Hành động', value: (row) => (row as AdminAuditRow).action_label || (row as AdminAuditRow).action || '—' },
-    { key: 'target', label: 'Đơn', value: (row) => (row as AdminAuditRow).target_label || (row as AdminAuditRow).target_id || '—' },
+    { key: 'time', label: 'Thời gian', icon: 'clock', mono: true, value: (row) => this.dateTime((row as AdminAuditRow).timestamp) },
+    { key: 'actor', label: 'Người thao tác', icon: 'user', value: (row) => this.auditActor(row as AdminAuditRow) },
+    { key: 'action', label: 'Hành động', icon: 'activity', value: (row) => (row as AdminAuditRow).action_label || (row as AdminAuditRow).action || '—' },
+    { key: 'target', label: 'Đơn', icon: 'hash', truncate: '240px', value: (row) => (row as AdminAuditRow).target_label || (row as AdminAuditRow).target_id || '—' },
   ];
 
   constructor() {

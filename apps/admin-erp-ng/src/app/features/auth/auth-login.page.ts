@@ -7,6 +7,7 @@ import { AdminErpApiService } from '../../core/admin-erp-api.service';
 import { adminAuthLockout, adminErrorMessage } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { useBodyClass } from '../../core/body-class';
+import { AdminErpIcon } from '../../shared/ui/admin-erp-icon';
 import { AuthFrame } from './auth-frame';
 
 const PKCE_STORAGE_KEY = 'velura-admin-erp-oauth-pkce';
@@ -17,7 +18,7 @@ const STATE_STORAGE_KEY = 'velura-admin-erp-oauth-state';
  */
 @Component({
   selector: 'app-auth-login-page',
-  imports: [ReactiveFormsModule, RouterLink, AuthFrame],
+  imports: [ReactiveFormsModule, RouterLink, AuthFrame, AdminErpIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-auth-frame>
@@ -58,10 +59,27 @@ const STATE_STORAGE_KEY = 'velura-admin-erp-oauth-state';
           <span>Email</span>
           <input class="erp-input" type="email" formControlName="email" placeholder="email@velura.vn" autocomplete="email" />
         </label>
-        <label class="erp-field">
-          <span>Mật khẩu</span>
-          <input class="erp-input" type="password" formControlName="password" placeholder="Nhập mật khẩu" autocomplete="current-password" />
-        </label>
+        <div class="erp-field">
+          <label for="login-password">Mật khẩu</label>
+          <div class="erp-secret-wrap">
+            <input
+              id="login-password"
+              class="erp-input"
+              [type]="showPassword() ? 'text' : 'password'"
+              formControlName="password"
+              placeholder="Nhập mật khẩu"
+              autocomplete="current-password"
+            />
+            <button
+              type="button"
+              class="erp-secret-toggle"
+              [attr.aria-label]="showPassword() ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'"
+              (click)="togglePassword()"
+            >
+              <app-erp-icon [name]="showPassword() ? 'eye-off' : 'eye'" [size]="'16'" />
+            </button>
+          </div>
+        </div>
         <button class="erp-btn erp-btn--primary auth-submit" type="submit" [disabled]="submitting() || isLocked()">
           {{ submitting() ? 'Đang đăng nhập…' : 'Đăng nhập' }}
         </button>
@@ -203,6 +221,7 @@ export class AuthLoginPage {
   readonly errorMessage = signal<string | null>(null);
   readonly successMessage = signal<string | null>(null);
   readonly submitting = signal(false);
+  readonly showPassword = signal(false);
   readonly remainingAttempts = signal<number | null>(null);
   readonly lockedUntil = signal<number | null>(null);
   readonly remainingLockMs = signal(0);
@@ -221,6 +240,11 @@ export class AuthLoginPage {
     useBodyClass('erp-auth');
     this.session.clear();
     this.destroyRef.onDestroy(() => this.stopCountdown());
+  }
+
+  /** Toggles password field visibility without mutating the form control value. */
+  togglePassword(): void {
+    this.showPassword.update((v) => !v);
   }
 
   /**

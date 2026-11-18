@@ -11,16 +11,47 @@
   </div>
 </app-erp-page-header>
 
-<section class="reviews-kpis" aria-label="Tóm tắt đánh giá">
-  <app-erp-kpi-card label="Tổng phiếu" [value]="kpi(total())" hint="Theo bộ lọc đang áp" tone="accent" icon="star" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Cần xử lý gấp" [value]="kpi(urgentCount())" hint="≤2 sao hoặc gắn cờ" tone="danger" icon="alert" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Đã xử lý" [value]="kpi(processedCount())" hint="Đã duyệt hoặc đã ẩn" tone="success" icon="check" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Đã ẩn" [value]="kpi(hiddenCount())" hint="Không hiển thị storefront" tone="warning" icon="lock" [loading]="loading() && !hasLoadedOnce()" />
+<section class="erp-kpi-grid reviews-kpis" aria-label="Tóm tắt đánh giá">
+  <app-erp-kpi-card
+    label="Tổng phiếu"
+    [value]="kpi(total())"
+    hint="Theo bộ lọc đang áp"
+    tone="accent"
+    icon="star"
+    [interactive]="true"
+    [active]="tab() === 'all'"
+    [loading]="loading() && !hasLoadedOnce()"
+    (selected)="setTab('all')"
+  />
+  <app-erp-kpi-card
+    label="Cần xử lý gấp"
+    [value]="kpi(urgentCount())"
+    hint="≤2 sao hoặc gắn cờ"
+    tone="danger"
+    icon="alert"
+    [interactive]="true"
+    [active]="tab() === 'urgent'"
+    [loading]="loading() && !hasLoadedOnce()"
+    (selected)="setTab('urgent')"
+  />
+  <app-erp-kpi-card
+    label="Đã xử lý"
+    [value]="kpi(processedCount())"
+    hint="Đã duyệt hoặc đã ẩn"
+    tone="success"
+    icon="check"
+    [interactive]="true"
+    [active]="tab() === 'processed'"
+    [loading]="loading() && !hasLoadedOnce()"
+    (selected)="setTab('processed')"
+  />
+  <app-erp-kpi-card label="Đã ẩn" [value]="kpi(hiddenCount())" hint="Không hiển thị storefront" tone="warning" icon="eye-off" [loading]="loading() && !hasLoadedOnce()" />
 </section>
 
 <section class="erp-card reviews-panel" aria-labelledby="reviews-title">
-  <div class="reviews-tabs">
-    <div>
+  <div class="erp-panel-head reviews-tabs">
+    <div class="erp-panel-head__title">
+      <span class="erp-panel-head__icon" aria-hidden="true"><app-erp-icon name="star" [size]="'16'" /></span>
       <h2 id="reviews-title">Danh sách đánh giá</h2>
     </div>
     <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />

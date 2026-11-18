@@ -172,23 +172,36 @@ export class AdminErpMembersPage {
     {
       key: 'member',
       label: 'Thành viên',
+      icon: 'user',
+      truncate: '210px',
       value: (row) => (row as AdminMemberRow).full_name || '(chưa đặt tên)',
+      subtext: (row) => ((row as AdminMemberRow).referral_code ? `Mã GT: ${(row as AdminMemberRow).referral_code}` : ''),
+      copyValue: (row) => (row as AdminMemberRow).referral_code || '',
     },
     {
       key: 'contact',
       label: 'Liên hệ',
+      icon: 'mail',
+      truncate: '230px',
       value: (row) => String((row as AdminMemberRow).email || (row as AdminMemberRow).phone || '—'),
+      subtext: (row) => {
+        const m = row as AdminMemberRow;
+        return m.email && m.phone ? String(m.phone) : '';
+      },
+      copyValue: (row) => String((row as AdminMemberRow).email || (row as AdminMemberRow).phone || ''),
     },
     {
       key: 'points',
       label: 'Điểm',
+      icon: 'award',
       value: (row) => this.pointsLabel(row as AdminMemberRow),
       align: 'right',
       mono: true,
     },
     {
       key: 'value',
-      label: 'Giá trị',
+      label: 'Giá trị quy đổi',
+      icon: 'coins',
       value: (row) => memberWalletValue((row as AdminMemberRow).balance_milli_points, (row as AdminMemberRow).debt_milli_points),
       align: 'right',
       mono: true,
@@ -196,6 +209,7 @@ export class AdminErpMembersPage {
     {
       key: 'state',
       label: 'Trạng thái',
+      icon: 'activity',
       value: (row) => memberState(row as AdminMemberRow).label,
       badge: (row) => memberState(row as AdminMemberRow),
     },
@@ -209,11 +223,14 @@ export class AdminErpMembersPage {
     {
       key: 'last',
       label: 'Hoạt động cuối',
+      icon: 'clock',
+      mono: true,
       value: (row) => this.dateTime((row as AdminMemberRow).last_ledger_at),
     },
     {
       key: 'vouchers',
       label: 'Ưu đãi',
+      icon: 'ticket',
       value: (row) => String((row as AdminMemberRow).vouchers_available ?? 0),
       align: 'right',
       mono: true,

@@ -192,10 +192,10 @@ export class AdminErpAccountsPage {
     const account = row as AdminAccountRow;
     if (!this.canMutate()) return [];
     if (account.is_active) {
-      return [{ label: 'Khoá', tone: 'danger', disabled: this.actionSaving(), run: () => this.openActionFor(account, 'lock') }];
+      return [{ label: 'Khoá', icon: 'lock', tone: 'danger-outline', disabled: this.actionSaving(), run: () => this.openActionFor(account, 'lock') }];
     }
     if (account.lock_type) {
-      return [{ label: 'Mở khoá', tone: 'ghost', disabled: this.actionSaving(), run: () => this.openActionFor(account, 'unlock') }];
+      return [{ label: 'Mở khoá', icon: 'unlock', tone: 'outline', disabled: this.actionSaving(), run: () => this.openActionFor(account, 'unlock') }];
     }
     return [];
   };
@@ -204,22 +204,36 @@ export class AdminErpAccountsPage {
     {
       key: 'person',
       label: 'Tài khoản',
+      icon: 'user',
+      truncate: '220px',
       value: (row) => {
         const account = row as AdminAccountRow;
         return account.full_name || account.email || account.phone || '—';
       },
+      cellIcon: (row) => ((row as AdminAccountRow).role === 'admin' ? { name: 'shield-user', tone: 'info' } : { name: 'user', tone: 'neutral' }),
     },
     {
       key: 'contact',
       label: 'Liên hệ',
+      icon: 'mail',
+      truncate: '240px',
       value: (row) => {
         const account = row as AdminAccountRow;
         return account.email || account.phone || '—';
+      },
+      subtext: (row) => {
+        const account = row as AdminAccountRow;
+        return account.email && account.phone ? String(account.phone) : '';
+      },
+      copyValue: (row) => {
+        const account = row as AdminAccountRow;
+        return account.email || account.phone || '';
       },
     },
     {
       key: 'role',
       label: 'Vai trò',
+      icon: 'shield-check',
       value: (row) => this.roleText(row as AdminAccountRow),
       badge: (row) => ({
         label: this.roleText(row as AdminAccountRow),
@@ -229,11 +243,12 @@ export class AdminErpAccountsPage {
     {
       key: 'status',
       label: 'Trạng thái',
+      icon: 'activity',
       value: (row) => this.statusLabel(row as AdminAccountRow),
       badge: (row) => ({ label: this.statusLabel(row as AdminAccountRow), tone: this.statusTone(row as AdminAccountRow) }),
     },
-    { key: 'created', label: 'Ngày tạo', value: (row) => this.date((row as AdminAccountRow).created_at) },
-    { key: 'lastLogin', label: 'Đăng nhập gần nhất', value: (row) => this.date((row as AdminAccountRow).last_login_at) },
+    { key: 'created', label: 'Ngày tạo', icon: 'calendar', mono: true, value: (row) => this.date((row as AdminAccountRow).created_at) },
+    { key: 'lastLogin', label: 'Đăng nhập cuối', icon: 'clock', mono: true, value: (row) => this.date((row as AdminAccountRow).last_login_at) },
   ];
 
   readonly requestColumns: readonly AdminTableColumn[] = [
@@ -415,6 +430,28 @@ export class AdminErpAccountsPage {
   goLogsPage(page: number): void {
     this.logsPage.set(Math.max(1, page));
     this.reload();
+  }
+
+  /**
+   * Updates rows-per-page across account, request and audit queues, resetting to page 1.
+   */
+  setPageSize(size: number): void {
+    if (!(PAGE_SIZES as readonly number[]).includes(size)) return;
+    this.pageSize.set(size);
+    this.page.set(1);
+    this.requestPage.set(1);
+    this.logsPage.set(1);
+    this.reload();
+  }
+
+  /**
+   * Moves the detail drawer to the previous or next account on the current page.
+   */
+  openSibling(step: -1 | 1): void {
+    const next = this.rows()[this.selectedIndex() + step];
+    if (next) {
+      this.openDetail(next);
+    }
   }
 
   /**

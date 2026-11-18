@@ -537,35 +537,39 @@ export class AdminErpContentPage {
     {
       key: 'title',
       label: 'Banner',
+      icon: 'image',
       value: (row) => (row as AdminBannerRow).title,
+      subtext: (row) => (row as AdminBannerRow).subtitle || '',
       image: (row) => this.asset(this.bannerThumb(row as AdminBannerRow)),
       imageRatio: '16:9',
-      truncate: '260px',
-      width: '260px',
+      truncate: '270px',
     },
     {
       key: 'media_type',
       label: 'Định dạng',
+      icon: 'video',
       value: (row) => ((row as AdminBannerRow).media_type === 'video' ? 'Video' : 'Hình ảnh'),
       badge: (row) => ({
         label: (row as AdminBannerRow).media_type === 'video' ? 'VIDEO' : 'HÌNH ẢNH',
         tone: (row as AdminBannerRow).media_type === 'video' ? 'info' : 'neutral',
       }),
-      width: '120px',
     },
     {
       key: 'tag',
       label: 'Nhãn kicker',
+      icon: 'tag',
       value: (row) => (row as AdminBannerRow).tag_label || 'VELURA ATELIER',
-      truncate: '180px',
+      truncate: '190px',
     },
     {
       key: 'cta',
       label: 'Liên kết CTA',
+      icon: 'external-link',
       value: (row) => {
         const b = row as AdminBannerRow;
         return b.link_url ? `${b.button_text || 'Khám phá ngay'} → ${b.link_url}` : '—';
       },
+      copyValue: (row) => (row as AdminBannerRow).link_url || '',
       truncate: '240px',
     },
     {
@@ -574,17 +578,16 @@ export class AdminErpContentPage {
       value: (row) => String((row as AdminBannerRow).sort_order ?? 0),
       align: 'right',
       mono: true,
-      width: '90px',
     },
     {
       key: 'status',
       label: 'Trạng thái',
+      icon: 'activity',
       value: (row) => ((row as AdminBannerRow).is_active ? 'Đang bật' : 'Tắt'),
       badge: (row) => ({
         label: (row as AdminBannerRow).is_active ? 'Đang bật' : 'Tắt',
         tone: (row as AdminBannerRow).is_active ? 'success' : 'neutral',
       }),
-      width: '120px',
     },
   ]);
   readonly bannerRowActions = computed<((row: unknown) => readonly AdminTableRowAction[]) | null>(() => {
@@ -593,7 +596,7 @@ export class AdminErpContentPage {
       const b = row as AdminBannerRow;
       return [
         { label: b.is_active ? 'Tắt' : 'Bật', tone: 'outline', run: () => this.toggleBannerActive(b) },
-        { label: 'Xóa', tone: 'danger-outline', run: () => void this.deleteBanner(b) },
+        { label: 'Xóa', icon: 'trash', tone: 'danger-outline', run: () => void this.deleteBanner(b) },
       ];
     };
   });
@@ -601,45 +604,48 @@ export class AdminErpContentPage {
     {
       key: 'name',
       label: 'Bộ sưu tập',
+      icon: 'sparkles',
       value: (row) => (row as AdminCollectionRow).name,
+      subtext: (row) => (row as AdminCollectionRow).col_number || '',
       image: (row) => this.asset(this.collectionThumb(row as AdminCollectionRow)),
       imageRatio: '16:9',
-      truncate: '250px',
-      width: '250px',
+      truncate: '260px',
     },
     {
       key: 'code',
       label: 'Mã định danh',
+      icon: 'hash',
       value: (row) => (row as AdminCollectionRow).code,
+      copyValue: (row) => (row as AdminCollectionRow).code,
       mono: true,
-      truncate: '160px',
+      truncate: '170px',
     },
     {
       key: 'mode',
       label: 'Kiểu Hero',
+      icon: 'image',
       value: (row) => ((row as AdminCollectionRow).hero_mode === 'cover' ? 'Ảnh bìa' : '5 người mẫu'),
       badge: (row) => ({
         label: (row as AdminCollectionRow).hero_mode === 'cover' ? 'ẢNH BÌA' : '5 NGƯỜI MẪU',
         tone: (row as AdminCollectionRow).hero_mode === 'cover' ? 'info' : 'neutral',
       }),
-      width: '130px',
     },
     {
       key: 'home',
       label: 'Trang chủ',
+      icon: 'dashboard',
       value: (row) => {
         const c = row as AdminCollectionRow;
         return c.show_on_home ? `Vị trí #${(c.home_sort_order ?? 0) + 1}` : '—';
       },
-      width: '120px',
     },
     {
       key: 'combos',
       label: 'Combo/Set',
+      icon: 'box',
       value: (row) => String(((row as AdminCollectionRow).product_ids ?? []).length),
       align: 'right',
       mono: true,
-      width: '105px',
     },
     {
       key: 'sort_order',
@@ -647,17 +653,16 @@ export class AdminErpContentPage {
       value: (row) => String((row as AdminCollectionRow).sort_order ?? 0),
       align: 'right',
       mono: true,
-      width: '90px',
     },
     {
       key: 'status',
       label: 'Trạng thái',
+      icon: 'activity',
       value: (row) => ((row as AdminCollectionRow).is_active ? 'Đang bật' : 'Tắt'),
       badge: (row) => ({
         label: (row as AdminCollectionRow).is_active ? 'Đang bật' : 'Tắt',
         tone: (row as AdminCollectionRow).is_active ? 'success' : 'neutral',
       }),
-      width: '120px',
     },
   ]);
   readonly collectionRowActions = computed<((row: unknown) => readonly AdminTableRowAction[]) | null>(() => {
@@ -666,7 +671,7 @@ export class AdminErpContentPage {
       const c = row as AdminCollectionRow;
       return [
         { label: c.is_active ? 'Tắt' : 'Bật', tone: 'outline', run: () => this.toggleCollectionActive(c) },
-        { label: 'Xóa', tone: 'danger-outline', run: () => void this.deleteCollection(c) },
+        { label: 'Xóa', icon: 'trash', tone: 'danger-outline', run: () => void this.deleteCollection(c) },
       ];
     };
   });

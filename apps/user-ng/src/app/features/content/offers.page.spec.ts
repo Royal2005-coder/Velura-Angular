@@ -1,10 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
+import { vi } from 'vitest';
 import { createStorefrontPage } from '../../../testing/storefront-testing';
 import { ApiService } from '../../core/services/api.service';
-import type { OfferVoucher, OffersResponse } from '../../core/models/offer.interface';
-import { OffersPage } from './offers.page';
+import { parseCampaignBannerFraming, type OfferCampaign, type OfferVoucher, type OffersResponse } from '../../core/models/offer.interface';
+import { CAMPAIGN_AUTO_SLIDE_MS, OffersPage } from './offers.page';
 
 function voucher(overrides: Partial<OfferVoucher>): OfferVoucher {
   return {
@@ -52,13 +53,13 @@ const RESPONSE: OffersResponse = {
   birthday_prompt: null,
 };
 
-async function createPage(offer: string | null): Promise<OffersPage> {
+async function createPage(offer: string | null, customResponse: OffersResponse = RESPONSE): Promise<OffersPage> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [OffersPage],
     providers: [
       provideRouter([]),
-      { provide: ApiService, useValue: { get: () => of(RESPONSE) } },
+      { provide: ApiService, useValue: { get: () => of(customResponse) } },
       {
         provide: ActivatedRoute,
         useValue: { snapshot: { queryParamMap: convertToParamMap(offer ? { offer } : {}) } },
@@ -118,5 +119,80 @@ describe('OffersPage', () => {
     page.onUseVoucher(testVoucher);
     expect(localStorage.getItem('checkout_voucher_code')).toBe('FALL10');
     expect(localStorage.getItem('checkout_voucher_id')).toBe('v-fall10');
+  });
+
+  it('auto-slides campaigns every 5s in a seamless infinite loop and pauses on hover', async () => {
+    vi.useFakeTimers();
+    try {
+      const multiCampaigns: OfferCampaign[] = [
+        { ...RESPONSE.campaigns[0], promo_id: 'c1', title: 'Chiến dịch 1' },
+        { ...RESPONSE.campaigns[0], promo_id: 'c2', title: 'Chiến dịch 2' },
+        { ...RESPONSE.campaigns[0], promo_id: 'c3', title: 'Chiến dịch 3' },
+      ];
+      const page = await createPage(null, { ...RESPONSE, campaigns: multiCampaigns });
+
+      // Cloned head & tail slides enable continuous unidirectional infinite wrap.
+      expect(page.renderedSlides().length).toBe(5);
+      expect(page.activeSlideIndex()).toBe(0);
+      expect(page.trackPosition()).toBe(1);
+
+      vi.advanceTimersByTime(CAMPAIGN_AUTO_SLIDE_MS);
+      expect(page.activeSlideIndex()).toBe(1);
+      expect(page.trackPosition()).toBe(2);
+
+      vi.advanceTimersByTime(CAMPAIGN_AUTO_SLIDE_MS);
+      expect(page.activeSlideIndex()).toBe(2);
+      expect(page.trackPosition()).toBe(3);
+
+      // Wrapping from last slide -> first slide moves forward to clone index 4, then snaps silently to 1.
+      vi.advanceTimersByTime(CAMPAIGN_AUTO_SLIDE_MS);
+      expect(page.activeSlideIndex()).toBe(0);
+      expect(page.trackPosition()).toBe(4);
+      vi.advanceTimersByTime(700);
+      expect(page.trackPosition()).toBe(1);
+
+      // Hovering pauses the 5s auto-advance timer.
+      page.onCarouselPause(true);
+      vi.advanceTimersByTime(CAMPAIGN_AUTO_SLIDE_MS * 2);
+      expect(page.activeSlideIndex()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('parses #focal framing, filters usable vouchers, and copies voucher codes', async () => {
+    const framing = parseCampaignBannerFraming('https://cdn.velura.vn/promo.mp4#focal=42,26,1.25');
+    expect(framing).toEqual({
+      cleanUrl: 'https://cdn.velura.vn/promo.mp4',
+      mediaType: 'video',
+      objectPosition: '42% 26%',
+      transformOrigin: '42% 26%',
+      transform: 'scale(1.25)',
+    });
+
+    const page = await createPage(null, {
+      ...RESPONSE,
+      vouchers: [
+        voucher({ voucher_id: 'v-ok', code: 'VELURA20', description: 'Giảm 20%', usable: true, group: 'running' }),
+        voucher({
+          voucher_id: 'v-locked',
+          code: 'HPBD2026',
+          description: 'Giảm 150.000đ',
+          discount_type: 'fixed_amount',
+          usable: false,
+          blocked_reason: 'Vui lòng cập nhật ngày sinh trong hồ sơ cá nhân.',
+          group: 'personal',
+        }),
+      ],
+    });
+
+    expect(page.usableVoucherCount()).toBe(1);
+    page.setWalletFilter('usable');
+    expect(page.visibleVoucherGroups().flatMap((g) => g.items.map((i) => i.code))).toEqual(['VELURA20']);
+    expect(page.voucherStub(RESPONSE.vouchers[0]).headline).toBe('10%');
+    expect(page.lockedVoucherAction({ ...RESPONSE.vouchers[0], usable: false, blocked_reason: 'Thiếu ngày sinh' })?.route).toBe('/account/profile');
+
+    page.copyVoucherCode('VELURA20');
+    expect(page.copiedCode()).toBe('VELURA20');
   });
 });

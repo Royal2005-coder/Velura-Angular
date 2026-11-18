@@ -18,17 +18,19 @@ const DEFAULT_BLOG_SCHEDULER_INTERVAL_MS = 60_000;
 export interface ScheduledBlogPublishSummary {
   readonly publishedCount: number;
   readonly publishedIds: readonly string[];
+  readonly failedRetryIds: readonly string[];
   readonly broadcastErrors: number;
 }
 
 /**
  * Claims and publishes all due `scheduled` / `failed_retry` (`publish_attempts < 3`) blog posts,
  * synchronizing promotion schedules and triggering idempotent newsletter broadcasts.
+ * Transitions any post whose downstream broadcast fails into `failed_retry` so retries occur up to `publish_attempts = 3`.
  */
 export async function runScheduledBlogPublishCycle(
   deps: {
     claimDueBlogs?: (limit: number) => Promise<JsonObject[]>;
-    broadcastBlog?: typeof newsletterService.broadcastBlog;
+    broadcastBlog?: (payload: Parameters<typeof newsletterService.broadcastBlog>[0]) => Promise<{ queuedCount: number }>;
     recordBroadcastError?: (blogId: string, errText: string) => Promise<void>;
   } = {},
 ): Promise<ScheduledBlogPublishSummary> {
@@ -45,7 +47,7 @@ export async function runScheduledBlogPublishCycle(
       await updateRows(
         "blog",
         { blog_id: `eq.${blogId}` },
-        { last_publish_error: errText.slice(0, 500) },
+        { status: "failed_retry", last_publish_error: errText.slice(0, 500) },
       ).catch(() => undefined);
     });
 
@@ -54,20 +56,20 @@ export async function runScheduledBlogPublishCycle(
     rows = await claim(10);
   } catch (err: unknown) {
     const msg = errorMessage(err);
-    // Quietly tolerate pre-migration rolling deploy before migration 133 is applied
+    // Quietly tolerate pre-migration rolling deploy before migration 134 is applied
     if (!/velura_publish_scheduled_blogs|does not exist|PGRST202/i.test(msg)) {
       console.error("[blog-scheduler] claim cycle failed:", msg);
     }
-    return { publishedCount: 0, publishedIds: [], broadcastErrors: 0 };
+    return { publishedCount: 0, publishedIds: [], failedRetryIds: [], broadcastErrors: 0 };
   }
 
   const publishedIds: string[] = [];
+  const failedRetryIds: string[] = [];
   let broadcastErrors = 0;
 
   for (const row of rows) {
     const blogId = asString(row.blog_id);
     if (!blogId) continue;
-    publishedIds.push(blogId);
 
     if (!row.newsletter_broadcast_at) {
       try {
@@ -79,16 +81,21 @@ export async function runScheduledBlogPublishCycle(
           imageUrl: asString(row.image_url),
           author: asString(row.author) || "Velura Editorial",
         });
+        publishedIds.push(blogId);
       } catch (err: unknown) {
         broadcastErrors++;
+        failedRetryIds.push(blogId);
         await recordErr(blogId, errorMessage(err));
       }
+    } else {
+      publishedIds.push(blogId);
     }
   }
 
   return {
     publishedCount: publishedIds.length,
     publishedIds,
+    failedRetryIds,
     broadcastErrors,
   };
 }
@@ -97,8 +104,10 @@ export async function runScheduledBlogPublishCycle(
  * Starts the periodic Smart Blog Publishing Scheduler in the API process.
  */
 export function startBlogScheduler(): ReturnType<typeof setInterval> | null {
-  if (!config.supabaseServiceRoleKey) return null;
-  const intervalMs = Number(process.env.BLOG_SCHEDULER_INTERVAL_MS || config.blogSchedulerIntervalMs) || DEFAULT_BLOG_SCHEDULER_INTERVAL_MS;
+  const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? config.supabaseServiceRoleKey ?? "").trim();
+  if (!serviceKey) return null;
+  const intervalMs =
+    Number(process.env.BLOG_SCHEDULER_INTERVAL_MS || config.blogSchedulerIntervalMs) || DEFAULT_BLOG_SCHEDULER_INTERVAL_MS;
   if (intervalMs <= 0) return null;
 
   const tick = () => {

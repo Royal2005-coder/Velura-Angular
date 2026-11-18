@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import sharp from "sharp";
 import { HttpError } from "../http.js";
+import { resolveRolloutMode } from "../decision/gemini-decision-client.js";
 import { asJsonObject } from "../types.js";
 import { validateColorResult } from "./personal-color-policy.js";
 import type { ColorAnalysis, ColorAssets, ColorPrincipal, ColorRepository, ColorVision, PersonalColorPolicy } from "./personal-color-types.js";
@@ -123,12 +124,39 @@ export class PersonalColorService {
         if (this.vision.decide) {
           const decision = await this.vision.decide(
             { bytes: image.bytes, mime: image.mime as "image/jpeg" | "image/png" },
-            { entityId: analysis.id, actorId: principal.userId || null, signal: controller.signal },
+            { entityId: analysis.id, actorId: null, signal: controller.signal },
           );
-          if (decision.lighting_valid === "RETAKE") {
+          if (resolveRolloutMode(analysis.id).activeForRequest) {
+            if (decision.lighting_valid === "RETAKE" || !decision.season) {
+              return {
+                status: "VALIDATION_FAILED" as const,
+                error: decision.failed_checks.length ? `COLOR_PICTURE_GUIDANCE:${decision.failed_checks.join(",")}` : "COLOR_PICTURE_GUIDANCE",
+                diagnostics: {
+                  base_skin_depth: decision.base_skin_depth,
+                  skin_depth: decision.skin_depth,
+                  undertone: decision.undertone,
+                  contrast_level: decision.contrast_level,
+                  ita_angle: decision.optical_measurement.itaAngle,
+                  white_balance_shift: decision.optical_measurement.whiteBalanceShift,
+                  recommended_hex_palette: [],
+                  avoid_hex_palette: [],
+                  requires_human_review: decision.requires_human_review,
+                },
+              };
+            }
+            const validSubtypes = policy.taxonomy[decision.season] || [decision.season];
+            const subtype = validSubtypes[0] || decision.season;
+            const output = {
+              season: decision.season,
+              subtype,
+              palette: [...decision.recommended_palette_ids],
+              avoided: [...decision.avoid_palette_ids],
+              confidence: decision.confidence_score,
+            };
+            const validated = validateColorResult(output, policy);
             return {
-              status: "VALIDATION_FAILED" as const,
-              error: decision.failed_checks.length ? `COLOR_PICTURE_GUIDANCE:${decision.failed_checks.join(",")}` : "COLOR_PICTURE_GUIDANCE",
+              status: validated.confidence < policy.minConfidence ? ("LOW_CONFIDENCE" as const) : ("SUCCESS" as const),
+              result: validated,
               diagnostics: {
                 base_skin_depth: decision.base_skin_depth,
                 skin_depth: decision.skin_depth,
@@ -142,31 +170,6 @@ export class PersonalColorService {
               },
             };
           }
-          const validSubtypes = policy.taxonomy[decision.season] || [decision.season];
-          const subtype = validSubtypes[0] || decision.season;
-          const output = {
-            season: decision.season,
-            subtype,
-            palette: [...decision.recommended_palette_ids],
-            avoided: [...decision.avoid_palette_ids],
-            confidence: decision.confidence_score,
-          };
-          const validated = validateColorResult(output, policy);
-          return {
-            status: validated.confidence < policy.minConfidence ? ("LOW_CONFIDENCE" as const) : ("SUCCESS" as const),
-            result: validated,
-            diagnostics: {
-              base_skin_depth: decision.base_skin_depth,
-              skin_depth: decision.skin_depth,
-              undertone: decision.undertone,
-              contrast_level: decision.contrast_level,
-              ita_angle: decision.optical_measurement.itaAngle,
-              white_balance_shift: decision.optical_measurement.whiteBalanceShift,
-              recommended_hex_palette: decision.recommended_hex_palette,
-              avoid_hex_palette: decision.avoid_hex_palette,
-              requires_human_review: decision.requires_human_review,
-            },
-          };
         }
         const raw = await this.vision.generate("Check if this photo is suitable for personal color analysis. Return booleans: lighting_valid (true unless extreme unnatural disco/neon colored lights completely hide skin tone; normal indoor room or daylight lighting is true), skin_visible (true if a human face with natural skin is present; false if face is missing, covered with a mask, or an animal/object), blur_free (true if the face is recognizable; normal phone focus or portrait bokeh is true), filter_free (true unless heavy cartoon/mask stickers completely obscure natural skin tone; normal phone camera photos are true). Accept genuine user portraits and selfies.", image,
           { type: "object", additionalProperties: false, required: ["lighting_valid", "skin_visible", "blur_free", "filter_free"], properties: { lighting_valid: { type: "boolean" }, skin_visible: { type: "boolean" }, blur_free: { type: "boolean" }, filter_free: { type: "boolean" } } }, { model: policy.model, signal: controller.signal });

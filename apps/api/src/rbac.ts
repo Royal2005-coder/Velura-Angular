@@ -301,8 +301,8 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
 /**
  * Require a signed-in user.
  */
-export function requireAuthenticated(context: AuthContext): void {
-  if (!context.authUser?.id) {
+export function requireAuthenticated(context: AuthContext | undefined): asserts context is AuthContext {
+  if (!context?.authUser?.id) {
     throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
   }
 }

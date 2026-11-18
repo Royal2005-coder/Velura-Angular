@@ -139,18 +139,19 @@ export class AdminErpPricingPage {
     {
       key: 'product',
       label: 'Sản phẩm',
-      truncate: '280px',
-      value: (row) => {
-        const product = row as AdminProductRow;
-        return `${product.name}${product.sku ? ' · ' + product.sku : ''}`;
-      },
+      icon: 'box',
+      truncate: '270px',
+      value: (row) => (row as AdminProductRow).name,
+      subtext: (row) => (row as AdminProductRow).sku || '',
+      copyValue: (row) => (row as AdminProductRow).sku || '',
     },
-    { key: 'category', label: 'Danh mục', value: (row) => this.categoryName(row as AdminProductRow) },
-    { key: 'base', label: 'Giá gốc', value: (row) => this.money((row as AdminProductRow).base_price), mono: true, align: 'right' },
-    { key: 'sale', label: 'Giá bán', value: (row) => this.money((row as AdminProductRow).sale_price), mono: true, align: 'right' },
+    { key: 'category', label: 'Danh mục', icon: 'layers', value: (row) => this.categoryName(row as AdminProductRow) },
+    { key: 'base', label: 'Giá gốc', icon: 'coins', value: (row) => this.money((row as AdminProductRow).base_price), mono: true, align: 'right' },
+    { key: 'sale', label: 'Giá bán', icon: 'tag', value: (row) => this.money((row as AdminProductRow).sale_price), mono: true, align: 'right' },
     {
       key: 'discount',
       label: 'Giảm',
+      icon: 'percent',
       value: (row) => this.discount(row as AdminProductRow),
       badge: (row) => {
         const pct = this.discountPct(row as AdminProductRow);
@@ -161,26 +162,27 @@ export class AdminErpPricingPage {
     {
       key: 'status',
       label: 'Trạng thái',
+      icon: 'activity',
       value: (row) => this.statusLabel((row as AdminProductRow).status),
       badge: (row) => ({ label: this.statusLabel((row as AdminProductRow).status), tone: this.statusTone((row as AdminProductRow).status) }),
     },
-    { key: 'updated', label: 'Cập nhật', value: (row) => this.date((row as AdminProductRow).updated_at) },
+    { key: 'updated', label: 'Cập nhật', icon: 'calendar', mono: true, value: (row) => this.date((row as AdminProductRow).updated_at) },
   ];
 
   readonly historyColumns: readonly AdminTableColumn[] = [
-    { key: 'date', label: 'Thời gian', value: (row) => this.date((row as AdminPriceHistoryRow).changed_at) },
-    { key: 'product', label: 'Sản phẩm', truncate: '240px', value: (row) => this.historyProductName(row as AdminPriceHistoryRow) },
-    { key: 'base', label: 'Giá gốc', value: (row) => `${this.money((row as AdminPriceHistoryRow).old_base_price)} → ${this.money((row as AdminPriceHistoryRow).new_base_price)}` },
-    { key: 'sale', label: 'Giá bán', value: (row) => `${this.money((row as AdminPriceHistoryRow).old_sale_price)} → ${this.money((row as AdminPriceHistoryRow).new_sale_price)}` },
+    { key: 'date', label: 'Thời gian', icon: 'clock', mono: true, value: (row) => this.date((row as AdminPriceHistoryRow).changed_at) },
+    { key: 'product', label: 'Sản phẩm', icon: 'box', truncate: '240px', value: (row) => this.historyProductName(row as AdminPriceHistoryRow) },
+    { key: 'base', label: 'Giá gốc', icon: 'coins', mono: true, value: (row) => `${this.money((row as AdminPriceHistoryRow).old_base_price)} → ${this.money((row as AdminPriceHistoryRow).new_base_price)}` },
+    { key: 'sale', label: 'Giá bán', icon: 'tag', mono: true, value: (row) => `${this.money((row as AdminPriceHistoryRow).old_sale_price)} → ${this.money((row as AdminPriceHistoryRow).new_sale_price)}` },
     { key: 'reason', label: 'Lý do', truncate: '260px', value: (row) => (row as AdminPriceHistoryRow).reason || '—' },
-    { key: 'actor', label: 'Người thao tác', value: (row) => (row as AdminPriceHistoryRow).changed_by || '—' },
+    { key: 'actor', label: 'Người thao tác', icon: 'user', value: (row) => (row as AdminPriceHistoryRow).changed_by || '—' },
   ];
 
   readonly logColumns: readonly AdminTableColumn[] = [
-    { key: 'time', label: 'Thời gian', value: (row) => this.date((row as AdminAuditRow).timestamp) },
-    { key: 'actor', label: 'Người thao tác', value: (row) => this.actor(row as AdminAuditRow) },
-    { key: 'action', label: 'Hành động', value: (row) => (row as AdminAuditRow).action_label || (row as AdminAuditRow).action || '—' },
-    { key: 'target', label: 'Đối tượng', truncate: '280px', value: (row) => (row as AdminAuditRow).target_label || (row as AdminAuditRow).target_id || '—' },
+    { key: 'time', label: 'Thời gian', icon: 'clock', mono: true, value: (row) => this.date((row as AdminAuditRow).timestamp) },
+    { key: 'actor', label: 'Người thao tác', icon: 'user', value: (row) => this.actor(row as AdminAuditRow) },
+    { key: 'action', label: 'Hành động', icon: 'activity', value: (row) => (row as AdminAuditRow).action_label || (row as AdminAuditRow).action || '—' },
+    { key: 'target', label: 'Đối tượng', icon: 'hash', truncate: '280px', value: (row) => (row as AdminAuditRow).target_label || (row as AdminAuditRow).target_id || '—' },
   ];
 
   /** Stable row identity so a reload keeps keyboard focus on the same product. */
@@ -188,7 +190,7 @@ export class AdminErpPricingPage {
 
   /** One-click "Đổi giá" per row: opens the shared price form without the drawer. */
   readonly priceRowActions = (row: unknown): readonly AdminTableRowAction[] =>
-    this.canMutate() ? [{ label: 'Đổi giá', run: () => this.openChangeFor(row as AdminProductRow) }] : [];
+    this.canMutate() ? [{ label: 'Đổi giá', icon: 'coins', tone: 'outline', run: () => this.openChangeFor(row as AdminProductRow) }] : [];
 
   constructor() {
     watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));

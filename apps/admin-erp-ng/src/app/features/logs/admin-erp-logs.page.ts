@@ -158,34 +158,48 @@ export class AdminErpLogsPage {
     {
       key: 'time',
       label: 'Thời gian',
-      width: '150px',
+      icon: 'clock',
       mono: true,
       value: (row) => this.date((row as AdminAuditRow).timestamp),
     },
     {
       key: 'actor',
       label: 'Người thực hiện',
+      icon: 'user',
+      truncate: '190px',
       value: (row) => this.actor(row as AdminAuditRow),
-    },
-    {
-      key: 'role',
-      label: 'Vai trò',
-      value: (row) => this.role(row as AdminAuditRow),
+      subtext: (row) => this.role(row as AdminAuditRow),
     },
     {
       key: 'module',
       label: 'Phân hệ',
+      icon: 'layers',
       value: (row) => this.moduleLabel(row as AdminAuditRow),
+      cellIcon: (row) => {
+        const mod = String((row as AdminAuditRow).module || '').toLowerCase();
+        if (mod.includes('order')) return { name: 'shopping-bag', tone: 'accent' };
+        if (mod.includes('return') || mod.includes('ticket')) return { name: 'return', tone: 'warning' };
+        if (mod.includes('product')) return { name: 'box', tone: 'info' };
+        if (mod.includes('pric')) return { name: 'coins', tone: 'success' };
+        if (mod.includes('promo') || mod.includes('voucher')) return { name: 'ticket', tone: 'accent' };
+        if (mod.includes('auth') || mod.includes('account')) return { name: 'shield-user', tone: 'info' };
+        return { name: 'activity', tone: 'neutral' };
+      },
     },
     {
       key: 'action',
       label: 'Hành động',
+      icon: 'activity',
+      truncate: '220px',
       value: (row) => this.action(row as AdminAuditRow),
     },
     {
       key: 'target',
       label: 'Đối tượng',
+      icon: 'hash',
+      truncate: '230px',
       value: (row) => this.target(row as AdminAuditRow),
+      copyValue: (row) => String((row as AdminAuditRow).target_id || ''),
     },
     {
       key: 'result',
@@ -203,6 +217,7 @@ export class AdminErpLogsPage {
       key: 'ip',
       label: 'IP',
       value: (row) => (row as AdminAuditRow).ip_address || '—',
+      copyValue: (row) => (row as AdminAuditRow).ip_address || '',
       mono: true,
     },
   ];

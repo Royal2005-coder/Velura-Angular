@@ -2,14 +2,16 @@ import { ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, i
 import { AdminErpConfirmService } from '../../core/admin-erp-confirm.service';
 import { lockBodyScroll } from '../../core/body-scroll-lock';
 import { isTopOverlay, pushOverlay } from '../../core/overlay-stack';
+import { AdminErpIcon } from './admin-erp-icon';
 
 let drawerSequence = 0;
 
 /**
- * Right-side detail drawer with backdrop close, Escape and a Tab trap.
+ * Right-side detail drawer with backdrop close, Escape, J/K queue stepping and a Tab trap.
  */
 @Component({
   selector: 'app-erp-drawer',
+  imports: [AdminErpIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (open()) {
@@ -26,13 +28,19 @@ let drawerSequence = 0;
           (keydown)="onPanelKeydown($event)"
         >
           <header class="drawer-head">
-            <h2 [id]="titleId">{{ title() }}</h2>
+            <h2 [id]="titleId" [attr.title]="title()">{{ title() }}</h2>
             <span class="drawer-head__actions">
               @if (navigable()) {
-                <button class="erp-icon-btn" type="button" aria-label="Bản ghi trước (K)" title="Bản ghi trước (K)" [disabled]="!hasPrev() || busy()" (click)="goPrev()">‹</button>
-                <button class="erp-icon-btn" type="button" aria-label="Bản ghi sau (J)" title="Bản ghi sau (J)" [disabled]="!hasNext() || busy()" (click)="goNext()">›</button>
+                <span class="drawer-nav-group" role="group" aria-label="Duyệt bản ghi kế/trước">
+                  <button class="erp-icon-btn drawer-nav-btn" type="button" aria-label="Bản ghi trước (K)" title="Bản ghi trước (phím K)" [disabled]="!hasPrev() || busy()" (click)="goPrev()">
+                    <app-erp-icon name="chevron-left" [size]="'15'" />
+                  </button>
+                  <button class="erp-icon-btn drawer-nav-btn" type="button" aria-label="Bản ghi sau (J)" title="Bản ghi sau (phím J)" [disabled]="!hasNext() || busy()" (click)="goNext()">
+                    <app-erp-icon name="chevron-right" [size]="'15'" />
+                  </button>
+                </span>
               }
-              <button class="erp-icon-btn" type="button" aria-label="Đóng" [disabled]="busy()" (click)="close()">×</button>
+              <button class="erp-icon-btn" type="button" aria-label="Đóng" title="Đóng (Esc)" [disabled]="busy()" (click)="close()">×</button>
             </span>
           </header>
           <div class="drawer-body"><ng-content /></div>
@@ -80,12 +88,22 @@ let drawerSequence = 0;
       .drawer-head__actions {
         display: inline-flex;
         align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+      .drawer-nav-group {
+        display: inline-flex;
+        align-items: center;
         gap: 4px;
       }
       h2 {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         font-family: var(--erp-display);
-        font-size: 18px;
-        font-weight: 600;
+        font-size: 17px;
+        font-weight: 700;
         color: var(--erp-ink);
       }
       .drawer-body {

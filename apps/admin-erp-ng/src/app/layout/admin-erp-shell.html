@@ -9,16 +9,14 @@
     aria-label="Điều hướng Velura ERP"
   >
     <div class="sidebar__brand">
-      <a class="brand" routerLink="/dashboard" aria-label="Velura ERP — Tổng quan">
+      <a class="brand" routerLink="/dashboard" aria-label="Velura ERP — Tổng quan" [attr.title]="railTooltip('Velura ERP — Tổng quan')">
         <img decoding="async" src="/admin-assets/images/logo.png" alt="Velura" />
         <span class="brand__copy">
           <strong>Velura ERP</strong>
         </span>
       </a>
       @if (isMobile()) {
-        <button class="sidebar__close" type="button" aria-label="Đóng menu" (click)="closeMobileNav()">
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
-        </button>
+        <button class="sidebar__close erp-icon-btn" type="button" aria-label="Đóng menu" (click)="closeMobileNav()">×</button>
       }
     </div>
 
@@ -33,8 +31,9 @@
               [class.is-active]="isActive(item)"
               [class.is-planned]="item.status === 'planned'"
               [attr.aria-current]="isActive(item) ? 'page' : null"
+              [attr.title]="railTooltip(item.label)"
             >
-              <app-erp-icon [name]="item.icon" [size]="'17'" />
+              <app-erp-icon [name]="item.icon" [size]="'18'" />
               <span class="nav-link__label">{{ item.label }}</span>
               @if (item.status === 'planned') {
                 <span class="nav-link__badge">Sắp mở</span>
@@ -46,7 +45,7 @@
     </nav>
 
     <div class="sidebar__foot">
-      <div class="sidebar-user">
+      <div class="sidebar-user" [attr.title]="railTooltip(session.displayName() + ' · ' + session.roleLabel())">
         <span class="sidebar-user__avatar">{{ session.initials() }}</span>
         <span class="sidebar-user__copy">
           <strong>{{ session.displayName() }}</strong>
@@ -54,13 +53,18 @@
         </span>
       </div>
       @if (session.session()?.passwordLogin) {
-        <a class="nav-link nav-link--quiet" routerLink="/change-password">
-          <app-erp-icon name="lock" [size]="'16'" />
+        <a class="nav-link nav-link--quiet" routerLink="/change-password" [attr.title]="railTooltip('Đổi mật khẩu')">
+          <app-erp-icon name="lock" [size]="'17'" />
           <span class="nav-link__label">Đổi mật khẩu</span>
         </a>
       }
-      <button class="nav-link nav-link--quiet nav-link--button" type="button" (click)="askLogout()">
-        <app-erp-icon name="log" [size]="'16'" />
+      <button
+        class="nav-link nav-link--quiet nav-link--button"
+        type="button"
+        [attr.title]="railTooltip('Đăng xuất')"
+        (click)="askLogout()"
+      >
+        <app-erp-icon name="logout" [size]="'17'" />
         <span class="nav-link__label">Đăng xuất</span>
       </button>
     </div>
@@ -77,10 +81,11 @@
         type="button"
         aria-controls="erp-sidebar"
         [attr.aria-label]="menuLabel()"
+        [attr.title]="menuLabel()"
         [attr.aria-expanded]="isMobile() ? mobileNavOpen() : !sidebarCollapsed()"
         (click)="toggleSidebar()"
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="4" width="18" height="16" rx="2.5" />
           <path d="M9 4v16" />
           <path [attr.d]="sidebarCollapsed() && !isMobile() ? 'M13 10l2 2-2 2' : 'M16 10l-2 2 2 2'" />
@@ -94,17 +99,17 @@
         <strong class="topbar__page">{{ pageTitle() }}</strong>
       </nav>
       <div class="topbar__actions">
-        <button class="topbar__search" type="button" (click)="openSearch()" aria-label="Tìm kiếm nhanh phân hệ">
+        <button class="topbar__search" type="button" (click)="openSearch()" aria-label="Tìm kiếm nhanh phân hệ (Ctrl+K)" title="Tìm kiếm nhanh phân hệ & hàng đợi (Ctrl+K)">
           <app-erp-icon name="search" [size]="'14'" />
-          <span class="topbar__search-text">Tìm kiếm…</span>
+          <span class="topbar__search-text">Tìm phân hệ, hàng đợi…</span>
           <kbd class="topbar__search-kbd">⌘K</kbd>
         </button>
-        <button class="erp-btn erp-btn--sm topbar__refresh-btn" type="button" (click)="refresh()" aria-label="Làm mới dữ liệu">
+        <button class="erp-btn erp-btn--sm topbar__refresh-btn" type="button" (click)="refresh()" aria-label="Làm mới dữ liệu" title="Làm mới dữ liệu trang hiện tại">
           <app-erp-icon name="refresh" [size]="'14'" />
           <span>Làm mới</span>
         </button>
         @if (session.session()?.passwordLogin) {
-          <a class="topbar__avatar" routerLink="/change-password" [attr.aria-label]="'Tài khoản ' + session.displayName()">
+          <a class="topbar__avatar" routerLink="/change-password" [attr.aria-label]="'Tài khoản ' + session.displayName()" [attr.title]="session.displayName() + ' · Đổi mật khẩu'">
             @if (session.avatarUrl()) {
               <img loading="lazy" decoding="async" [src]="session.avatarUrl()" alt="" />
             } @else {
@@ -112,7 +117,7 @@
             }
           </a>
         } @else {
-          <span class="topbar__avatar" [attr.aria-label]="'Tài khoản ' + session.displayName()">
+          <span class="topbar__avatar" [attr.aria-label]="'Tài khoản ' + session.displayName()" [attr.title]="session.displayName()">
             @if (session.avatarUrl()) {
               <img loading="lazy" decoding="async" [src]="session.avatarUrl()" alt="" />
             } @else {
@@ -134,44 +139,64 @@
   <div footer class="logout-actions">
     <button class="erp-btn" type="button" (click)="cancelLogout()" [disabled]="signingOut()">Ở lại</button>
     <button class="erp-btn erp-btn--danger" type="button" (click)="confirmLogout()" [disabled]="signingOut()">
+      <app-erp-icon name="logout" [size]="'14'" />
       {{ signingOut() ? 'Đang đăng xuất…' : 'Đăng xuất' }}
     </button>
   </div>
 </app-erp-modal>
-<app-erp-modal [open]="searchOpen()" title="Tìm kiếm phân hệ & thao tác" size="md" (closed)="closeSearch()">
-  <div class="cmd-palette">
+
+<app-erp-modal [open]="searchOpen()" title="Tìm kiếm phân hệ & lối tắt vận hành" size="md" (closed)="closeSearch()">
+  <div class="cmd-palette" (keydown)="onSearchKeydown($event)">
     <div class="cmd-palette__input-wrap">
       <app-erp-icon name="search" [size]="'18'" />
       <input
         #searchInput
         class="cmd-palette__input"
         type="text"
-        placeholder="Gõ tên phân hệ, tính năng hoặc trang (VD: Đơn hàng, CMS, Đánh giá)…"
+        placeholder="Gõ tên phân hệ hoặc hàng đợi (VD: đơn cần xử lý, banner, sắp hết, nâng quyền)…"
         [value]="searchQuery()"
         (input)="onSearchInput($event)"
       />
+      @if (searchQuery()) {
+        <button type="button" class="cmd-palette__clear" aria-label="Xóa từ khóa" (click)="searchQuery.set(''); searchActiveIndex.set(0); searchInput.focus()">×</button>
+      }
     </div>
-    <div class="cmd-palette__list" role="listbox">
-      @for (res of searchResults(); track res.item.key) {
+    <div class="cmd-palette__list" role="listbox" aria-label="Kết quả tìm kiếm nhanh">
+      @for (res of searchResults(); track res.id; let idx = $index) {
         <a
           class="cmd-palette__item"
-          [routerLink]="navLink(res.item)"
+          [class.is-selected]="idx === searchActiveIndex()"
+          [routerLink]="navLink(res)"
+          (mouseenter)="setSearchActive(idx)"
           (click)="closeSearch()"
           role="option"
+          [attr.aria-selected]="idx === searchActiveIndex()"
         >
-          <div class="cmd-palette__icon-box">
-            <app-erp-icon [name]="res.item.icon" [size]="'16'" />
+          <div class="cmd-palette__icon-box" [class.cmd-palette__icon-box--quick]="res.kind === 'quick'">
+            <app-erp-icon [name]="res.icon" [size]="'16'" />
           </div>
           <div class="cmd-palette__item-copy">
-            <strong>{{ res.item.label }}</strong>
-            <small>{{ res.groupLabel }} · {{ res.item.title }}</small>
+            <span class="cmd-palette__item-title">
+              <strong>{{ res.label }}</strong>
+              @if (res.kind === 'quick') {
+                <span class="cmd-palette__tag">Lối tắt</span>
+              }
+            </span>
+            <small>{{ res.subtitle }}</small>
           </div>
           <span class="cmd-palette__enter">Mở ↵</span>
         </a>
       } @empty {
-        <div class="cmd-palette__empty">Không tìm thấy phân hệ nào khớp với "{{ searchQuery() }}"</div>
+        <div class="cmd-palette__empty">Không tìm thấy phân hệ hoặc hàng đợi nào khớp với "{{ searchQuery() }}"</div>
       }
     </div>
+    <footer class="cmd-palette__foot" aria-hidden="true">
+      <span><kbd>↑</kbd><kbd>↓</kbd> Di chuyển</span>
+      <span><kbd>↵</kbd> Mở ngay</span>
+      <span><kbd>/</kbd> Lọc bảng</span>
+      <span><kbd>J</kbd><kbd>K</kbd> Bản ghi kế/trước</span>
+      <span><kbd>Esc</kbd> Đóng</span>
+    </footer>
   </div>
 </app-erp-modal>
 

@@ -1,7 +1,7 @@
 import { config } from "../config.js";
-import { getRequestIp, HttpError, readJson, sendJson } from "../http.js";
+import { HttpError, readJson, sendJson } from "../http.js";
+import { IMAGE_MIME_TYPES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, readMultipartFile, uploadToSupabaseStorage, VIDEO_MIME_TYPES } from "../storage.js";
 import type { RouteArgs } from "../types.js";
-import { readMultipartImage, uploadToSupabaseStorage } from "../user/upload.js";
 import { PROMOTION_BANNER_STORAGE, PROMOTION_OPERATOR_ROLES } from "./pricing-constants.js";
 import type { PricingService } from "./pricing-service.js";
 
@@ -49,11 +49,17 @@ export async function handlePricingRoute({ req, res, url, parts, context, header
         throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
       }
       if (!PROMOTION_OPERATOR_ROLES.includes(context.roleCode)) {
-        throw new HttpError(403, "RBAC_DENIED", "Chỉ người vận hành giá & khuyến mãi mới được tải ảnh chiến dịch.");
+        throw new HttpError(403, "RBAC_DENIED", "Chỉ người vận hành giá & khuyến mãi mới được tải media chiến dịch.");
       }
-      const image = await readMultipartImage(req);
-      const url = await uploadToSupabaseStorage(image.fileBuffer, image.fileName, image.mimeType, PROMOTION_BANNER_STORAGE);
-      sendJson(res, 200, { url }, headers);
+      const media = await readMultipartFile(req, {
+        maxBytes: MAX_VIDEO_BYTES,
+        allowedTypes: [...IMAGE_MIME_TYPES, ...VIDEO_MIME_TYPES]
+      });
+      if (IMAGE_MIME_TYPES.includes(media.mimeType) && media.fileBuffer.byteLength > MAX_IMAGE_BYTES) {
+        throw new HttpError(413, "PAYLOAD_TOO_LARGE", "Ảnh banner chiến dịch tối đa 10 MB.");
+      }
+      const url = await uploadToSupabaseStorage(media.fileBuffer, media.fileName, media.mimeType, PROMOTION_BANNER_STORAGE);
+      sendJson(res, 200, { url, media_type: VIDEO_MIME_TYPES.includes(media.mimeType) ? "video" : "image" }, headers);
       return true;
     }
     const promoId = parts[4];

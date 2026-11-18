@@ -92,6 +92,8 @@ describe('AdminErpPromotionsPage', () => {
     let toggleCalls = 0;
     const voucherCalls: Array<Record<string, string> | undefined> = [];
     const pauseBodies: Array<Record<string, unknown>> = [];
+    const createdPromos: Array<Record<string, unknown>> = [];
+    const updatedPromos: Array<{ id: string; body: Record<string, unknown> }> = [];
     const api = {
       listPromotions,
       listVouchers: (params?: Record<string, string>) => {
@@ -110,8 +112,14 @@ describe('AdminErpPromotionsPage', () => {
         pauseBodies.push(body);
         return of({});
       },
-      createPromotion: () => of(campaigns[0]),
-      updatePromotion: () => of(campaigns[0]),
+      createPromotion: (body: Record<string, unknown>) => {
+        createdPromos.push(body);
+        return of(campaigns[0]);
+      },
+      updatePromotion: (id: string, body: Record<string, unknown>) => {
+        updatedPromos.push({ id, body });
+        return of(campaigns[0]);
+      },
       createVoucher: () => of({}),
       updateVoucher: () => of(vouchers[0]),
     };
@@ -135,7 +143,7 @@ describe('AdminErpPromotionsPage', () => {
     const fixture = TestBed.createComponent(AdminErpPromotionsPage);
     fixture.detectChanges();
     const confirm = TestBed.inject(AdminErpConfirmService);
-    return { fixture, router, confirm, toggled: () => toggled, toggleCalls: () => toggleCalls, voucherCalls, pauseBodies };
+    return { fixture, router, confirm, toggled: () => toggled, toggleCalls: () => toggleCalls, voucherCalls, pauseBodies, createdPromos, updatedPromos };
   }
 
   const listCampaigns: ListPromotionsFn = () => of({ rows: campaigns, count: 1, summary: stats.promotions });
@@ -288,5 +296,60 @@ describe('AdminErpPromotionsPage', () => {
       (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLOptionElement>('select[name="applicableUserGroup"] option'),
     ).map((option) => option.value);
     expect(options).toEqual(['all_users', 'new_user', 'member', 'guest', 'loyal_user', 'churn_risk_user', 'birthday']);
+  });
+
+  it('synchronizes 5s banner studio fields, #focal cropper framing, and explicit banner clearing on update', async () => {
+    const { fixture, updatedPromos } = await boot(() =>
+      of({
+        rows: [
+          { ...campaigns[0], promo_id: 'p-regular', promo_name: 'Regular', display_order: 0, is_featured: false },
+          {
+            ...campaigns[0],
+            promo_id: 'p-featured',
+            promo_name: 'Featured Campaign',
+            banner_image_url: 'https://cdn.velura.vn/fall.webp#focal=40,25,1.15',
+            highlight_label: 'Flash Sale 48H',
+            display_order: 3,
+            is_featured: true,
+          },
+        ],
+        count: 2,
+        summary: stats.promotions,
+      }),
+    );
+    const page = fixture.componentInstance;
+
+    page.setCampaignLayout('banners');
+    expect(page.sortedBannerCampaigns().map((c) => c.promo_id)).toEqual(['p-featured', 'p-regular']);
+
+    // Edit featured campaign, adjust cropper framing + presentation fields, and submit
+    const target = page.sortedBannerCampaigns()[0];
+    page.openEditCampaign(target);
+    fixture.detectChanges();
+
+    expect(page.cleanBannerSrc()).toBe('https://cdn.velura.vn/fall.webp');
+    expect(page.campaignFraming()).toEqual({ posX: 40, posY: 25, zoom: 1.15 });
+    expect(page.campaignHighlightLabel()).toBe('Flash Sale 48H');
+    expect(page.campaignIsFeatured()).toBe(true);
+
+    page.onBannerFramingChange({ posX: 46, posY: 22, zoom: 1.3 });
+    page.applyHighlightPreset('Đặc quyền tháng này');
+    fixture.detectChanges();
+
+    const form = (fixture.nativeElement as HTMLElement).querySelector<HTMLFormElement>('#promo-campaign-form')!;
+    form.dispatchEvent(new Event('submit'));
+
+    expect(updatedPromos.length).toBe(1);
+    expect(updatedPromos[0].body['bannerImageUrl']).toBe('https://cdn.velura.vn/fall.webp#focal=46,22,1.3');
+    expect(updatedPromos[0].body['highlightLabel']).toBe('Đặc quyền tháng này');
+    expect(updatedPromos[0].body['isFeatured']).toBe(true);
+
+    // Clearing the banner on edit sends "" (not null) so RPC clears the stored banner
+    page.openEditCampaign(target);
+    page.clearCampaignBanner();
+    fixture.detectChanges();
+    const form2 = (fixture.nativeElement as HTMLElement).querySelector<HTMLFormElement>('#promo-campaign-form')!;
+    form2.dispatchEvent(new Event('submit'));
+    expect(updatedPromos[1].body['bannerImageUrl']).toBe('');
   });
 });

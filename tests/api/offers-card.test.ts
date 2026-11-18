@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { toVoucherCard, voucherGroup } from "../../apps/api/src/user/offers.js";
+import { inferCampaignMediaType, sortOfferCampaignRows, toVoucherCard, voucherGroup } from "../../apps/api/src/user/offers.js";
 
 const NOW = new Date("2026-10-10T00:00:00Z");
 const inDays = (days) => new Date(NOW.getTime() + days * 86400000).toISOString();
@@ -39,4 +39,26 @@ test("offers group: ending soon first, then codes aimed at this member, then the
   assert.equal(voucherGroup(evaluated({ audience: "all_users" }), true, true, NOW), "running");
   // Khách vãng lai không có nhóm cá nhân.
   assert.equal(voucherGroup(evaluated({ audience: "guest" }), true, false, NOW), "running");
+});
+
+test("sortOfferCampaignRows pins featured campaigns first, then display_order ascending, then newest start_date", () => {
+  const sorted = sortOfferCampaignRows([
+    { promo_id: "p-order-2", is_featured: false, display_order: 2, start_date: "2026-10-01T00:00:00Z" },
+    { promo_id: "p-order-0-old", is_featured: false, display_order: 0, start_date: "2026-10-01T00:00:00Z" },
+    { promo_id: "p-featured", is_featured: true, display_order: 5, start_date: "2026-09-01T00:00:00Z" },
+    { promo_id: "p-order-0-new", is_featured: false, display_order: 0, start_date: "2026-10-09T00:00:00Z" }
+  ]);
+  assert.deepEqual(sorted.map((r) => r.promo_id), [
+    "p-featured",
+    "p-order-0-new",
+    "p-order-0-old",
+    "p-order-2"
+  ]);
+});
+
+test("inferCampaignMediaType detects video banners even with #focal fragment metadata", () => {
+  assert.equal(inferCampaignMediaType("https://cdn.velura.vn/promo.mp4#focal=50,35,1.2"), "video");
+  assert.equal(inferCampaignMediaType("/assets/videos/campaign.webm?v=1"), "video");
+  assert.equal(inferCampaignMediaType("https://cdn.velura.vn/promo.webp#focal=40,20,1.1"), "image");
+  assert.equal(inferCampaignMediaType(null), "image");
 });

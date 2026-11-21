@@ -72,7 +72,7 @@
                   />
                 </div>
                 <div class="cart-item__image">
-                  <img loading="lazy" decoding="async" [src]="imageUrl(item)" [alt]="item.product_name" />
+                  <img loading="lazy" decoding="async" [src]="imageUrl(item)" [alt]="item.product_name" (error)="onImageError($event)" />
                 </div>
                 <div class="cart-item__details u-inline-ee3d55bf99">
                   <div class="cart-item__header-row">
@@ -103,7 +103,7 @@
                           <div class="u-inline-8bc13d6c95">
                             <div class="u-inline-0714eafcca">
                               <a [routerLink]="['/products', sub.product_id]" target="_blank" title="Xem sản phẩm riêng lẻ" class="u-inline-1987c411c4">
-                                <img loading="lazy" decoding="async" [src]="imageUrl(sub)" [alt]="sub.product_name" class="u-inline-453fc34f92" />
+                                <img loading="lazy" decoding="async" [src]="imageUrl(sub)" [alt]="sub.product_name" class="u-inline-453fc34f92" (error)="onImageError($event)" />
                               </a>
                               <div class="u-inline-62b2fca2a4">
                                 <a [routerLink]="['/products', sub.product_id]" target="_blank" title="Xem sản phẩm riêng lẻ" class="u-inline-7fc62ca3ae">
@@ -355,7 +355,7 @@
               @for (item of selectedItems(); track item.variant_id) {
                 <div class="u-inline-730b6a79e4">
                   <div class="u-inline-9cff2bd9af">
-                    <img loading="lazy" decoding="async" [src]="imageUrl(item)" [alt]="item.product_name" class="u-inline-0b8e13feb2" />
+                    <img loading="lazy" decoding="async" [src]="imageUrl(item)" [alt]="item.product_name" class="u-inline-0b8e13feb2" (error)="onImageError($event)" />
                   </div>
                   <div class="u-inline-69fcbc5468">
                     <span class="u-inline-8c32d50b1d">{{ item.product_name }}</span>
@@ -465,7 +465,7 @@
               Bạn có chắc chắn muốn xóa sản phẩm này? Thao tác này sẽ gỡ sản phẩm ra khỏi giỏ hàng của bạn.
             </p>
             <div class="cart-delete-item-preview">
-              <img loading="lazy" decoding="async" [src]="imageUrl(pendingDeleteItem()!)" [alt]="pendingDeleteItem()!.product_name" class="cart-delete-item-img" />
+              <img loading="lazy" decoding="async" [src]="imageUrl(pendingDeleteItem()!)" [alt]="pendingDeleteItem()!.product_name" class="cart-delete-item-img" (error)="onImageError($event)" />
               <div class="cart-delete-item-info">
                 <h4 class="cart-delete-item-name">{{ pendingDeleteItem()!.product_name }}</h4>
                 @if (pendingDeleteItem()!.is_combo) {

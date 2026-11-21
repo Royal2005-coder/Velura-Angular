@@ -1,7 +1,20 @@
-<main class="blog-page">
+<main class="blog-page" [class.is-loading]="loading()" [attr.aria-busy]="loading()">
+  <app-loading-overlay [active]="loading()" label="Đang tải nội dung bài viết…" />
   <div class="container">
     <a routerLink="/blog" class="btn-read-more">← Tạp chí phong cách</a>
-    @if (post(); as article) {
+    @if (loading()) {
+      <article class="blog-detail-skeleton" aria-hidden="true">
+        <div class="blog-skeleton-line blog-skeleton-line--sm skeleton-shimmer" style="margin-top: 24px;"></div>
+        <div class="blog-skeleton-line blog-skeleton-line--hero-title skeleton-shimmer"></div>
+        <div class="blog-skeleton-line blog-skeleton-line--md skeleton-shimmer"></div>
+        <div class="blog-skeleton-box blog-detail-skeleton__hero skeleton-shimmer"></div>
+        <div class="blog-detail-skeleton__body">
+          <div class="blog-skeleton-line skeleton-shimmer"></div>
+          <div class="blog-skeleton-line skeleton-shimmer"></div>
+          <div class="blog-skeleton-line blog-skeleton-line--md skeleton-shimmer"></div>
+        </div>
+      </article>
+    } @else if (post(); as article) {
       <article>
         <header class="article-header" style="margin-top: 24px;">
           <span class="blog-badge">{{ article.badge }}</span>
@@ -84,7 +97,11 @@
         </div>
       </article>
     } @else {
-      <h1 class="blog-intro__title">Không tìm thấy bài viết</h1>
+      <section class="blog-empty-state" role="status" style="margin-top: 32px;">
+        <h1 class="blog-intro__title">Không tìm thấy bài viết</h1>
+        <p class="blog-intro__desc">Bài viết có thể đã bị gỡ hoặc đường dẫn không còn tồn tại.</p>
+        <a routerLink="/blog" class="btn btn--primary" style="margin-top: 16px; display: inline-flex;">Quay lại Tạp chí phong cách</a>
+      </section>
     }
   </div>
 </main>

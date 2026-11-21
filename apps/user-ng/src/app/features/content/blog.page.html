@@ -1,4 +1,5 @@
-<main class="blog-page">
+<main class="blog-page" [class.is-loading]="loading()" [attr.aria-busy]="loading()">
+  <app-loading-overlay [active]="loading()" label="Đang tải tạp chí Velura…" />
   <div class="container">
     <div class="blog-intro">
       <div class="blog-intro__copy">
@@ -13,80 +14,106 @@
       </figure>
     </div>
 
-    @if (featured(); as post) {
-      <section class="featured-post">
-        <div class="featured-post__image">
-          <img loading="lazy" decoding="async" [src]="post.image" [alt]="post.title" />
-        </div>
-        <div class="featured-post__content">
-          <span class="blog-badge">{{ post.badge }}</span>
-          <h2 class="featured-post__title">{{ post.title }}</h2>
-          <p class="featured-post__excerpt">{{ post.excerpt }}</p>
-          <div class="post-meta">
-            <span class="post-meta__author">{{ post.author }}</span>
-            <span class="post-meta__dot">&middot;</span>
-            <span class="post-meta__date">{{ post.date }}</span>
-            <span class="post-meta__dot">&middot;</span>
-            <span class="post-meta__read-time">
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                <circle cx="8" cy="8" r="6" />
-                <path d="M8 4v4l2.5 1.5" />
-              </svg>
-              {{ post.readMinutes }} phút đọc
-            </span>
-          </div>
-          <a [routerLink]="['/blog', post.slug]" class="btn-read-more">
-            Đọc tiếp
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-              <polyline points="12 5 19 12 12 19"></polyline>
-            </svg>
-          </a>
+    @if (loading()) {
+      <section class="blog-skeleton-featured" aria-hidden="true">
+        <div class="blog-skeleton-box blog-skeleton-featured__media skeleton-shimmer"></div>
+        <div class="blog-skeleton-featured__copy">
+          <div class="blog-skeleton-line blog-skeleton-line--sm skeleton-shimmer"></div>
+          <div class="blog-skeleton-line blog-skeleton-line--title skeleton-shimmer"></div>
+          <div class="blog-skeleton-line skeleton-shimmer"></div>
+          <div class="blog-skeleton-line blog-skeleton-line--md skeleton-shimmer"></div>
         </div>
       </section>
-    }
-
-    <div class="category-tabs">
-      <button type="button" class="category-tab" [class.is-active]="category() === 'all'" (click)="setCategory('all')">Tất cả</button>
-      <button type="button" class="category-tab" [class.is-active]="category() === 'trend'" (click)="setCategory('trend')">Xu hướng</button>
-      <button type="button" class="category-tab" [class.is-active]="category() === 'style'" (click)="setCategory('style')">Phối đồ</button>
-      <button type="button" class="category-tab" [class.is-active]="category() === 'interview'" (click)="setCategory('interview')">Phỏng vấn</button>
-      <button type="button" class="category-tab" [class.is-active]="category() === 'sustainable'" (click)="setCategory('sustainable')">Bền vững</button>
-      <button type="button" class="category-tab" [class.is-active]="category() === 'event'" (click)="setCategory('event')">Sự kiện</button>
-    </div>
-
-    <div class="articles-grid">
-      @if (!posts().length) {
-        <p class="blog-intro__desc">Chưa có bài viết đã xuất bản.</p>
-      }
-      @for (post of posts(); track post.slug) {
-        <article class="article-card">
-          <div class="article-card__image">
+      <div class="articles-grid" aria-hidden="true">
+        @for (n of [1, 2, 3]; track n) {
+          <article class="article-card blog-skeleton-card">
+            <div class="blog-skeleton-box blog-skeleton-card__media skeleton-shimmer"></div>
+            <div class="article-card__content">
+              <div class="blog-skeleton-line blog-skeleton-line--sm skeleton-shimmer"></div>
+              <div class="blog-skeleton-line blog-skeleton-line--title skeleton-shimmer"></div>
+              <div class="blog-skeleton-line skeleton-shimmer"></div>
+            </div>
+          </article>
+        }
+      </div>
+    } @else {
+      @if (featured(); as post) {
+        <section class="featured-post">
+          <div class="featured-post__image">
             <img loading="lazy" decoding="async" [src]="post.image" [alt]="post.title" />
           </div>
-          <div class="article-card__content">
+          <div class="featured-post__content">
             <span class="blog-badge">{{ post.badge }}</span>
-            <h3 class="article-card__title">
-              <a [routerLink]="['/blog', post.slug]">{{ post.title }}</a>
-            </h3>
-            <p class="article-card__excerpt">{{ post.excerpt }}</p>
+            <h2 class="featured-post__title">{{ post.title }}</h2>
+            <p class="featured-post__excerpt">{{ post.excerpt }}</p>
             <div class="post-meta">
               <span class="post-meta__author">{{ post.author }}</span>
               <span class="post-meta__dot">&middot;</span>
               <span class="post-meta__date">{{ post.date }}</span>
               <span class="post-meta__dot">&middot;</span>
               <span class="post-meta__read-time">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
                   <circle cx="8" cy="8" r="6" />
                   <path d="M8 4v4l2.5 1.5" />
                 </svg>
-                {{ post.readMinutes }} phút
+                {{ post.readMinutes }} phút đọc
               </span>
             </div>
+            <a [routerLink]="['/blog', post.slug]" class="btn-read-more">
+              Đọc tiếp
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </a>
           </div>
-        </article>
+        </section>
       }
-    </div>
+
+      <div class="category-tabs">
+        <button type="button" class="category-tab" [class.is-active]="category() === 'all'" (click)="setCategory('all')">Tất cả</button>
+        <button type="button" class="category-tab" [class.is-active]="category() === 'trend'" (click)="setCategory('trend')">Xu hướng</button>
+        <button type="button" class="category-tab" [class.is-active]="category() === 'style'" (click)="setCategory('style')">Phối đồ</button>
+        <button type="button" class="category-tab" [class.is-active]="category() === 'interview'" (click)="setCategory('interview')">Phỏng vấn</button>
+        <button type="button" class="category-tab" [class.is-active]="category() === 'sustainable'" (click)="setCategory('sustainable')">Bền vững</button>
+        <button type="button" class="category-tab" [class.is-active]="category() === 'event'" (click)="setCategory('event')">Sự kiện</button>
+      </div>
+
+      <div class="articles-grid">
+        @if (!posts().length) {
+          <div class="blog-empty-state" role="status">
+            <p class="blog-intro__desc">Chưa có bài viết đã xuất bản trong mục này.</p>
+          </div>
+        }
+        @for (post of posts(); track post.slug) {
+          <article class="article-card">
+            <div class="article-card__image">
+              <img loading="lazy" decoding="async" [src]="post.image" [alt]="post.title" />
+            </div>
+            <div class="article-card__content">
+              <span class="blog-badge">{{ post.badge }}</span>
+              <h3 class="article-card__title">
+                <a [routerLink]="['/blog', post.slug]">{{ post.title }}</a>
+              </h3>
+              <p class="article-card__excerpt">{{ post.excerpt }}</p>
+              <div class="post-meta">
+                <span class="post-meta__author">{{ post.author }}</span>
+                <span class="post-meta__dot">&middot;</span>
+                <span class="post-meta__date">{{ post.date }}</span>
+                <span class="post-meta__dot">&middot;</span>
+                <span class="post-meta__read-time">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="8" cy="8" r="6" />
+                    <path d="M8 4v4l2.5 1.5" />
+                  </svg>
+                  {{ post.readMinutes }} phút
+                </span>
+              </div>
+            </div>
+          </article>
+        }
+      </div>
+    }
 
     <section class="newsletter-box">
       <div class="newsletter-box__icon">

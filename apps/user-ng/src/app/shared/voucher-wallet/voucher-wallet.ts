@@ -51,6 +51,8 @@ export class VoucherWallet {
    * tiên hơn mã tốt nhất ở lần tải đầu, vì đó là lựa chọn của khách.
    */
   readonly preferred = input<string | null>(null);
+  /** Token OTP checkout của khách vãng lai đã xác thực SĐT để đồng bộ đúng lượt dùng mã. */
+  readonly guestCheckoutToken = input<string | null>(null);
 
   readonly applied = output<AppliedVoucher | null>();
   /**
@@ -108,6 +110,7 @@ export class VoucherWallet {
       // Chỉ theo dõi nội dung giỏ, không theo dõi tham chiếu mảng, để trang cha dựng lại
       // mảng mới mỗi lần render không làm ví tải lại liên tục.
       const cartKey = this.cartKey();
+      const guestToken = this.guestCheckoutToken();
       const session = this.vouchers.customerSession?.();
       untracked(() => {
         if (session !== previousSession) {
@@ -123,6 +126,7 @@ export class VoucherWallet {
         this.refresh(value, shipping);
       });
       void cartKey;
+      void guestToken;
     });
     effect(() => {
       const dialog = this.dialog()?.nativeElement;
@@ -140,11 +144,21 @@ export class VoucherWallet {
     this.applying.set(false);
     const version = ++this.requestVersion;
     const cartKey = this.cartKey();
+    const guestToken = this.guestCheckoutToken();
     const session = this.vouchers.customerSession?.();
-    const current = () => version === this.requestVersion && cartKey === this.cartKey() && session === this.vouchers.customerSession?.() && orderValue === this.orderValue() && shippingFee === this.shippingFee();
+    const current = () =>
+      version === this.requestVersion &&
+      cartKey === this.cartKey() &&
+      guestToken === this.guestCheckoutToken() &&
+      session === this.vouchers.customerSession?.() &&
+      orderValue === this.orderValue() &&
+      shippingFee === this.shippingFee();
     this.loading.set(true);
     this.loadError.set(null);
-    this.walletRequest = this.vouchers.loadWallet(orderValue, shippingFee, this.cartItems()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    const request$ = guestToken
+      ? this.vouchers.loadWallet(orderValue, shippingFee, this.cartItems(), guestToken)
+      : this.vouchers.loadWallet(orderValue, shippingFee, this.cartItems());
+    this.walletRequest = request$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (response) => {
         if (!current()) return;
         this.loading.set(false);
@@ -165,27 +179,43 @@ export class VoucherWallet {
   /**
    * Giữ lựa chọn của khách khi còn hợp lệ; ngược lại mới tự áp mã tốt nhất.
    *
-   * Giỏ hàng thay đổi có thể khiến mã đang áp mất hiệu lực — lúc đó phải báo cho
-   * trang cha biết để bỏ số tiền giảm khỏi tổng tiền, chứ không im lặng giữ nguyên.
+   * Giỏ hàng thay đổi hoặc khách vừa xác thực SĐT có thể khiến mã đang áp mất hiệu lực
+   * — lúc đó báo rõ lý do và tự chuyển sang mã hợp lệ tốt nhất (hoặc bỏ mã nếu hết).
    */
   private reconcileSelection(bestId: string | null): void {
     if (!this.selectedId() && this.applyPreferred()) return;
     const currentId = this.selectedId();
+    let invalidated: WalletVoucher | null = null;
     if (currentId) {
       const still = this.items().find((item) => item.voucher_id === currentId);
       if (still?.eligible) {
         this.emit(still);
         return;
       }
+      invalidated = still ?? null;
       this.selectedId.set(null);
+      safeStorage()?.removeItem('checkout_voucher_id');
+      safeStorage()?.removeItem('checkout_voucher_code');
       this.applied.emit(null);
     }
 
-    if (!this.autoApply() || this.dismissed() || !bestId) return;
+    if (!this.autoApply() || this.dismissed() || !bestId) {
+      if (invalidated) {
+        this.preferredNotice.set(
+          `Mã ${invalidated.code} chưa dùng được cho đơn này: ${invalidated.reason_text || 'đã hết lượt sử dụng'}.`
+        );
+      }
+      return;
+    }
     const best = this.items().find((item) => item.voucher_id === bestId);
     if (best?.eligible) {
       this.selectedId.set(best.voucher_id);
       this.emit(best);
+      if (invalidated) {
+        this.preferredNotice.set(
+          `Mã ${invalidated.code} không áp dụng được (${invalidated.reason_text || 'đã hết lượt sử dụng'}). Đã tự động chuyển sang mã ${best.code}.`
+        );
+      }
     }
   }
 
@@ -290,8 +320,18 @@ export class VoucherWallet {
     const orderValue = this.orderValue();
     const shippingFee = this.shippingFee();
     const session = this.vouchers.customerSession?.();
-    const current = () => version === this.manualVersion && cartKey === this.cartKey() && orderValue === this.orderValue() && shippingFee === this.shippingFee() && session === this.vouchers.customerSession?.();
-    this.manualRequest = this.vouchers.applyCode(code, orderValue, shippingFee, this.cartItems()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    const guestToken = this.guestCheckoutToken();
+    const current = () =>
+      version === this.manualVersion &&
+      cartKey === this.cartKey() &&
+      guestToken === this.guestCheckoutToken() &&
+      orderValue === this.orderValue() &&
+      shippingFee === this.shippingFee() &&
+      session === this.vouchers.customerSession?.();
+    const apply$ = guestToken
+      ? this.vouchers.applyCode(code, orderValue, shippingFee, this.cartItems(), guestToken)
+      : this.vouchers.applyCode(code, orderValue, shippingFee, this.cartItems());
+    this.manualRequest = apply$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (response) => {
         if (!current()) return;
         this.applying.set(false);

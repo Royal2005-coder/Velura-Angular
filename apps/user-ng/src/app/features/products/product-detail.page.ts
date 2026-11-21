@@ -776,6 +776,13 @@ export class ProductDetailPage {
     return toPublicAsset(url, '/assets/images/placeholder.jpg');
   }
 
+  onImageError(event: Event): void {
+    const target = event.target as HTMLImageElement;
+    if (target && !target.src.endsWith('/assets/images/placeholder.jpg')) {
+      target.src = '/assets/images/placeholder.jpg';
+    }
+  }
+
   /**
    * Selects a color and shows its first associated image, then a common image, then the primary.
    */

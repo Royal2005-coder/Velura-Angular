@@ -12,7 +12,7 @@
       <span class="product-card__badge" [class.product-card__badge--hot]="!isCatalog()" [class.product-card__badge--new]="isCatalog()">NỔI BẬT</span>
     }
     <a [routerLink]="['/products', product().product_id]" class="product-card__img-link">
-      <img [src]="imageUrl()" [alt]="product().name" class="product-card__img" />
+      <img [src]="imageUrl()" [alt]="product().name" class="product-card__img" (error)="onImageError($event)" />
     </a>
     <div class="product-card__img-hover">
       <a [routerLink]="['/products', product().product_id]" class="btn-detail">Xem chi tiết</a>

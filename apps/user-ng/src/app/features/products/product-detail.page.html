@@ -57,7 +57,7 @@
     <div class="product-detail-layout">
       <div class="product-detail__gallery">
         <div class="gallery-main" (click)="openImageZoom()">
-          <img [src]="imageUrl()" [alt]="product()?.name || ''" class="gallery-main__img product-detail__main-img" />
+          <img [src]="imageUrl()" [alt]="product()?.name || ''" class="gallery-main__img product-detail__main-img" (error)="onImageError($event)" />
           <button
             type="button"
             class="gallery-expand-btn"
@@ -85,7 +85,7 @@
         <div class="gallery-thumbs">
           @for (image of gallery(); track image; let i = $index) {
             <button type="button" class="gallery-thumbs__btn" [class.active]="activeImage() === i" (click)="selectImage(i)">
-              <img [src]="gallerySrc(image)" [alt]="product()?.name || ''" />
+              <img [src]="gallerySrc(image)" [alt]="product()?.name || ''" (error)="onImageError($event)" />
             </button>
           }
         </div>
@@ -1070,7 +1070,7 @@
                   (click)="selectImage(i); resetZoom()"
                   [attr.aria-label]="'Xem góc chụp ' + (i + 1)"
                 >
-                  <img [src]="gallerySrc(image)" [alt]="product()?.name || ''" />
+                  <img [src]="gallerySrc(image)" [alt]="product()?.name || ''" (error)="onImageError($event)" />
                 </button>
               }
             </div>

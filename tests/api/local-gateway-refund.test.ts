@@ -253,3 +253,22 @@ test("a refund of an order with no captured gateway payment is skipped, not fail
     assert.equal((await refundLocalGatewayOrder(ORDER_ID, returnOptions)).status, "skipped");
   } finally { globalThis.fetch = original; h.restore(); }
 });
+
+test("sandbox simulator VNPay and MoMo refunds settle on the internal ledger without calling external endpoints", async () => {
+  for (const provider of ["momo", "vnpay"] as const) {
+    const h = harness({ provider });
+    Object.assign(config, {
+      vnpayTmnCode: "", vnpayHashSecret: "",
+      momoPartnerCode: "", momoAccessKey: "", momoSecretKey: "",
+      paymentGatewayEnvironment: "sandbox", paymentGatewaySimulator: true
+    });
+    try {
+      const result = await refundLocalGatewayOrder(ORDER_ID, returnOptions);
+      assert.equal(result.status, "refunded");
+      assert.equal(Object.keys(h.providerCall()).length, 0, "simulator refund must not call external VNPay/MoMo sandbox");
+      assert.equal(h.completed(), true, "simulator refund must settle through velura_complete_return_refund");
+    } finally {
+      h.restore();
+    }
+  }
+});

@@ -210,6 +210,7 @@ test("F5.3: ReturnService enforces server-side 409 RETURN_REFUND_FROZEN_BY_FOREN
 
   let gatewayRefundCalls = 0;
   let manualRefundCalls = 0;
+  const recordedOverrides: Array<{ forensicsId: string; actorId: string | null; reason: string }> = [];
 
   const repo = {
     getReturn: async () => ({
@@ -270,6 +271,9 @@ test("F5.3: ReturnService enforces server-side 409 RETURN_REFUND_FROZEN_BY_FOREN
         tampering_risk_score: 84,
       },
     ],
+    recordForensicsOverride: async (forensicsId, actorId, reason) => {
+      recordedOverrides.push({ forensicsId, actorId, reason });
+    },
   });
 
   // 1. CSKH operator blocked on Stripe refund with 409 RETURN_REFUND_FROZEN_BY_FORENSICS (even if trying to pass override!)
@@ -299,7 +303,7 @@ test("F5.3: ReturnService enforces server-side 409 RETURN_REFUND_FROZEN_BY_FOREN
   assert.equal(gatewayRefundCalls, 0);
   assert.equal(manualRefundCalls, 0);
 
-  // 3. Super admin WITH explicit >= 15-char forensicsOverrideReason succeeds cleanly!
+  // 3. Super admin WITH explicit >= 15-char forensicsOverrideReason succeeds cleanly and persists the override audit!
   const overridden = await service.triggerStripeRefund(superCtx, returnId, {
     returnItemId,
     expectedVersion: 4,
@@ -307,4 +311,8 @@ test("F5.3: ReturnService enforces server-side 409 RETURN_REFUND_FROZEN_BY_FOREN
   });
   assert.equal(overridden.success, true);
   assert.equal(gatewayRefundCalls, 1);
+  assert.equal(recordedOverrides.length, 1);
+  assert.equal(recordedOverrides[0]?.forensicsId, "fx-frozen-1");
+  assert.equal(recordedOverrides[0]?.actorId, "super-op");
+  assert.match(String(recordedOverrides[0]?.reason), /nguyên vẹn đúng SKU/);
 });

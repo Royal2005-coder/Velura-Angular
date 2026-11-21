@@ -708,7 +708,7 @@
 .velura-auth-page :is(.login-container, .callback-card) h1 { color: var(--auth-primary); }
 .velura-auth-page :is(button, a, input, select):focus-visible { outline: 3px solid #C94F70; outline-offset: 3px; }
 .velura-auth-page :is(input, select) { border-color: var(--auth-border); border-radius: 12px; background-color: var(--auth-input-bg); }
-.velura-auth-page :is(button[type="submit"], .callback-back) { border-radius: 999px; }
+.velura-auth-page :is(button[type="submit"], .callback-back) { border-radius: 8px !important; }
 @media (prefers-reduced-motion: reduce) {
   .velura-auth-page *, .velura-auth-page *::before, .velura-auth-page *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

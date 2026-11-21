@@ -1548,7 +1548,7 @@ select.profile-form__input {
   padding: 4px 14px;
   background: linear-gradient(135deg, #FDF8F8, #FAF0EB);
   border: 1px solid rgba(201, 123, 99, 0.2);
-  border-radius: 999px;
+  border-radius: 6px;
   font-size: 0.75rem;
   font-weight: 600;
   color: #844A5A;
@@ -1584,7 +1584,7 @@ select.profile-form__input {
   gap: 5px;
   padding: 6px 14px;
   background: #FDF2F4;
-  border-radius: 999px;
+  border-radius: 6px;
   font-size: 0.8125rem;
   font-weight: 600;
   color: #7C5454;
@@ -1675,7 +1675,7 @@ select.profile-form__input {
   color: #fff;
   font-size: 0.6875rem;
   font-weight: 700;
-  border-radius: 999px;
+  border-radius: 6px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   z-index: 2;
@@ -1828,7 +1828,7 @@ select.profile-form__input {
   padding: 5px 12px;
   background: #fff;
   border: 1px solid #EAE3DC;
-  border-radius: 999px;
+  border-radius: 6px;
   font-size: 0.8125rem;
   font-weight: 500;
   color: #1C1B1B;
@@ -2336,7 +2336,7 @@ body.page-profile :is(.account-sidebar__user-card, .account-sidebar__nav, .accou
   border-radius: var(--radius-lg, 20px);
   box-shadow: 0 8px 26px rgba(122, 40, 60, .06);
 }
-body.page-profile .account-sidebar__badge { color: var(--velura-maroon, #7A283C); background: var(--velura-blush, #FDF2F4); border-radius: 999px; }
+body.page-profile .account-sidebar__badge { color: var(--velura-maroon, #7A283C); background: var(--velura-blush, #FDF2F4); border-radius: 6px; }
 body.page-profile .account-sidebar__link:hover,
 body.page-profile .account-sidebar__link.is-active {
   color: var(--velura-maroon, #7A283C);

@@ -2,6 +2,7 @@ export interface HomeCarouselOptions {
   label: string;
   scrollRatio?: number;
   autoplay?: 'forward' | 'backward';
+  hideArrows?: boolean;
 }
 
 /**
@@ -19,25 +20,36 @@ export function bindHomeCarousel(track: HTMLElement | undefined, options: HomeCa
   section.classList.add('home-carousel');
   track.classList.add('home-carousel__track');
   track.setAttribute('tabindex', '0');
+
+  const container = track.parentElement || section;
+  container.classList.add('home-carousel__container');
+  container.querySelectorAll('.home-carousel__arrow, .home-carousel__progress').forEach((node) => node.remove());
   section.querySelectorAll('.home-carousel__arrow, .home-carousel__progress').forEach((node) => node.remove());
 
-  const prevBtn = document.createElement('button');
-  prevBtn.type = 'button';
-  prevBtn.className = 'home-carousel__arrow home-carousel__arrow--prev';
-  prevBtn.setAttribute('aria-label', `Trượt ${options.label} sang trái`);
-  prevBtn.innerHTML = '<span aria-hidden="true">‹</span>';
+  let prevBtn: HTMLButtonElement | null = null;
+  let nextBtn: HTMLButtonElement | null = null;
 
-  const nextBtn = document.createElement('button');
-  nextBtn.type = 'button';
-  nextBtn.className = 'home-carousel__arrow home-carousel__arrow--next';
-  nextBtn.setAttribute('aria-label', `Trượt ${options.label} sang phải`);
-  nextBtn.innerHTML = '<span aria-hidden="true">›</span>';
+  if (!options.hideArrows) {
+    prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = 'home-carousel__arrow home-carousel__arrow--prev';
+    prevBtn.setAttribute('aria-label', `Trượt ${options.label} sang trái`);
+    prevBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+
+    nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'home-carousel__arrow home-carousel__arrow--next';
+    nextBtn.setAttribute('aria-label', `Trượt ${options.label} sang phải`);
+    nextBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+
+    container.append(prevBtn, nextBtn);
+  }
 
   const progress = document.createElement('div');
   progress.className = 'home-carousel__progress';
   progress.setAttribute('aria-hidden', 'true');
   progress.innerHTML = '<span class="home-carousel__progress-bar"></span>';
-  section.append(prevBtn, nextBtn, progress);
+  container.append(progress);
   const motionPreference: Pick<MediaQueryList, 'matches' | 'addEventListener' | 'removeEventListener'> =
     typeof window !== 'undefined' && typeof window.matchMedia === 'function'
       ? window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -59,8 +71,12 @@ export function bindHomeCarousel(track: HTMLElement | undefined, options: HomeCa
     const travelRatio = hasOverflow ? current / maxScroll : 0;
     const maxTranslate = Math.max((1 / viewportRatio - 1) * 100, 0);
     section.classList.toggle('home-carousel--static', !hasOverflow);
-    prevBtn.disabled = !hasOverflow || current <= 4;
-    nextBtn.disabled = !hasOverflow || current >= maxScroll - 4;
+    if (prevBtn) {
+      prevBtn.disabled = !hasOverflow || current <= 4;
+    }
+    if (nextBtn) {
+      nextBtn.disabled = !hasOverflow || current >= maxScroll - 4;
+    }
     if (bar) {
       bar.style.width = `${viewportRatio * 100}%`;
       bar.style.transform = `translateX(${travelRatio * maxTranslate}%)`;
@@ -69,8 +85,12 @@ export function bindHomeCarousel(track: HTMLElement | undefined, options: HomeCa
 
   const onPrev = () => track.scrollBy({ left: -scrollStep(), behavior: scrollBehavior() });
   const onNext = () => track.scrollBy({ left: scrollStep(), behavior: scrollBehavior() });
-  prevBtn.addEventListener('click', onPrev);
-  nextBtn.addEventListener('click', onNext);
+  if (prevBtn) {
+    prevBtn.addEventListener('click', onPrev);
+  }
+  if (nextBtn) {
+    nextBtn.addEventListener('click', onNext);
+  }
   track.addEventListener('scroll', updateState, { passive: true });
   window.addEventListener('resize', updateState, { passive: true });
   requestAnimationFrame(updateState);
@@ -131,15 +151,19 @@ export function bindHomeCarousel(track: HTMLElement | undefined, options: HomeCa
 
   return () => {
     stopAutoplay();
-    prevBtn.removeEventListener('click', onPrev);
-    nextBtn.removeEventListener('click', onNext);
+    if (prevBtn) {
+      prevBtn.removeEventListener('click', onPrev);
+      prevBtn.remove();
+    }
+    if (nextBtn) {
+      nextBtn.removeEventListener('click', onNext);
+      nextBtn.remove();
+    }
     track.removeEventListener('scroll', updateState);
     window.removeEventListener('resize', updateState);
     section.removeEventListener('mouseenter', onEnter);
     section.removeEventListener('mouseleave', onLeave);
     motionPreference.removeEventListener('change', onMotionPreferenceChange);
-    prevBtn.remove();
-    nextBtn.remove();
     progress.remove();
   };
 }

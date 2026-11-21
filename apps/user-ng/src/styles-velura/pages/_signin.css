@@ -304,5 +304,23 @@ body.page-signin {
 .signup a { color: var(--terracotta, #A18265); font-weight: 600; text-decoration: none; }
 .signup a:hover { text-decoration: underline; }
 
+@media (max-width: 480px) {
+  .login-card {
+    padding: 32px 20px;
+    margin: 40px auto 24px;
+    width: calc(100% - 24px);
+  }
+  .brand-logo-link {
+    top: 16px;
+    left: 20px;
+  }
+  .oauth {
+    flex-direction: column;
+  }
+  .btn--guest {
+    width: 100%;
+  }
+}
+
 /* ─── Legacy image product positions (kept for reference, unused) ─── */
 /* .signin-stage .product--8 { left: -1.9%; top: 1%; ... } */

@@ -81,9 +81,6 @@
           <p class="ai-section__subtitle">Chưa có combo phù hợp. Hãy cập nhật Style Profile để nhận gợi ý mới.</p>
         } @else {
           <div class="combo-slider-wrapper">
-            <button class="combo-slider-btn prev" type="button" aria-label="Trước" (click)="scrollCombos(-1)">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </button>
             <div class="combo-grid" #comboTrack>
               @for (combo of combos(); track combo.name) {
                 <article class="combo-card" (click)="openCombo(combo)">
@@ -120,9 +117,6 @@
                 </article>
               }
             </div>
-            <button class="combo-slider-btn next" type="button" aria-label="Tiếp" (click)="scrollCombos(1)">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
           </div>
         }
       </section>
@@ -140,6 +134,14 @@
         <div id="profile-categories-container">
           @if (categories().length) {
             <div class="ai-category-tabs">
+              <button
+                type="button"
+                class="ai-tab-btn"
+                [class.is-active]="activeCategoryId() === 'all' || !activeCategoryId()"
+                (click)="selectCategory('all')"
+              >
+                Tất cả ({{ allProductsCount() }})
+              </button>
               @for (category of categories(); track category.category_id) {
                 <button
                   type="button"
@@ -151,18 +153,52 @@
                 </button>
               }
             </div>
-            <div class="ai-slider-wrapper u-inline-50666a574d">
-              <button class="ai-slider-nav prev" type="button" aria-label="Trượt trái" (click)="scrollProfile(-1)">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-              </button>
-              <div class="profile-slider" #profileTrack>
-                @for (product of profileProducts(); track product.product_id) {
+            <div class="ai-products-grid-wrapper">
+              <div class="ai-products-grid" #profileTrack>
+                @for (product of paginatedProducts(); track product.product_id) {
                   <app-product-card [product]="product" />
                 }
               </div>
-              <button class="ai-slider-nav next" type="button" aria-label="Trượt phải" (click)="scrollProfile(1)">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-              </button>
+
+              @if (totalPages() > 1) {
+                <nav class="ai-pagination" aria-label="Phân trang gợi ý phong cách">
+                  <button
+                    type="button"
+                    class="ai-pagination__btn ai-pagination__btn--prev"
+                    [disabled]="currentPage() === 1"
+                    (click)="prevPage()"
+                    aria-label="Trang trước"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    <span>Trước</span>
+                  </button>
+
+                  <div class="ai-pagination__pages">
+                    @for (page of pageNumbers(); track page) {
+                      <button
+                        type="button"
+                        class="ai-pagination__btn ai-pagination__page"
+                        [class.is-active]="currentPage() === page"
+                        [attr.aria-current]="currentPage() === page ? 'page' : null"
+                        (click)="goToPage(page)"
+                      >
+                        {{ page }}
+                      </button>
+                    }
+                  </div>
+
+                  <button
+                    type="button"
+                    class="ai-pagination__btn ai-pagination__btn--next"
+                    [disabled]="currentPage() === totalPages()"
+                    (click)="nextPage()"
+                    aria-label="Trang sau"
+                  >
+                    <span>Sau</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                  </button>
+                </nav>
+              }
             </div>
           }
         </div>

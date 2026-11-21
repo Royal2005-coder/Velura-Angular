@@ -169,7 +169,7 @@ export class ReturnFlowComponent {
     // hand transfer only exists for COD or for an order whose gateway already refused.
     if (this.isMoney()) {
       if (!this.canFinance() || !itemRefundAllowed(line) || this.refundable() <= 0) return false;
-      if (this.forensicsFrozen() && this.forensicsOverrideReason().trim().length < 15) return false;
+      if (this.forensicsFrozen() && (!this.canApprove() || this.forensicsOverrideReason().trim().length < 15)) return false;
       if (flow === 'stripe') return isGatewayRefundChannel(record.payment_kind);
       if (!this.canReconcileByHand(record)) return false;
       return !refundReceiverBlocked(record)
@@ -571,15 +571,39 @@ export class ReturnFlowComponent {
     this.disposition.set((event.target as HTMLSelectElement).value as AdminReturnDisposition);
   }
 
+  /** Quick audit templates for Super Admin overriding an AI Forensics freeze. */
+  readonly forensicsOverridePresets: readonly string[] = [
+    'Super Admin đã đối chiếu video mở hộp tại kho, xác nhận sản phẩm nguyên vẹn đúng SKU và phê duyệt ghi đè hoàn tiền.',
+    'Đã lập biên bản khiếu nại riêng với ĐVVC về sai lệch vỏ kiện; chấp thuận hoàn tiền cho khách hàng theo chính sách.',
+  ];
+
+  setForensicsOverrideQuick(text: string): void {
+    this.forensicsOverrideReason.set(text);
+  }
+
   /** Evidence uses the existing authenticated private-upload boundary, never a typed URL. */
   pickFile(kind: 'proof' | 'photos' | 'video', event: Event): void {
     const picker = event.target as HTMLInputElement;
     const files = Array.from(picker.files || []);
     picker.value = '';
-    if (kind === 'photos') this.pickupPhotos.set(files.filter((file) => file.type.startsWith('image/')).slice(0, 8));
-    else if (kind === 'video') this.pickupVideo.set(files.find((file) => ['video/mp4', 'video/webm'].includes(file.type) && file.size <= 50 * 1024 * 1024) || null);
-    else {
-      this.proofFile.set(files.find((file) => file.type.startsWith('image/')) || null);
+    const maxImageBytes = 10 * 1024 * 1024;
+    if (kind === 'photos') {
+      const valid = files.filter((file) => file.type.startsWith('image/') && file.size <= maxImageBytes).slice(0, 8);
+      if (files.some((file) => file.type.startsWith('image/') && file.size > maxImageBytes)) {
+        this.error.set('Ảnh vượt quá giới hạn 10 MB. Vui lòng chọn ảnh có dung lượng nhỏ hơn.');
+      }
+      this.pickupPhotos.set(valid);
+    } else if (kind === 'video') {
+      this.pickupVideo.set(files.find((file) => ['video/mp4', 'video/webm'].includes(file.type) && file.size <= 50 * 1024 * 1024) || null);
+    } else {
+      const candidate = files.find((file) => file.type.startsWith('image/')) || null;
+      if (candidate && candidate.size > maxImageBytes) {
+        this.proofFile.set(null);
+        this.error.set('Ảnh kiểm hàng vượt quá giới hạn 10 MB. Vui lòng nén ảnh hoặc chọn tệp nhỏ hơn.');
+      } else {
+        this.proofFile.set(candidate);
+        this.error.set(null);
+      }
       this.boxForensics.set(null);
       this.forensicsError.set(null);
     }

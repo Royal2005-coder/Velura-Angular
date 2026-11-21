@@ -21,7 +21,7 @@ import {
   refundReceiverStatus
 } from "./return-refund-receiver.js";
 import { listReturnEvidence, resolveEvidenceRef, storeReturnEvidence, type ReturnEvidenceKind } from "./return-evidence.js";
-import { executeReturnBoxForensics, listStoredReturnBoxForensics } from "./return-forensics.js";
+import { executeReturnBoxForensics, listStoredReturnBoxForensics, recordReturnBoxForensicsOverride } from "./return-forensics.js";
 import { recordRefundEvent } from "../payments/payment-metrics.js";
 import { GATEWAY_REFUND_LOOKUP_UNAVAILABLE, GATEWAY_REFUND_TIMEOUT, type RefundResult } from "../payments/stripe.js";
 import { earliestPickupSlot } from "./return-pickup.js";
@@ -89,11 +89,13 @@ export function createReturnService({
   refunds,
   listForensics,
   runForensics = executeReturnBoxForensics,
+  recordForensicsOverride = recordReturnBoxForensicsOverride,
 }: {
   repository: ReturnRepository;
   refunds?: ReturnRefundGateway;
   listForensics?: typeof listStoredReturnBoxForensics;
   runForensics?: typeof executeReturnBoxForensics;
+  recordForensicsOverride?: typeof recordReturnBoxForensicsOverride;
 }): ReturnService {
   const readForensics = listForensics ?? (repository.listBoxForensics ? (id: string) => repository.listBoxForensics!(id) : undefined);
   /** Linked chatbot cases use exclusive ownership, filtered replies and audited lifecycle actions. */
@@ -176,6 +178,10 @@ export function createReturnService({
           "RETURN_REFUND_FROZEN_BY_FORENSICS",
           "Hoàn tiền tự động đang tạm khóa do AI Giám định kiện hàng phát hiện rủi ro. Cần Quản trị cấp cao xác nhận lý do ghi đè (>= 15 ký tự)."
         );
+      }
+      const forensicsId = asString(latestForensics.forensics_id);
+      if (forensicsId) {
+        await recordForensicsOverride(forensicsId, context.profile?.user_id || context.authUser.id, overrideReason).catch(() => undefined);
       }
     }
     return { current, item, returnItemId, version };

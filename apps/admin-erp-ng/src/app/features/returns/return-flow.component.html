@@ -254,19 +254,37 @@
           </div>
           @if (fx.freeze_auto_refund) {
             <p class="flow-warning" style="margin-top: 8px;">
-              🔒 Hệ thống AI Forensics đang khóa hoàn tiền tự động do nghi vấn ngoại quan/tráo kiện. Chỉ <strong>Super Admin</strong> mới được phép ghi đè hoàn tiền kèm biên bản xác minh thực tế (tối thiểu 15 ký tự).
+              🔒 Hệ thống AI Forensics đang khóa hoàn tiền tự động do nghi vấn ngoại quan/tráo kiện. Chỉ <strong>Super Admin</strong> mới được phép ghi đè bằng chứng và mở khóa hoàn tiền kèm biên bản xác minh thực tế (tối thiểu 15 ký tự).
             </p>
-            <label class="erp-field">
-              <span>Căn cứ ghi đè khóa Forensics (Super Admin) <span class="erp-required" aria-hidden="true">*</span></span>
-              <textarea
-                class="erp-input"
-                rows="2"
-                [value]="forensicsOverrideReason()"
-                aria-required="true"
-                placeholder="Nhập biên bản đối chiếu video mở hộp / xác nhận lỗi thuộc ĐVVC (tối thiểu 15 ký tự)…"
-                (input)="setText('forensicsOverrideReason', $event)"
-              ></textarea>
-            </label>
+            @if (canApprove()) {
+              <div class="flow-note-shortcuts" style="margin-bottom: 8px;">
+                <span class="flow-facts__label">Mẫu căn cứ ghi đè (Super Admin):</span>
+                <div class="flow-facts__list">
+                  @for (preset of forensicsOverridePresets; track preset) {
+                    <button class="flow-fact" type="button" (click)="setForensicsOverrideQuick(preset)">{{ preset }}</button>
+                  }
+                </div>
+              </div>
+              <label class="erp-field">
+                <span>Căn cứ ghi đè khóa Forensics (Super Admin) <span class="erp-required" aria-hidden="true">*</span></span>
+                <textarea
+                  class="erp-input"
+                  rows="2"
+                  [value]="forensicsOverrideReason()"
+                  aria-required="true"
+                  placeholder="Nhập biên bản đối chiếu video mở hộp / xác nhận lỗi thuộc ĐVVC (tối thiểu 15 ký tự)…"
+                  (input)="setText('forensicsOverrideReason', $event)"
+                ></textarea>
+              </label>
+            } @else {
+              <p class="flow-warning" style="margin-top: 6px;">
+                Tài khoản hiện tại không có quyền <strong>Super Admin</strong> nên không thể ghi đè khóa AI Forensics. Vui lòng chuyển phiếu để Super Admin xác minh và mở khóa.
+              </p>
+            }
+          } @else if (fx.human_override_verdict) {
+            <p class="flow-note" style="margin-top: 8px; color: #2f6b46;">
+              ✓ Super Admin đã xác minh bằng chứng &amp; ghi đè khóa AI Forensics.
+            </p>
           }
         </div>
       }

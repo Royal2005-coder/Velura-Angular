@@ -423,11 +423,67 @@ export class AdminErpContentPage {
     { key: 'collections', label: 'Bộ sưu tập & Lookbook', count: this.collectionsList().length },
     { key: 'subscribers', label: 'Người nhận tin', count: this.counts().subscribers },
   ]);
-  readonly editorTabs = computed<readonly { key: EditorTab; label: string }[]>(() => [
-    { key: 'content', label: 'Nội dung' },
-    { key: 'seo', label: 'SEO' },
-    { key: 'products', label: `Sản phẩm (${this.draft()?.productIds.length ?? 0})` },
-  ]);
+  readonly editorTabs = computed<readonly { key: EditorTab; label: string; errorCount: number }[]>(() => {
+    const errs = this.errors();
+    const seoKeys = ['metaTitle', 'metaDescription', 'canonicalUrl', 'ogImageUrl', 'tags'];
+    const contentCount = errs['content'] ? 1 : 0;
+    const seoCount = seoKeys.filter((k) => Boolean(errs[k])).length;
+    const productsCount = errs['productIds'] ? 1 : 0;
+    return [
+      { key: 'content', label: 'Nội dung', errorCount: contentCount },
+      { key: 'seo', label: 'SEO', errorCount: seoCount },
+      { key: 'products', label: `Sản phẩm (${this.draft()?.productIds.length ?? 0})`, errorCount: productsCount },
+    ];
+  });
+
+  /** Actionable per-field error list with tab location so operators know exactly where to fix. */
+  readonly blogErrorSummary = computed<readonly { key: string; label: string; tab: EditorTab | 'general'; tabLabel: string; message: string }[]>(() => {
+    const errs = this.errors();
+    const meta: Record<string, { label: string; tab: EditorTab | 'general'; tabLabel: string }> = {
+      title: { label: 'Tiêu đề bài viết', tab: 'general', tabLabel: 'Thông tin chung' },
+      slug: { label: 'Đường dẫn (Slug)', tab: 'general', tabLabel: 'Thông tin chung' },
+      categorySlug: { label: 'Chuyên mục', tab: 'general', tabLabel: 'Thông tin chung' },
+      status: { label: 'Trạng thái xuất bản', tab: 'general', tabLabel: 'Thông tin chung' },
+      scheduledAt: { label: 'Thời gian hẹn đăng', tab: 'general', tabLabel: 'Thông tin chung' },
+      excerpt: { label: 'Tóm tắt bài viết', tab: 'general', tabLabel: 'Thông tin chung' },
+      imageUrl: { label: 'Ảnh đại diện', tab: 'general', tabLabel: 'Thông tin chung' },
+      author: { label: 'Tác giả', tab: 'general', tabLabel: 'Thông tin chung' },
+      readMinutes: { label: 'Thời gian đọc', tab: 'general', tabLabel: 'Thông tin chung' },
+      voucherCode: { label: 'Mã ưu đãi gắn bài', tab: 'general', tabLabel: 'Thông tin chung' },
+      content: { label: 'Nội dung bài viết', tab: 'content', tabLabel: 'Tab Nội dung' },
+      metaTitle: { label: 'Meta Title', tab: 'seo', tabLabel: 'Tab SEO' },
+      metaDescription: { label: 'Meta Description', tab: 'seo', tabLabel: 'Tab SEO' },
+      canonicalUrl: { label: 'Canonical URL', tab: 'seo', tabLabel: 'Tab SEO' },
+      ogImageUrl: { label: 'Ảnh chia sẻ (OG Image)', tab: 'seo', tabLabel: 'Tab SEO' },
+      tags: { label: 'Thẻ từ khóa (Tags)', tab: 'seo', tabLabel: 'Tab SEO' },
+      productIds: { label: 'Sản phẩm gắn kèm', tab: 'products', tabLabel: 'Tab Sản phẩm' },
+    };
+    return Object.entries(errs)
+      .filter(([, message]) => Boolean(message))
+      .map(([key, message]) => {
+        const info = meta[key] || { label: key, tab: 'general' as const, tabLabel: 'Thông tin chung' };
+        return { key, ...info, message };
+      });
+  });
+
+  /** Switches to the tab containing the invalid blog field and scrolls it into view. */
+  jumpToBlogError(item: { key: string; tab: EditorTab | 'general' }): void {
+    if (item.tab !== 'general') {
+      this.editorTab.set(item.tab);
+    }
+    setTimeout(() => {
+      const target =
+        document.querySelector<HTMLElement>(`.content-form [name="${item.key}"]`)
+        || document.querySelector<HTMLElement>('.content-form .erp-error');
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const focusable = target.matches('input,textarea,select,[contenteditable]')
+          ? target
+          : target.closest('.erp-field')?.querySelector<HTMLElement>('input,textarea,select,[contenteditable]');
+        focusable?.focus();
+      }
+    }, 40);
+  }
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
   readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, this.tab() === 'subscribers' ? 'người đăng ký' : 'bài viết'));
   readonly statusChoices = computed(() => blogStatusChoices(this.editing()?.status, !this.editing()));
@@ -2461,10 +2517,15 @@ export class AdminErpContentPage {
           this.errors.set({});
           return;
         }
-        const fieldErrors = code === 'CONTENT_VALIDATION' ? this.fieldErrors(error) : {};
+        const fieldErrors = this.fieldErrors(error);
         this.errors.set(fieldErrors);
         this.focusFirstError(fieldErrors);
-        this.notice.set(adminErrorMessage(error, 'Không lưu được bài viết.'));
+        const rawMsg = adminErrorMessage(error, 'Không lưu được bài viết.');
+        const hint =
+          !Object.keys(fieldErrors).length && rawMsg.includes('Không thể xử lý dữ liệu')
+            ? `${rawMsg} Kiểm tra lại: Đường dẫn (Slug) ở phần Thông tin chung có bị trùng bài khác, thời gian hẹn đăng, ảnh đại diện hoặc liên kết ở Tab SEO.`
+            : rawMsg;
+        this.notice.set(hint);
       },
     });
   }
@@ -2473,6 +2534,17 @@ export class AdminErpContentPage {
     if (errors['content']) this.editorTab.set('content');
     else if (errors['metaTitle'] || errors['metaDescription'] || errors['canonicalUrl'] || errors['ogImageUrl'] || errors['tags']) this.editorTab.set('seo');
     else if (errors['productIds']) this.editorTab.set('products');
+    const firstKey = Object.keys(errors)[0];
+    if (firstKey) {
+      const tab: EditorTab | 'general' = errors['content']
+        ? 'content'
+        : (errors['metaTitle'] || errors['metaDescription'] || errors['canonicalUrl'] || errors['ogImageUrl'] || errors['tags'])
+          ? 'seo'
+          : errors['productIds']
+            ? 'products'
+            : 'general';
+      this.jumpToBlogError({ key: firstKey, tab });
+    }
   }
 
   /**
@@ -2533,7 +2605,12 @@ export class AdminErpContentPage {
     const details = adminErrorDetails(error) || {};
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(details)) {
-      if (typeof value === 'string') out[key] = value;
+      if (typeof value === 'string' && value.trim()) {
+        out[key] = value.trim();
+      } else if (Array.isArray(value)) {
+        const first = value.find((item) => typeof item === 'string' && item.trim());
+        if (typeof first === 'string') out[key] = first.trim();
+      }
     }
     return out;
   }

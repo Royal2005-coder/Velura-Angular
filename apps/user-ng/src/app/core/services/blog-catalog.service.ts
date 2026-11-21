@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { Observable, catchError, map, of } from 'rxjs';
+import { Observable, catchError, finalize, map, of } from 'rxjs';
 import { BlogPost, BlogProductSummary } from '../models/blog-post';
 import { ApiService } from './api.service';
 
@@ -53,11 +53,16 @@ const CATEGORY_BADGE: Record<BlogPost['category'], string> = {
 export class BlogCatalogService {
   private readonly api = inject(ApiService);
   private readonly postsState = signal<BlogPost[]>([]);
+  /** True while the initial published journal list is still being fetched. */
+  readonly loading = signal(true);
 
   constructor() {
     this.api
       .get<ContentBlogList>('/api/content/blogs?limit=50')
-      .pipe(catchError(() => of({ rows: [] as ContentBlogRow[] })))
+      .pipe(
+        catchError(() => of({ rows: [] as ContentBlogRow[] })),
+        finalize(() => this.loading.set(false)),
+      )
       .subscribe((payload) => this.postsState.set((payload.rows || []).map((row) => this.toPost(row))));
   }
 

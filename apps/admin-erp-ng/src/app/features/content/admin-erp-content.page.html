@@ -554,7 +554,12 @@
               [class.is-active]="editorTab() === editorTabOption.key"
               [attr.aria-selected]="editorTab() === editorTabOption.key"
               (click)="setEditorTab(editorTabOption.key)"
-            >{{ editorTabOption.label }}</button>
+            >
+              {{ editorTabOption.label }}
+              @if (editorTabOption.errorCount > 0) {
+                <span class="erp-badge erp-badge--danger" style="margin-left: 6px;">{{ editorTabOption.errorCount }} lỗi</span>
+              }
+            </button>
           }
           <span class="content-compose__spacer"></span>
           <span class="content-compose__seo-score">{{ seoPassed() }}/{{ seoChecks().length }} tiêu chí SEO</span>
@@ -950,7 +955,21 @@
           <button class="erp-btn erp-btn--sm" type="button" (click)="reloadConflict()">Tải bản mới nhất vào trình soạn</button>
         </div>
       }
-      @if (notice() && draft()) {
+      @if (blogErrorSummary().length > 0) {
+        <div class="content-banner content-banner--warn" role="alert" style="display: flex; flex-direction: column; gap: 8px;">
+          <strong>Vui lòng sửa {{ blogErrorSummary().length }} mục chưa hợp lệ trước khi lưu:</strong>
+          @for (item of blogErrorSummary(); track item.key) {
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+              <span>
+                <strong>[{{ item.tabLabel }}] {{ item.label }}:</strong> {{ item.message }}
+              </span>
+              <button class="erp-btn erp-btn--sm" type="button" (click)="jumpToBlogError(item)">
+                Đi tới trường lỗi →
+              </button>
+            </div>
+          }
+        </div>
+      } @else if (notice() && draft()) {
         <p class="erp-error" role="alert">{{ notice() }}</p>
       }
     </form>

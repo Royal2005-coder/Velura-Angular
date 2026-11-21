@@ -84,7 +84,7 @@ export class PurchaseFlowPage {
   readonly voucherDeclined = signal(['true', '1'].includes(localStorage.getItem('checkout_voucher_declined') || ''));
   readonly preferredVoucher = localStorage.getItem('checkout_voucher_code') || this.voucherId();
   private quoteVersion = 0;
-  private guestCheckoutToken = '';
+  readonly guestCheckoutToken = signal('');
   readonly quote = computed(() => this.order() || {
     subtotal: this.serverQuote()?.subtotal ?? 0,
     shipping: this.serverQuote()?.shipping_fee ?? 0,
@@ -337,7 +337,7 @@ export class PurchaseFlowPage {
         };
         this.order.set(null);
         this.otpVerified.set(false);
-        this.guestCheckoutToken = '';
+        this.guestCheckoutToken.set('');
         this.busy.set(false);
         this.step.set('form');
         void this.router.navigateByUrl(this.member() ? '/checkout/user' : '/checkout/guest');
@@ -495,7 +495,7 @@ export class PurchaseFlowPage {
       clearTimeout(this.otpTimeout);
       this.sendingOtp.set(false);
       this.otpVerified.set(false);
-      this.guestCheckoutToken = '';
+      this.guestCheckoutToken.set('');
       this.otpPhone.set('');
       this.digits.set(['', '', '', '', '', '']);
       this.otpError.set('');
@@ -529,7 +529,7 @@ export class PurchaseFlowPage {
     }
     this.sendingOtp.set(true);
     this.otpVerified.set(false);
-    this.guestCheckoutToken = '';
+    this.guestCheckoutToken.set('');
     this.purchaseApi.sendOtp({
       full_name: this.address.name,
       phone,
@@ -566,10 +566,14 @@ export class PurchaseFlowPage {
     this.purchaseApi.verifyOtp(phone, otp).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (response) => {
         if (phone !== normalizePhone(this.address.phone)) return;
-        this.guestCheckoutToken = response.success === true ? response.guest_checkout_token || '' : '';
-        this.otpVerified.set(!!this.guestCheckoutToken);
-        this.otpError.set(this.guestCheckoutToken ? '' : response.message || 'Chưa xác thực được số điện thoại. Vui lòng thử lại.');
+        const token = response.success === true ? response.guest_checkout_token || '' : '';
+        this.guestCheckoutToken.set(token);
+        this.otpVerified.set(!!token);
+        this.otpError.set(token ? '' : response.message || 'Chưa xác thực được số điện thoại. Vui lòng thử lại.');
         this.sendingOtp.set(false);
+        if (token) {
+          this.refreshQuote();
+        }
       },
       error: (error: Error) => {
         if (phone !== normalizePhone(this.address.phone)) return;
@@ -582,7 +586,7 @@ export class PurchaseFlowPage {
   /** Cho phép khách vãng lai đặt lại trạng thái xác thực để gửi lại OTP hoặc đổi thông tin. */
   reverifyPhone(): void {
     this.otpVerified.set(false);
-    this.guestCheckoutToken = '';
+    this.guestCheckoutToken.set('');
     this.digits.set(['', '', '', '', '', '']);
     this.otpError.set('');
   }
@@ -762,7 +766,13 @@ export class PurchaseFlowPage {
     this.serverQuote.set(null);
     this.quoteLoading.set(true);
     this.quoteError.set('');
-    this.vouchers.quote(this.lines(), this.shippingMethod(), { voucherId: this.voucherId(), decline: this.voucherDeclined(), pointsSpent: this.member() ? this.requestedPoints() : 0 })
+    const guestToken = !this.member() ? this.guestCheckoutToken() || null : null;
+    this.vouchers.quote(this.lines(), this.shippingMethod(), {
+      voucherId: this.voucherId(),
+      decline: this.voucherDeclined(),
+      pointsSpent: this.member() ? this.requestedPoints() : 0,
+      ...(guestToken ? { guestCheckoutToken: guestToken } : {})
+    })
       .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
         next: (quote) => {
           if (version !== this.quoteVersion) return;
@@ -865,7 +875,7 @@ export class PurchaseFlowPage {
           ...payload,
           phone: normalizePhone(this.address.phone),
           otp_code: this.digits().join(''),
-          guest_checkout_token: this.guestCheckoutToken,
+          guest_checkout_token: this.guestCheckoutToken(),
           order: payload,
         });
     const userId = this.model.userId();
@@ -884,8 +894,10 @@ export class PurchaseFlowPage {
           const replacement = details?.replacement ?? null;
           this.voucherId.set(replacement?.voucher_id ?? null);
           this.voucherDeclined.set(!replacement?.voucher_id);
+          localStorage.setItem('checkout_voucher_declined', String(!replacement?.voucher_id));
           if (replacement?.voucher_id) {
             localStorage.setItem('checkout_voucher_id', replacement.voucher_id);
+            localStorage.setItem('checkout_voucher_code', replacement.code);
           } else {
             localStorage.removeItem('checkout_voucher_id');
             localStorage.removeItem('checkout_voucher_code');
@@ -897,7 +909,7 @@ export class PurchaseFlowPage {
         }
         if (error instanceof ApiRequestError && (error.code === 'CHECKOUT_PROOF_REQUIRED' || error.code === 'INVALID_OTP' || error.code === 'EXPIRED_OTP')) {
           this.otpVerified.set(false);
-          this.guestCheckoutToken = '';
+          this.guestCheckoutToken.set('');
         }
         this.error.set(error.message || 'Chưa thể tạo đơn. Thông tin của bạn đã được giữ lại.');
       },

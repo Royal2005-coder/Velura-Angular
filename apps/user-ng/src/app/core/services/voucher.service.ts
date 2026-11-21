@@ -15,6 +15,7 @@ export interface QuoteVoucherChoice {
   code?: string | null;
   decline?: boolean;
   pointsSpent?: number;
+  guestCheckoutToken?: string | null;
 }
 
 /**
@@ -38,36 +39,55 @@ export class VoucherService {
    * Lấy ví voucher đã đánh giá theo giỏ hàng hiện tại.
    * Dùng được cho cả khách vãng lai và thành viên.
    */
-  loadWallet(orderValue: number, shippingFee: number, items: readonly CartItemRef[] = []): Observable<VoucherWalletResponse> {
+  loadWallet(
+    orderValue: number,
+    shippingFee: number,
+    items: readonly CartItemRef[] = [],
+    guestCheckoutToken: string | null = null
+  ): Observable<VoucherWalletResponse> {
     const params = new URLSearchParams({
       orderValue: String(Math.max(0, Math.round(orderValue))),
       shippingFee: String(Math.max(0, Math.round(shippingFee)))
     });
     const compact = compactItems(items);
     if (compact) params.set('items', compact);
+    if (guestCheckoutToken) params.set('guestCheckoutToken', guestCheckoutToken);
     return this.api.get<VoucherWalletResponse>(`/api/user/vouchers?${params.toString()}`);
   }
 
   /**
    * Nhờ hệ thống tự chọn mã cho số tiền giảm thực tế lớn nhất.
    */
-  pickBest(orderValue: number, shippingFee: number, items: readonly CartItemRef[] = []): Observable<VoucherApplyResponse> {
+  pickBest(
+    orderValue: number,
+    shippingFee: number,
+    items: readonly CartItemRef[] = [],
+    guestCheckoutToken: string | null = null
+  ): Observable<VoucherApplyResponse> {
     return this.api.post<VoucherApplyResponse>('/api/user/vouchers/best', {
       order_value: orderValue,
       shipping_fee: shippingFee,
-      items: toWireItems(items)
+      items: toWireItems(items),
+      ...(guestCheckoutToken ? { guest_checkout_token: guestCheckoutToken } : {})
     });
   }
 
   /**
    * Áp một mã cụ thể do khách chọn hoặc tự nhập.
    */
-  applyCode(code: string, orderValue: number, shippingFee: number, items: readonly CartItemRef[] = []): Observable<VoucherApplyResponse> {
+  applyCode(
+    code: string,
+    orderValue: number,
+    shippingFee: number,
+    items: readonly CartItemRef[] = [],
+    guestCheckoutToken: string | null = null
+  ): Observable<VoucherApplyResponse> {
     return this.api.post<VoucherApplyResponse>('/api/user/vouchers/apply', {
       code,
       order_value: orderValue,
       shipping_fee: shippingFee,
-      items: toWireItems(items)
+      items: toWireItems(items),
+      ...(guestCheckoutToken ? { guest_checkout_token: guestCheckoutToken } : {})
     });
   }
 
@@ -82,7 +102,8 @@ export class VoucherService {
         voucher_id: choice.voucherId || null,
         code: choice.code || null,
         decline_voucher: choice.decline === true,
-        points_spent: choice.pointsSpent ?? 0
+        points_spent: choice.pointsSpent ?? 0,
+        ...(choice.guestCheckoutToken ? { guest_checkout_token: choice.guestCheckoutToken } : {})
       })
       .pipe(map((response) => response.quote));
   }

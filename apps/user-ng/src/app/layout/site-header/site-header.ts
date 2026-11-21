@@ -230,6 +230,8 @@ export class SiteHeader {
    * Gọi API thu hồi token trước khi xoá khỏi trình duyệt; mất mạng vẫn phải đăng xuất cục bộ
    * để người dùng không bị kẹt trong một phiên họ đã chủ động thoát.
    */
+  readonly logoutModalOpen = signal(false);
+
   logout(): void {
     this.api.logout().subscribe({
       next: () => this.finishLogout(),
@@ -237,8 +239,13 @@ export class SiteHeader {
     });
   }
 
+  closeLogoutModal(): void {
+    this.logoutModalOpen.set(false);
+  }
+
   private finishLogout(): void {
     this.auth.signOut();
+    this.logoutModalOpen.set(true);
     void this.router.navigateByUrl('/');
   }
 

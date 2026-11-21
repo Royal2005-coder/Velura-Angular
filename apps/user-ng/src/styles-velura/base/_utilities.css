@@ -42,8 +42,8 @@
 /* Global loading spinner. Pair with a `.visually-hidden` label so screen readers still hear the status. */
 .spinner {
   display: inline-block;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.75rem;
+  height: 1.75rem;
   border: 3px solid rgba(122, 40, 60, 0.18);
   border-top-color: var(--velura-rose, #7A283C);
   border-radius: 50%;
@@ -51,7 +51,127 @@
   animation: velura-spin 0.75s linear infinite;
 }
 .spinner--sm { width: 1rem; height: 1rem; border-width: 2px; }
-.loading-state { display: flex; align-items: center; justify-content: center; gap: 0.75rem; padding: 2rem 1rem; }
+.spinner--lg { width: 2.5rem; height: 2.5rem; border-width: 3.5px; }
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2.5rem 1.25rem;
+  color: var(--velura-maroon, #7A283C);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: center;
+}
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(250, 240, 243, 0.68);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.loading-overlay__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.875rem;
+  min-width: 240px;
+  max-width: 340px;
+  padding: 1.75rem 2rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(201, 79, 112, 0.22);
+  box-shadow: 0 20px 50px rgba(42, 26, 29, 0.14);
+  text-align: center;
+}
+.loading-overlay__text {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--velura-maroon, #7A283C);
+  line-height: 1.45;
+}
+
+.logout-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(42, 26, 29, 0.45);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+.logout-modal-card {
+  width: min(100%, 380px);
+  padding: 1.75rem 1.75rem 1.5rem;
+  border-radius: 20px;
+  background: #ffffff;
+  border: 1px solid var(--velura-border, #F2C2CF);
+  box-shadow: 0 24px 60px rgba(42, 26, 29, 0.2);
+  text-align: center;
+}
+.logout-modal-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 0.875rem;
+  border-radius: 999px;
+  background: var(--velura-blush, #FDF2F4);
+  color: var(--velura-maroon, #7A283C);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+.logout-modal-title {
+  margin: 0 0 0.5rem;
+  font-family: var(--velura-font-display, Georgia, serif);
+  font-size: 1.5rem;
+  color: var(--ink, #2A1A1D);
+}
+.logout-modal-desc {
+  margin: 0 0 1.25rem;
+  font-size: 0.925rem;
+  color: var(--muted, #7A5A62);
+  line-height: 1.5;
+}
+.logout-modal-actions {
+  display: flex;
+  gap: 0.625rem;
+  justify-content: center;
+}
+.logout-modal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 1.25rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.logout-modal-btn--primary {
+  background: var(--velura-maroon, #7A283C);
+  color: #ffffff;
+}
+.logout-modal-btn--secondary {
+  background: #ffffff;
+  color: var(--velura-maroon, #7A283C);
+  border-color: var(--velura-border, #F2C2CF);
+}
 
 @keyframes velura-spin {
   to { transform: rotate(360deg); }

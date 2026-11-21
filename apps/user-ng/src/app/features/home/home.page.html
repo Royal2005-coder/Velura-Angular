@@ -74,17 +74,10 @@
           <span class="hero__meta-sub">{{ activeLook().looksCount }}</span>
         </div>
         <div class="hero__buttons">
-          @if (isExternalLink(activeLook().link)) {
-            <a [href]="activeLook().link" target="_blank" rel="noopener noreferrer" class="btn btn--accent hero__cta-btn">
-              <span>KHÁM PHÁ BỘ SƯU TẬP</span>
-              <span class="hero__btn-arrow">→</span>
-            </a>
-          } @else {
-            <a [routerLink]="cmsLink(activeLook().link)" class="btn btn--accent hero__cta-btn">
-              <span>KHÁM PHÁ BỘ SƯU TẬP</span>
-              <span class="hero__btn-arrow">→</span>
-            </a>
-          }
+          <a routerLink="/collections" [queryParams]="{ collection: activeLook().id }" class="btn btn--accent hero__cta-btn">
+            <span>KHÁM PHÁ BỘ SƯU TẬP</span>
+            <span class="hero__btn-arrow">→</span>
+          </a>
           <a routerLink="/ai/style-quiz" class="btn btn--outline hero__btn--quiz">Style Quiz</a>
         </div>
         <!-- Indicators (Dots/Dash) -->
@@ -120,7 +113,7 @@
               [tabindex]="dist === 0 ? 0 : -1"
               (keydown.enter)="onModelClick(i)"
               (keydown.space)="$event.preventDefault(); onModelClick(i)"
-              [attr.aria-label]="look.title + (dist === 0 ? ' (Đang ở trung tâm, nhấn để xem sản phẩm)' : ' (Nhấn để đưa về trung tâm)')"
+              [attr.aria-label]="look.title + (dist === 0 ? ' (Đang ở trung tâm, nhấn để xem bộ sưu tập)' : ' (Nhấn để đưa về trung tâm)')"
             >
               <div class="runway-model__shadow" aria-hidden="true"></div>
               <img
@@ -135,7 +128,7 @@
               />
               @if (dist === 0) {
                 <div class="runway-model__badge">
-                  <span>Xem sản phẩm</span>
+                  <span>Xem bộ sưu tập</span>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="7" y1="17" x2="17" y2="7"></line>
                     <polyline points="7 7 17 7 17 17"></polyline>

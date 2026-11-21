@@ -8,8 +8,18 @@
     <h1>Thanh toán</h1>
     <p class="muted intro">Hoàn tất thông tin để đơn hàng được giao nhanh và chính xác.</p>
   </header>
+  @if (resumeLoading() || busy()) {
+    <div class="loading-overlay" role="status" aria-live="polite">
+      <div class="loading-overlay__card">
+        <span class="spinner spinner--lg" aria-hidden="true"></span>
+        <p class="loading-overlay__text">
+          {{ resumeLoading() ? 'Đang tải đơn hàng để tiếp tục thanh toán…' : 'Đang xử lý yêu cầu thanh toán, vui lòng đợi…' }}
+        </p>
+      </div>
+    </div>
+  }
   @if (resumeLoading()) {
-    <section class="panel loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải đơn hàng để tiếp tục thanh toán…</span></section>
+    <section class="panel loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span>Đang tải đơn hàng để tiếp tục thanh toán…</span></section>
   } @else if (resumeLocked() && error() && !order()) {
     <section class="panel">
       <p class="error" role="alert">{{ error() }}</p>
@@ -156,7 +166,6 @@
                     @if (otpError()) {
                       <p class="error" role="alert">{{ otpError() }}</p>
                     }
-                    <small class="muted">Mã OTP SMS thử nghiệm hiện tại là <strong>123456</strong>.</small>
                   }
                 </section>
                 <section class="form-section">
@@ -306,7 +315,13 @@
                   {{ verifying() ? 'Đang kiểm tra với cổng…' : 'Tôi đã thanh toán — kiểm tra lại' }}
                 </button>
                 @if (gateway().url) { <button type="button" class="secondary" (click)="openGatewayPage()">Mở trang thanh toán</button> }
-                <button type="button" class="secondary" (click)="useCod()">Đổi sang COD</button>
+                <button type="button" class="secondary" (click)="retry()" [disabled]="busy()">Tạo lại mã thanh toán</button>
+                @for (alt of switchableOnlineProviders(); track alt.code) {
+                  <button type="button" class="secondary" (click)="retry(alt.code === 'STRIPE' || alt.code === 'VNPAY' || alt.code === 'MOMO' ? alt.code : undefined)" [disabled]="busy()">
+                    Đổi sang {{ providerLabel[alt.code] }}
+                  </button>
+                }
+                <button type="button" class="secondary" (click)="useCod()" [disabled]="busy()">Đổi sang COD</button>
               </div>
               <p><small>Bạn đã thoát ra giữa chừng? Quay lại trang này bằng đơn hàng {{ order()?.id }}; mã QR và thời hạn phiên vẫn giữ nguyên.</small></p>
             </section>
@@ -333,8 +348,13 @@
                       {{ verifying() ? 'Đang kiểm tra với cổng…' : 'Kiểm tra thanh toán' }}
                     </button>
                   }
-                  <button (click)="retry()">Thanh toán lại</button
-                  ><button class="secondary" (click)="useCod()">Đổi sang COD</button
+                  <button type="button" (click)="retry()">Thanh toán lại</button>
+                  @for (alt of switchableOnlineProviders(); track alt.code) {
+                    <button type="button" class="secondary" (click)="retry(alt.code === 'STRIPE' || alt.code === 'VNPAY' || alt.code === 'MOMO' ? alt.code : undefined)">
+                      Đổi sang {{ providerLabel[alt.code] }}
+                    </button>
+                  }
+                  <button type="button" class="secondary" (click)="useCod()">Đổi sang COD</button
                   ><a
                     class="action secondary"
                     [routerLink]="member() ? '/account/orders' : '/guest/orders'"

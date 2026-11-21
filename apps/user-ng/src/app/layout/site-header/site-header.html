@@ -456,3 +456,16 @@
     </nav>
   </div>
 </header>
+@if (logoutModalOpen()) {
+  <div class="logout-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="logout-modal-title" (click)="closeLogoutModal()">
+    <div class="logout-modal-card" (click)="$event.stopPropagation()">
+      <div class="logout-modal-icon" aria-hidden="true">✓</div>
+      <h2 id="logout-modal-title" class="logout-modal-title">Đã đăng xuất</h2>
+      <p class="logout-modal-desc">Bạn đã đăng xuất khỏi tài khoản thành công.</p>
+      <div class="logout-modal-actions">
+        <button type="button" class="logout-modal-btn logout-modal-btn--primary" (click)="closeLogoutModal()">Đóng</button>
+        <a routerLink="/auth/signin" class="logout-modal-btn logout-modal-btn--secondary" (click)="closeLogoutModal()">Đăng nhập lại</a>
+      </div>
+    </div>
+  </div>
+}

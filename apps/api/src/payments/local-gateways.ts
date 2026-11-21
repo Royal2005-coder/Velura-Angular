@@ -283,19 +283,31 @@ export async function openLocalGateway(orderId: string, provider: LocalGateway, 
       extraData: "", requestType: "captureWallet", autoCapture: true, lang: "vi"
     };
     request.signature = momoSignature(request, MOMO_CREATE_KEYS, credentials.secret);
-    let response: Response;
-    try {
-      response = await fetch(`${endpoints.pay}/create`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal: AbortSignal.timeout(35000)
-      });
-    } catch (error) {
-      throw new HttpError(502, "GATEWAY_OPEN_FAILED", "Không kết nối được MoMo.", undefined, { reason: error instanceof Error && error.name === "TimeoutError" ? "TIMEOUT" : "NETWORK", provider });
-    }
-    const result = asJsonObject(await response.json().catch(() => ({})));
-    if (!response.ok || Number(result.resultCode) !== 0) {
-      throw new HttpError(502, "MOMO_CHECKOUT_FAILED", "Chưa mở được phiên MoMo. Vui lòng thử lại trên đơn hàng hiện tại.", undefined, {
-        reason: "PROVIDER_REJECTED", provider, http_status: response.status, result_code: result.resultCode, provider_message: asString(result.message)
-      });
+    let result: JsonObject;
+    if (credentials.simulator) {
+      // Execute MoMo simulator in-process so sandbox QR creation never depends on public HTTPS hairpinning.
+      const { createSimulatedMomoPayment } = await import("./gateway-simulator.js");
+      result = createSimulatedMomoPayment(request, credentials);
+      if (Number(result.resultCode) !== 0) {
+        throw new HttpError(502, "MOMO_CHECKOUT_FAILED", "Chưa mở được phiên MoMo. Vui lòng thử lại trên đơn hàng hiện tại.", undefined, {
+          reason: "PROVIDER_REJECTED", provider, result_code: result.resultCode, provider_message: asString(result.message)
+        });
+      }
+    } else {
+      let response: Response;
+      try {
+        response = await fetch(`${endpoints.pay}/create`, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal: AbortSignal.timeout(35000)
+        });
+      } catch (error) {
+        throw new HttpError(502, "GATEWAY_OPEN_FAILED", "Không kết nối được MoMo.", undefined, { reason: error instanceof Error && error.name === "TimeoutError" ? "TIMEOUT" : "NETWORK", provider });
+      }
+      result = asJsonObject(await response.json().catch(() => ({})));
+      if (!response.ok || Number(result.resultCode) !== 0) {
+        throw new HttpError(502, "MOMO_CHECKOUT_FAILED", "Chưa mở được phiên MoMo. Vui lòng thử lại trên đơn hàng hiện tại.", undefined, {
+          reason: "PROVIDER_REJECTED", provider, http_status: response.status, result_code: result.resultCode, provider_message: asString(result.message)
+        });
+      }
     }
     if (result.partnerCode !== credentials.merchantId || result.orderId !== reference || result.requestId !== reference || Number(result.amount) !== Number(attempt.amount)
       || !momoCreateResponseSigned(result, credentials)) {

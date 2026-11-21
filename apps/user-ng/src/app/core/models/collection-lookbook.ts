@@ -121,25 +121,68 @@ function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : [];
 }
 
+/** Official editorial lookbook covers & homepage runway models from the KAN-65 redesign. */
+const OFFICIAL_COLLECTION_ASSETS: Readonly<Record<string, { cover: string; runway: string }>> = {
+  'soft-ceremony': {
+    cover: '/assets/images/collections/soft-ceremony-cover.png',
+    runway: '/assets/images/models/runway-soft-ceremony.png',
+  },
+  'the-urban-rhythm': {
+    cover: '/assets/images/collections/the-urban-rhythm-cover.png',
+    runway: '/assets/images/models/runway-the-urban-rhythm.png',
+  },
+  'weekend-escape': {
+    cover: '/assets/images/collections/weekend-escape-cover.png',
+    runway: '/assets/images/models/runway-weekend-escape.png',
+  },
+  'midnight-mirage': {
+    cover: '/assets/images/collections/midnight-mirage-cover.png',
+    runway: '/assets/images/models/runway-midnight-mirage.png',
+  },
+  'the-afterglow': {
+    cover: '/assets/images/collections/the-afterglow-cover.png',
+    runway: '/assets/images/models/runway-the-afterglow.png',
+  },
+};
+
+function isLegacyCutoutPath(url: string): boolean {
+  return /^\/assets\/images\/models\/model_cutout_\d+\.png$/i.test(url.trim());
+}
+
 /**
  * Chuẩn hóa một bản ghi collection (snake_case từ `GET /api/v1/collections`) sang `CollectionLookbook`.
  * Trường mới thiếu (API/migration cũ) rơi về mặc định: `heroMode: 'models'`, `showOnHome: false`, `productIds: []`.
  */
 export function normalizeCollectionLookbook(raw: CollectionLookbookSource): CollectionLookbook {
   const id = raw.code || raw.id || 'collection';
+  const official = OFFICIAL_COLLECTION_ASSETS[id];
   const models = stringList(raw.models);
   const sortOrder = raw.home_sort_order ?? raw.homeSortOrder;
   const meta =
     typeof raw.styling_metadata === 'object' && raw.styling_metadata !== null && !Array.isArray(raw.styling_metadata)
       ? (raw.styling_metadata as Record<string, unknown>)
       : {};
+  const rawBanner = raw.banner_url || raw.banner || '';
+  const rawHomeModel = raw.home_model_url || raw.homeModel || '';
+  const rawHeroMode = (raw.hero_mode ?? raw.heroMode) === 'cover' ? 'cover' : 'models';
+  const usesLegacyCutouts = models.length === 0 || models.every(isLegacyCutoutPath);
+  const resolvedHeroMode: CollectionHeroMode =
+    official && rawHeroMode === 'models' && usesLegacyCutouts ? 'cover' : rawHeroMode;
+  const resolvedBanner =
+    official && (!rawBanner || rawBanner.includes('cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images'))
+      ? official.cover
+      : rawBanner;
+  const resolvedHomeModel =
+    official && (!rawHomeModel || isLegacyCutoutPath(rawHomeModel))
+      ? official.runway
+      : rawHomeModel;
   return {
     id,
     code: id,
     name: raw.name || '',
     label: raw.label || raw.name || '',
     quote: raw.quote || '',
-    banner: raw.banner_url || raw.banner || '',
+    banner: resolvedBanner,
     decor: raw.decor_url || raw.decor || '/assets/images/collections/soft-ceremony-decor.png',
     story: stringList(raw.story_paragraphs ?? raw.story),
     badge: raw.badge || 'ELEGANT',
@@ -162,8 +205,8 @@ export function normalizeCollectionLookbook(raw: CollectionLookbookSource): Coll
       '/assets/images/models/model_cutout_4.png',
       '/assets/images/models/model_cutout_5.png',
     ],
-    heroMode: (raw.hero_mode ?? raw.heroMode) === 'cover' ? 'cover' : 'models',
-    homeModel: raw.home_model_url || raw.homeModel || '',
+    heroMode: resolvedHeroMode,
+    homeModel: resolvedHomeModel,
     showOnHome: (raw.show_on_home ?? raw.showOnHome) === true,
     homeSortOrder: typeof sortOrder === 'number' && Number.isFinite(sortOrder) ? sortOrder : 0,
     productIds: stringList(raw.product_ids ?? raw.productIds),
@@ -173,14 +216,14 @@ export function normalizeCollectionLookbook(raw: CollectionLookbookSource): Coll
   };
 }
 
-/** Mặc định cho các trường CMS mới của fallback tĩnh: hero `models`, không lên runway trang chủ, không có combo chọn sẵn. */
+/** Mặc định cho các trường CMS mới của fallback tĩnh: hero `cover` (ảnh bộ sưu tập chính thức). */
 const STATIC_CMS_DEFAULTS: Pick<
   CollectionLookbook,
   'heroMode' | 'homeModel' | 'showOnHome' | 'homeSortOrder' | 'productIds' | 'coverX' | 'coverY' | 'coverZoom'
 > = {
-  heroMode: 'models',
+  heroMode: 'cover',
   homeModel: '',
-  showOnHome: false,
+  showOnHome: true,
   homeSortOrder: 0,
   productIds: [],
   coverX: 50,

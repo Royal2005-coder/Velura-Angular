@@ -214,6 +214,13 @@ export class CartPage {
     return toPublicAsset(item.product_image, '/assets/images/placeholder.jpg');
   }
 
+  onImageError(event: Event): void {
+    const target = event.target as HTMLImageElement;
+    if (target && !target.src.endsWith('/assets/images/placeholder.jpg')) {
+      target.src = '/assets/images/placeholder.jpg';
+    }
+  }
+
   /**
    * Lists combo component names for the original "Gồm:" tag.
    */

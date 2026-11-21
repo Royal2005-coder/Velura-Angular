@@ -62,6 +62,13 @@ export class ProductCard {
   readonly excerpt = computed(() => (this.product().description || '').trim());
   readonly rating = computed(() => Number(this.product().rating_value || 0).toFixed(1));
   readonly saved = computed(() => this.wishlist.has(this.product().product_id));
+
+  onImageError(event: Event): void {
+    const target = event.target as HTMLImageElement;
+    if (target && !target.src.endsWith('/assets/images/placeholder.jpg')) {
+      target.src = '/assets/images/placeholder.jpg';
+    }
+  }
   /**
    * Unique catalog color swatches from the original product variants.
    */

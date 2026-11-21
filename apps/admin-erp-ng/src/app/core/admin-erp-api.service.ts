@@ -888,6 +888,8 @@ export interface AdminReturnBoxForensicsResult {
   confidence_score: number;
   requires_human_review: boolean;
   freeze_auto_refund: boolean;
+  reviewed_by?: string | null;
+  human_override_verdict?: string | null;
   suggested_qa_failed_codes: readonly string[];
   suggested_disposition: AdminReturnDisposition;
   discrepancy_evidence: readonly string[];

@@ -254,11 +254,15 @@ body.page-quiz-flow {
 .quiz-slider-value-box {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   background: #FFF5F7;
-  border: 1.5px solid rgba(242, 194, 207, 0.85);
-  border-radius: 10px;
-  padding: 3px 10px;
+  border: 1px solid rgba(242, 194, 207, 0.85);
+  border-radius: 8px !important;
+  padding: 3px 12px;
+  min-width: 72px;
+  height: 34px;
+  box-sizing: border-box;
   transition: all 0.2s ease;
   cursor: text;
 }
@@ -271,18 +275,28 @@ body.page-quiz-flow {
 }
 
 .quiz-slider-number-input {
-  width: 48px;
-  border: none;
-  background: transparent;
-  outline: none;
+  width: 40px;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
   font-family: var(--velura-font-ui, "Inter", sans-serif);
-  font-size: 1.125rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--velura-maroon, #7A283C);
   text-align: right;
-  padding: 0;
-  margin: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1;
   -moz-appearance: textfield;
+}
+
+.quiz-slider-number-input:focus {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  background: transparent !important;
 }
 
 .quiz-slider-number-input::-webkit-outer-spin-button,
@@ -292,10 +306,11 @@ body.page-quiz-flow {
 }
 
 .quiz-slider-unit {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: #7A5A62;
   user-select: none;
+  line-height: 1;
 }
 
 .quiz-slider-input {
@@ -1317,12 +1332,13 @@ body.page-quiz-flow {
    ============================================================ */
 .quiz-split-card {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  overflow: hidden;
+  grid-template-columns: 280px minmax(0, 1fr);
   border: 1px solid #EEDDE0;
   border-radius: 28px;
   background: #FFFCFB;
   box-shadow: 0 8px 30px rgba(122, 40, 60, 0.08);
+  position: relative;
+  align-items: stretch;
 }
 
 .quiz-split-card.u-hidden,
@@ -1331,19 +1347,27 @@ body.page-quiz-flow {
 }
 
 .quiz-side-panel {
+  position: relative;
+  background: linear-gradient(155deg, #F8E9EC 0%, #FFF7F6 60%, #E6ECD5 100%);
+  border-radius: 27px 0 0 27px;
+  padding: 32px 24px;
+}
+
+.quiz-side-panel__inner {
+  position: sticky;
+  top: 96px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   min-height: 520px;
-  overflow: hidden;
-  padding: 32px 26px;
-  background: linear-gradient(150deg, #F8E9EC 0%, #FFF7F6 65%, #E6ECD5 100%);
-  position: relative;
+  height: 100%;
+  max-height: min(640px, calc(100vh - 120px));
 }
 
 .quiz-side-panel__top {
   position: relative;
   z-index: 2;
+  flex-shrink: 0;
 }
 
 .quiz-side-panel__tag {
@@ -1356,19 +1380,21 @@ body.page-quiz-flow {
 }
 
 .quiz-side-panel__quote {
-  margin: 16px 0 0;
+  margin: 14px 0 0;
   color: #7A283C;
   font-family: var(--font-heading, "Cormorant Garamond", Georgia, serif);
-  font-size: 1.875rem;
+  font-size: 1.75rem;
   font-style: italic;
-  line-height: 1.05;
+  line-height: 1.1;
   font-weight: 500;
 }
 
 .quiz-side-panel__art {
   position: relative;
-  height: 250px;
-  margin: 16px 0;
+  flex: 1 1 auto;
+  min-height: 280px;
+  max-height: 400px;
+  margin: 12px 0;
   display: flex;
   justify-content: center;
   align-items: flex-end;
@@ -1376,22 +1402,40 @@ body.page-quiz-flow {
 
 .quiz-side-panel__model {
   display: block;
-  max-height: 240px;
+  height: 100%;
+  max-height: clamp(280px, 44vh, 380px);
   width: auto;
   object-fit: contain;
-  filter: drop-shadow(0 12px 14px rgba(60, 20, 30, 0.12));
+  object-position: bottom;
+  filter: drop-shadow(0 14px 18px rgba(60, 20, 30, 0.15));
   position: relative;
   z-index: 2;
+  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.quiz-side-panel__pedestal {
+  position: absolute;
+  bottom: 0px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 140px;
+  height: 14px;
+  background: radial-gradient(ellipse at center, rgba(122, 40, 60, 0.18) 0%, rgba(122, 40, 60, 0.04) 55%, transparent 75%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .quiz-side-panel__watermark {
   position: absolute;
-  right: -8px;
-  top: 45%;
+  right: -4px;
+  bottom: 22%;
   font-family: var(--font-heading, "Cormorant Garamond", Georgia, serif);
-  font-size: 3.5rem;
+  font-size: clamp(3.2rem, 3.8vw, 4.2rem);
   font-style: italic;
-  color: rgba(255, 255, 255, 0.85);
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.88);
+  letter-spacing: -0.02em;
   pointer-events: none;
   z-index: 1;
   user-select: none;
@@ -1400,10 +1444,11 @@ body.page-quiz-flow {
 .quiz-side-panel__hint {
   color: #806A6D;
   font-size: 0.6875rem;
-  line-height: 1.6;
+  line-height: 1.5;
   margin: 0;
   position: relative;
   z-index: 2;
+  flex-shrink: 0;
 }
 
 .quiz-main-panel {
@@ -1411,6 +1456,7 @@ body.page-quiz-flow {
   padding: 36px 40px 28px;
   display: flex;
   flex-direction: column;
+  border-radius: 0 27px 27px 0;
 }
 
 .quiz-step-eyebrow {
@@ -1464,9 +1510,32 @@ body.page-quiz-flow {
   }
   .quiz-main-panel {
     padding: 24px 20px 20px;
+    border-radius: 20px;
   }
   .quiz-actions-hint {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .quiz-main-panel {
+    padding: 20px 14px 16px;
+    border-radius: 18px;
+  }
+  .quiz-step-title {
+    font-size: 1.3rem;
+  }
+  .quiz-actions {
+    margin-top: 24px;
+    padding-top: 16px;
+    gap: 8px;
+  }
+  .quiz-actions .btn {
+    padding: 10px 16px;
+    font-size: 0.8125rem;
+  }
+  .quiz-slider-value-box {
+    padding: 3px 10px;
   }
 }
 
@@ -1511,7 +1580,7 @@ body.page-quiz-flow {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border-radius: 999px;
+  border-radius: 6px !important;
   border: 1px solid #EBCBD1;
   background: rgba(255, 255, 255, 0.85);
   padding: 6px 16px;
@@ -1891,7 +1960,7 @@ body.page-quiz-flow {
 
 .quiz-result-cta-btn {
   padding: 14px 44px;
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: #7A283C;
   color: #ffffff;
   font-size: 0.875rem;
@@ -1912,7 +1981,7 @@ body.page-quiz-flow {
 
 .quiz-result-retake-btn {
   padding: 14px 34px;
-  border-radius: 999px;
+  border-radius: 8px !important;
   border: 1px solid #E7CDD3;
   color: #7A283C;
   font-size: 0.875rem;

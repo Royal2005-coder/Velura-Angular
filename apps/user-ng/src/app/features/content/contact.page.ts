@@ -1,8 +1,10 @@
 import { Component, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { useBodyClass } from '../../core/utils/body-class';
 
 @Component({
   selector: 'app-contact-page',
+  imports: [RouterLink],
   templateUrl: './contact.page.html',
 })
 export class ContactPage {

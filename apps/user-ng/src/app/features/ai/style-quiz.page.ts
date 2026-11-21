@@ -4,9 +4,72 @@ import { Router, RouterLink, UrlTree } from '@angular/router';
 import { Observable, Subject } from 'rxjs';
 import { StyleProfileService } from '../../core/services/style-profile.service';
 import { AuthService } from '../../core/services/auth.service';
+import { COLLECTION_LOOKBOOKS } from '../../core/models/collection-lookbook';
 import type { StyleQuizAnswers, StyleQuizDraft } from '../../core/models/style-profile.interface';
 import { useBodyClass } from '../../core/utils/body-class';
 import { PersonalColorComponent } from './personal-color.component';
+
+export interface QuizSideEditorial {
+  tag: string;
+  quote: string;
+  hint: string;
+  model: string;
+  collectionName: string;
+}
+
+const QUIZ_EDITORIAL_BY_STEP: Record<
+  number,
+  { tag: string; quote: string; hint: string; defaultCollection: string }
+> = {
+  1: {
+    tag: 'A NOTE FOR YOU',
+    quote: 'Gu thẩm mỹ không cần khuôn mẫu.',
+    hint: 'Chọn nhiều hơn một đáp án khi câu hỏi cho phép.',
+    defaultCollection: 'the-urban-rhythm',
+  },
+  2: {
+    tag: 'A NOTE FOR YOU',
+    quote: 'Sự vừa vặn tạo nên sự thoải mái tự nhiên.',
+    hint: 'Thông tin chỉ dùng để tinh chỉnh gợi ý size chuẩn xác.',
+    defaultCollection: 'soft-ceremony',
+  },
+  3: {
+    tag: 'A NOTE FOR YOU',
+    quote: 'Mỗi đường nét đều có tỷ lệ hoàn mỹ riêng.',
+    hint: 'Bạn có thể bỏ qua nếu chưa tiện chia sẻ.',
+    defaultCollection: 'the-afterglow',
+  },
+  4: {
+    tag: 'A NOTE FOR YOU',
+    quote: 'Không có dáng nào là tiêu chuẩn duy nhất.',
+    hint: 'Mỗi dáng người đều có phom đồ tôn trọn ưu điểm.',
+    defaultCollection: 'soft-ceremony',
+  },
+  5: {
+    tag: 'A NOTE FOR YOU',
+    quote: 'Sắc màu rực rỡ nhất là màu tôn trọn làn da bạn.',
+    hint: 'Chọn cảm nhận gần nhất với ánh sáng tự nhiên của làn da.',
+    defaultCollection: 'midnight-mirage',
+  },
+  6: {
+    tag: 'A NOTE FOR YOU',
+    quote: 'Phong cách là cách bạn kể câu chuyện của mình.',
+    hint: 'Chọn phong cách khiến bạn thấy thoải mái và là chính mình nhất.',
+    defaultCollection: 'the-urban-rhythm',
+  },
+  7: {
+    tag: 'A NOTE FOR YOU',
+    quote: 'Bảng màu tạo nên cảm xúc cho cả ngày dài.',
+    hint: 'Chọn tối đa ba sắc màu bạn yêu thích nhất.',
+    defaultCollection: 'soft-ceremony',
+  },
+  8: {
+    tag: 'A NOTE FOR YOU',
+    quote: 'Đầu tư cho phong cách là đầu tư cho chính mình.',
+    hint: 'Chọn mức chi tiêu bạn cảm thấy thoải mái nhất.',
+    defaultCollection: 'weekend-escape',
+  },
+};
 
 const COLOR_HEX_MAP: Record<string, string> = {
   Kem: '#F4E5DA',
@@ -93,6 +156,48 @@ export class StyleQuizPage {
   readonly displayStep = computed(() => (this.showSummary() ? 8 : this.step()));
   readonly progressPercent = computed(() => (this.showSummary() ? 100 : (this.step() / 8) * 100));
   readonly nextLabel = computed(() => (this.showSummary() ? this.quizSaved() ? 'Xem gợi ý' : 'Lưu hồ sơ & chọn phân tích màu' : this.step() === 8 ? 'Xem tóm tắt' : 'Tiếp tục'));
+
+  readonly selectedContext = signal<string>('Office');
+  readonly selectedMainStyle = signal<string>('Minimalist');
+  readonly selectedBodyShape = signal<string>('Hourglass');
+
+  readonly currentEditorial = computed<QuizSideEditorial>(() => {
+    const step = this.step();
+    const config = QUIZ_EDITORIAL_BY_STEP[step] || QUIZ_EDITORIAL_BY_STEP[1];
+
+    let collectionId = config.defaultCollection;
+    if (step === 1) {
+      const ctx = this.selectedContext();
+      if (ctx === 'Party') collectionId = 'the-afterglow';
+      else if (ctx === 'Travel' || ctx === 'Home') collectionId = 'weekend-escape';
+      else if (ctx === 'School' || ctx === 'Sport') collectionId = 'midnight-mirage';
+      else if (ctx === 'Casual') collectionId = 'soft-ceremony';
+      else collectionId = 'the-urban-rhythm';
+    } else if (step === 4) {
+      const shape = this.selectedBodyShape();
+      if (shape === 'Hourglass' || shape === 'Inverted Triangle') collectionId = 'the-afterglow';
+      else if (shape === 'Rectangle') collectionId = 'the-urban-rhythm';
+      else collectionId = 'soft-ceremony';
+    } else if (step === 6 || step === 7) {
+      const st = this.selectedMainStyle();
+      if (st === 'Romantic' || st === 'Classic') collectionId = 'soft-ceremony';
+      else if (st === 'Elegant') collectionId = 'the-afterglow';
+      else if (st === 'Street' || st === 'Sporty') collectionId = 'midnight-mirage';
+      else if (st === 'Boho') collectionId = 'weekend-escape';
+      else collectionId = 'the-urban-rhythm';
+    }
+
+    const lookbook = COLLECTION_LOOKBOOKS.find((c) => c.id === collectionId) || COLLECTION_LOOKBOOKS[0];
+
+    return {
+      tag: 'A NOTE FOR YOU',
+      quote: config.quote,
+      hint: config.hint,
+      model: `/assets/images/models/runway-${lookbook.id}.png`,
+      collectionName: lookbook.name,
+    };
+  });
+
   private exitDecision: Subject<boolean | UrlTree> | null = null;
   private exitApproved = false;
 
@@ -101,6 +206,12 @@ export class StyleQuizPage {
     afterNextRender(() => {
       this.restoreAnswers();
       this.syncStepDom();
+      const ctx = this.selectedValue('context');
+      if (ctx) this.selectedContext.set(ctx);
+      const shape = this.selectedValue('body-shape');
+      if (shape) this.selectedBodyShape.set(shape);
+      const styles = this.selectedValues('main-style');
+      if (styles.length) this.selectedMainStyle.set(styles[0]);
     });
   }
 
@@ -157,11 +268,27 @@ export class StyleQuizPage {
     if (multi) {
       target.classList.toggle('is-selected');
       this.persistDraft();
+      const groupName = group.getAttribute('data-group');
+      if (groupName === 'main-style') {
+        const vals = this.selectedValues('main-style');
+        if (vals.length) this.selectedMainStyle.set(vals[0]);
+      }
       return;
     }
     group.querySelectorAll('[data-value]').forEach((node) => node.classList.remove('is-selected'));
     target.classList.add('is-selected');
     this.persistDraft();
+    const groupName = group.getAttribute('data-group');
+    if (groupName === 'context') {
+      const val = target.getAttribute('data-value') || '';
+      if (val) this.selectedContext.set(val);
+    } else if (groupName === 'body-shape') {
+      const val = target.getAttribute('data-value') || '';
+      if (val) this.selectedBodyShape.set(val);
+    } else if (groupName === 'main-style') {
+      const val = target.getAttribute('data-value') || '';
+      if (val) this.selectedMainStyle.set(val);
+    }
   }
 
   /** Switches between AI Vision and manual skin-tone selection mode. */
@@ -509,6 +636,9 @@ export class StyleQuizPage {
     select('body-shape', answers.body_shape ? [answers.body_shape] : []); select('skin-tone', answers.skin_tone ? [answers.skin_tone] : []);
     select('main-style', answers.style_tags || []); select('colors', answers.favorite_colors || []);
     select('budget', answers.budget_range ? [answers.budget_range] : []);
+    if (answers.preferred_occasions?.[0]) this.selectedContext.set(answers.preferred_occasions[0]);
+    if (answers.style_tags?.[0]) this.selectedMainStyle.set(answers.style_tags[0]);
+    if (answers.body_shape) this.selectedBodyShape.set(answers.body_shape);
     const heightLabel = document.getElementById('height-val');
     const weightLabel = document.getElementById('weight-val');
     if (heightLabel) heightLabel.textContent = String(this.height());

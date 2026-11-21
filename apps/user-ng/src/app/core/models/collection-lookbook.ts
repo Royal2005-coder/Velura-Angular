@@ -196,8 +196,7 @@ const STATIC_LOOKBOOK_CONTENT: StaticLookbookContent[] = [
     name: 'Soft Ceremony',
     label: 'Thanh lịch & Kiêu sa',
     quote: 'Thanh lịch không phải là nổi bật, mà là biết cách tôn lên chính mình.',
-    banner:
-      'https://cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images@main/categories/set-do/velura_Soft-Ceremony_cover.png',
+    banner: '/assets/images/collections/soft-ceremony-cover.png',
     decor: '/assets/images/collections/soft-ceremony-decor.png',
     badge: 'ELEGANT',
     homeStory:
@@ -210,16 +209,13 @@ const STATIC_LOOKBOOK_CONTENT: StaticLookbookContent[] = [
     storyDesc:
       'Những chuyển động mềm như lụa, sắc hoa phai và phom dáng thanh thoát. Cho những dịp đặc biệt — và cả những ngày rất đỗi bình thường.',
     exploreCta: 'Khám phá bộ sưu tập',
-    categoryLink: '/products?category=dam-vay',
+    categoryLink: '/products?collection=Soft+Ceremony',
     productsSub: 'SELECTED FOR YOU',
     productsTitle: 'Những thiết kế nổi bật',
     closingQuote: 'Một chút lãng mạn, vừa đủ cho riêng bạn.',
     models: [
-      '/assets/images/models/model_cutout_1.png',
-      '/assets/images/models/model_cutout_2.png',
-      '/assets/images/models/model_cutout_4.png',
-      '/assets/images/models/model_cutout_3.png',
-      '/assets/images/models/model_cutout_5.png',
+      '/assets/images/models/runway-soft-ceremony.png',
+      '/assets/images/collections/soft-ceremony-cover.png',
     ],
     story: [
       'Soft Ceremony là bộ sưu tập dành cho những dịp cần sự chỉn chu hơn thường ngày như tiệc nhẹ, hẹn hò, chụp ảnh hay những buổi gặp gỡ đặc biệt.',
@@ -232,8 +228,7 @@ const STATIC_LOOKBOOK_CONTENT: StaticLookbookContent[] = [
     name: 'The Urban Rhythm',
     label: 'Năng động & Thời thượng',
     quote: 'Nhịp sống hiện đại đẹp nhất khi sự tự tin luôn vừa vặn với từng chuyển động.',
-    banner:
-      'https://cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images@main/categories/set-do/Velura_urban-rythm_cover.png',
+    banner: '/assets/images/collections/the-urban-rhythm-cover.png',
     decor: '/assets/images/collections/the-urban-rhythm-decor.png',
     badge: 'CASUAL',
     homeStory:
@@ -246,16 +241,13 @@ const STATIC_LOOKBOOK_CONTENT: StaticLookbookContent[] = [
     storyDesc:
       'Phom dáng tinh gọn, bảng màu dịu mắt và những lớp phối linh hoạt — để nàng luôn chỉn chu mà vẫn là chính mình.',
     exploreCta: 'Xem các thiết kế',
-    categoryLink: '/products?category=set-do',
+    categoryLink: '/products?collection=The+Urban+Rhythm',
     productsSub: 'CITY-READY WARDROBE',
     productsTitle: 'Chuyển động cùng thành phố',
     closingQuote: 'Từ buổi sáng đầu tiên đến cuộc hẹn cuối ngày.',
     models: [
-      '/assets/images/models/model_cutout_1.png',
-      '/assets/images/models/model_cutout_5.png',
-      '/assets/images/models/model_cutout_3.png',
-      '/assets/images/models/model_cutout_2.png',
-      '/assets/images/models/model_cutout_1.png',
+      '/assets/images/models/runway-the-urban-rhythm.png',
+      '/assets/images/collections/the-urban-rhythm-cover.png',
     ],
     story: [
       'The Urban Rhythm dành cho những quý cô hiện đại yêu thích sự linh hoạt giữa môi trường công sở và nhịp sống phố thị.',
@@ -268,8 +260,7 @@ const STATIC_LOOKBOOK_CONTENT: StaticLookbookContent[] = [
     name: 'Weekend Escape',
     label: 'Tự do & Phóng khoáng',
     quote: 'Một cuối tuần đẹp bắt đầu từ cảm giác nhẹ nhàng trong chính bộ đồ mình chọn.',
-    banner:
-      'https://cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images@main/categories/set-do/velura_Weekend-Escape_cover.png',
+    banner: '/assets/images/collections/weekend-escape-cover.png',
     decor: '/assets/images/collections/weekend-escape-decor.png',
     badge: 'TRAVEL',
     homeStory:
@@ -282,16 +273,13 @@ const STATIC_LOOKBOOK_CONTENT: StaticLookbookContent[] = [
     storyDesc:
       'Chất liệu thoáng nhẹ, phom dáng tự do cùng gam màu lấy cảm hứng từ thiên nhiên. Mặc đẹp mà không cần cố gắng.',
     exploreCta: 'Tìm cảm hứng dạo phố',
-    categoryLink: '/products?category=set-do',
+    categoryLink: '/products?collection=Weekend+Escape',
     productsSub: 'MADE FOR SLOW MORNINGS',
     productsTitle: 'Mặc nhẹ tênh, đi muôn nơi',
     closingQuote: 'Gói ghém một ngày tự do theo cách của bạn.',
     models: [
-      '/assets/images/models/model_cutout_1.png',
-      '/assets/images/models/model_cutout_2.png',
-      '/assets/images/models/model_cutout_3.png',
-      '/assets/images/models/model_cutout_4.png',
-      '/assets/images/models/model_cutout_1.png',
+      '/assets/images/models/runway-weekend-escape.png',
+      '/assets/images/collections/weekend-escape-cover.png',
     ],
     story: [
       'Weekend Escape lấy cảm hứng từ những chuyến đi cuối tuần và những ngày thư giãn trọn vẹn.',
@@ -304,8 +292,7 @@ const STATIC_LOOKBOOK_CONTENT: StaticLookbookContent[] = [
     name: 'Midnight Mirage',
     label: 'Cá tính & Đường phố',
     quote: 'Cá tính không cần ồn ào, chỉ cần đủ rõ để người mặc thấy mình trong đó.',
-    banner:
-      'https://cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images@main/categories/set-do/velura_Midnight-Mirage_cover.png',
+    banner: '/assets/images/collections/midnight-mirage-cover.png',
     decor: '/assets/images/collections/midnight-mirage-decor.png',
     badge: 'STREET',
     homeStory:
@@ -318,16 +305,13 @@ const STATIC_LOOKBOOK_CONTENT: StaticLookbookContent[] = [
     storyDesc:
       'Đường cắt mềm, chất liệu bắt sáng vừa đủ và sắc độ nữ tính tạo nên dấu ấn không thể nhầm lẫn.',
     exploreCta: 'Chọn thiết kế dự tiệc',
-    categoryLink: '/products?category=dam-vay',
+    categoryLink: '/products?collection=Midnight+Mirage',
     productsSub: 'A MOMENT IN THE SPOTLIGHT',
     productsTitle: 'Sắc đêm, nét kiêu kỳ',
     closingQuote: 'Để khoảnh khắc của nàng trở thành tâm điểm.',
     models: [
-      '/assets/images/models/model_cutout_5.png',
-      '/assets/images/models/model_cutout_4.png',
-      '/assets/images/models/model_cutout_3.png',
-      '/assets/images/models/model_cutout_5.png',
-      '/assets/images/models/model_cutout_4.png',
+      '/assets/images/models/runway-midnight-mirage.png',
+      '/assets/images/collections/midnight-mirage-cover.png',
     ],
     story: [
       'Midnight Mirage lấy cảm hứng từ thời trang đường phố Hàn Quốc, kết hợp nét cá tính, tối giản và hiện đại.',
@@ -340,8 +324,7 @@ const STATIC_LOOKBOOK_CONTENT: StaticLookbookContent[] = [
     name: 'The Afterglow',
     label: 'Dư âm Vương giả',
     quote: 'Có những khoảnh khắc không cần phô diễn, chỉ cần lưu lại như một vệt sáng rất riêng.',
-    banner:
-      'https://cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images@main/categories/set-do/velura_The-Afterglow_cover.png',
+    banner: '/assets/images/collections/the-afterglow-cover.png',
     decor: '/assets/images/collections/the-afterglow-decor.png',
     badge: 'COUTURE',
     homeStory:
@@ -354,16 +337,13 @@ const STATIC_LOOKBOOK_CONTENT: StaticLookbookContent[] = [
     storyDesc:
       'Một tuyển tập dành cho những dịp đáng nhớ: nữ tính, mềm mại và tinh tế đến từng chi tiết.',
     exploreCta: 'Khám phá sắc hồng',
-    categoryLink: '/products?category=dam-vay',
+    categoryLink: '/products?collection=The+Afterglow',
     productsSub: 'THE FINAL TOUCH',
     productsTitle: 'Dành cho ngày đặc biệt',
     closingQuote: 'Giữ lại ánh nhìn, lưu lại cảm xúc.',
     models: [
-      '/assets/images/models/model_cutout_2.png',
-      '/assets/images/models/model_cutout_3.png',
-      '/assets/images/models/model_cutout_5.png',
-      '/assets/images/models/model_cutout_4.png',
-      '/assets/images/models/model_cutout_2.png',
+      '/assets/images/models/runway-the-afterglow.png',
+      '/assets/images/collections/the-afterglow-cover.png',
     ],
     story: [
       'The Afterglow lấy cảm hứng từ ánh hoàng hôn diễm lệ và vẻ đẹp kiêu sa, lãng mạn.',

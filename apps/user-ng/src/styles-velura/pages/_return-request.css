@@ -706,6 +706,6 @@ body.page-return .return-header h1 { color: var(--velura-maroon, #7A283C); }
 body.page-return .return-form :is(.btn-submit, button[type="submit"]) {
   border-color: var(--velura-maroon, #7A283C);
   background: var(--velura-maroon, #7A283C);
-  border-radius: 999px;
+  border-radius: 8px !important;
 }
 body.page-return :is(button, a, input, select, textarea):focus-visible { outline: 3px solid var(--velura-rose, #C94F70); outline-offset: 3px; }

@@ -268,7 +268,7 @@
   min-height: 38px;
   padding: 9px 18px;
   border: 1px solid var(--line, #e8dfd6);
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: #fff;
   color: var(--ink, #2a2522);
   cursor: pointer;
@@ -472,7 +472,7 @@
   height: 38px;
   place-items: center;
   border: 1px solid var(--line, #e8dfd6);
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: #fff;
   color: var(--muted, #6b635d);
   cursor: pointer;
@@ -1301,7 +1301,7 @@
   min-height: 48px;
   padding: 0 28px;
   border: 1px solid var(--terracotta, #c97b63);
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: transparent;
   color: var(--terracotta, #c97b63);
   cursor: pointer;
@@ -1356,7 +1356,7 @@
 .blog-empty__reset {
   padding: 10px 22px;
   border: 1px solid var(--terracotta, #c97b63);
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: var(--terracotta, #c97b63);
   color: #fff;
   cursor: pointer;

@@ -153,10 +153,11 @@ export class AdminErpModal {
   }
 
   /**
-   * Closes only when the backdrop itself is clicked.
+   * Closes only when the backdrop itself of the topmost modal is clicked.
    */
   onBackdrop(event: MouseEvent): void {
-    if (event.target === event.currentTarget) {
+    event.stopPropagation();
+    if (event.target === event.currentTarget && isTopOverlay(this)) {
       this.close();
     }
   }

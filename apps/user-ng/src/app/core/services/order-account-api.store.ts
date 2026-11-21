@@ -533,8 +533,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
     this.loading.set(true);
     this.error.set('');
     try {
-      if (context.userId) await Promise.all([this.loadOrders(context, version), this.loadReturns(context, version)]);
-      else { await this.loadOrders(context, version); if (this.current(context) && version === this.refreshVersion) await this.loadReturns(context, version); }
+      await Promise.all([this.loadOrders(context, version), this.loadReturns(context, version)]);
     }
     catch (error) { if (this.current(context) && version === this.refreshVersion) this.error.set(orderAccountErrorMessage(error)); }
     finally { if (this.current(context) && version === this.refreshVersion) this.loading.set(false); }
@@ -950,13 +949,12 @@ export class OrderAccountApiStore implements OrderAccountModel {
   }
 
   private async loadReturns(context: OrderContext, version: number): Promise<void> {
-    const responses = context.userId
-      ? [await firstValueFrom(this.api.get<{ returns?: ApiReturn[] }>('/api/user/returns'))]
-      : await Promise.all(this.orders().filter((row) => row.orderId).map((order) => firstValueFrom(
-          this.api.get<{ returns?: ApiReturn[] }>(`/api/user/returns/guest?order_id=${encodeURIComponent(order.orderId!)}&guest_access_token=${encodeURIComponent(context.guestToken)}`),
-        )));
+    const path = context.userId
+      ? '/api/user/returns'
+      : `/api/user/returns/guest?guest_access_token=${encodeURIComponent(context.guestToken)}`;
+    const data = await firstValueFrom(this.api.get<{ returns?: ApiReturn[] }>(path));
     if (this.current(context) && version === this.refreshVersion) {
-      const rows = responses.flatMap((data) => data.returns || []);
+      const rows = data.returns || [];
       const mappedReturns = rows.map((row) => {
         const mapped = mapReturn(row);
         return { ...mapped, orderId: this.orders().find((order) => order.orderId === row.order_id)?.id || mapped.orderId };

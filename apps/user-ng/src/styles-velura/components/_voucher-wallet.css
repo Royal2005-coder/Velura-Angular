@@ -75,6 +75,20 @@
 
 .voucher-wallet__state--error { color: var(--error); }
 
+.voucher-wallet .field__error,
+.voucher-modal .field__error {
+  display: block;
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 .voucher-wallet__hint {
   margin: 0;
   padding: 10px 12px;

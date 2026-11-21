@@ -53,6 +53,8 @@ export interface VoucherEvaluationContext {
   isBirthdayMonth?: boolean;
   hasBirthday?: boolean;
   birthMonth?: number | null;
+  /** Bật kiểm tra giới hạn lượt dùng theo khách cho cả khách vãng lai đã xác thực SĐT. */
+  enforcePerUserLimit?: boolean;
 }
 
 /**
@@ -294,7 +296,7 @@ export function evaluateVoucher(
     );
   }
 
-  if (context.isMember && usedByThisCustomer >= usageLimitPerUser) {
+  if ((context.enforcePerUserLimit ?? context.isMember) && usedByThisCustomer >= usageLimitPerUser) {
     return reject("USER_LIMIT_REACHED", "Bạn đã dùng hết lượt cho mã này.");
   }
 

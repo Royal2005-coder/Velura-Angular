@@ -181,7 +181,11 @@ app-site-footer:has(.newsletter-modal-overlay) {
 }
 
 .velura-auth-page .field__error,
-.otp-card .field__error {
+.otp-card .field__error,
+.voucher-wallet .field__error,
+.voucher-modal .field__error,
+.field__error[role='alert'],
+.field__error[role='status'] {
   display: block;
 }
 

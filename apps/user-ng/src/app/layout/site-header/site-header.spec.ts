@@ -34,6 +34,7 @@ describe('SiteHeader', () => {
 
     expect(localStorage.getItem('velura_token')).toBeNull();
     expect(localStorage.getItem('velura_user')).toBeNull();
+    expect(header.logoutModalOpen()).toBe(true);
     expect(navigate).toHaveBeenCalledWith('/');
   });
 

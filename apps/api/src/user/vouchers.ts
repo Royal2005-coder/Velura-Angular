@@ -168,11 +168,38 @@ export async function buildWallet(
     }
   };
 
+  const fetchCustomerOrders = async (): Promise<{ rows: JsonObject[] }> => {
+    if (profile?.user_id) {
+      return selectRows("orders", { user_id: `eq.${profile.user_id}`, limit: 500 });
+    }
+    if (!verifiedGuestPhone) {
+      return { rows: [] as JsonObject[] };
+    }
+    const cleanPhone = verifiedGuestPhone.trim();
+    const phoneVariants = Array.from(new Set([
+      cleanPhone,
+      cleanPhone.startsWith("0") ? `84${cleanPhone.slice(1)}` : cleanPhone,
+      cleanPhone.startsWith("0") ? `+84${cleanPhone.slice(1)}` : cleanPhone
+    ].filter(Boolean)));
+    const [byPhone, matchedUsers] = await Promise.all([
+      selectRows("orders", { shipping_phone: `in.(${phoneVariants.join(",")})`, limit: 500 }).catch(() => ({ rows: [] as JsonObject[] })),
+      selectRows("users", { phone: `in.(${phoneVariants.join(",")})`, select: "user_id", limit: 10 }).catch(() => ({ rows: [] as JsonObject[] }))
+    ]);
+    const userIds = Array.from(new Set(matchedUsers.rows.map((u) => String(u.user_id || "")).filter(Boolean)));
+    const byUser = userIds.length
+      ? await selectRows("orders", { user_id: `in.(${userIds.join(",")})`, limit: 500 }).catch(() => ({ rows: [] as JsonObject[] }))
+      : { rows: [] as JsonObject[] };
+    const merged = new Map<string, JsonObject>();
+    for (const row of [...byPhone.rows, ...byUser.rows]) {
+      const id = String(row.order_id || "");
+      if (id) merged.set(id, row);
+    }
+    return { rows: Array.from(merged.values()) };
+  };
+
   const [voucherResult, orderResult, confirmedOfferIds] = await Promise.all([
     fetchVouchers(),
-    profile?.user_id
-      ? selectRows("orders", { user_id: `eq.${profile.user_id}`, limit: 500 })
-      : Promise.resolve({ rows: [] as JsonObject[] }),
+    fetchCustomerOrders(),
     listConfirmedSupportVoucherIds(profile?.user_id || null, verifiedGuestPhone)
   ]);
 
@@ -222,7 +249,8 @@ export async function buildWallet(
     categoryNameById: cart?.categoryNameById,
     isBirthdayMonth,
     hasBirthday,
-    birthMonth
+    birthMonth,
+    enforcePerUserLimit: Boolean(profile?.user_id || verifiedGuestPhone)
   };
 
   const items = evaluateVouchers(activeVouchers, evaluationContext);

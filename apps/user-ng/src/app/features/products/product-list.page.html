@@ -50,7 +50,11 @@
                 <span aria-hidden="true">↗</span>
               </a>
             } @else {
-              <a [routerLink]="cmsLink(currentBanner().link_url)" class="product-list-editorial-hero__cta-btn">
+              <a
+                [routerLink]="bannerLinkPath(currentBanner().link_url)"
+                [queryParams]="bannerLinkQuery(currentBanner().link_url)"
+                class="product-list-editorial-hero__cta-btn"
+              >
                 <span>{{ currentBanner().button_text || 'Khám phá ngay' }}</span>
                 <span aria-hidden="true">↗</span>
               </a>

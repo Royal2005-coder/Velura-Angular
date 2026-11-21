@@ -1,7 +1,7 @@
 import { RETURN_STATUS_LABELS_VI, returnCustomerResponseOption, returnCustomerResponseOptionsFor, returnReasonLabel } from "../returns/return-constants.js";
 import { classifyReturnPayment, customerRefundReceiver, refundFlowFor, validateRefundReceiver } from "../returns/return-refund-receiver.js";
 import { listReturnEvidence, resolveEvidenceRef, storeReturnEvidence, type ReturnEvidenceKind } from "../returns/return-evidence.js";
-import { hasGuestOrderAccess } from "./order-access.js";
+import { guestSessionPhone, hasGuestOrderAccess } from "./order-access.js";
 import { HttpError } from "../http.js";
 import { returnWindowOpen } from "./return-window.js";
 import { asJsonObject, asNumber, asString, type HttpRequest, type JsonObject, type UserProfile } from "../types.js";
@@ -483,13 +483,33 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       return createForOrder(repository, order, body);
     },
 
-    /** Lists return requests only after a signed same-phone session authorizes the order. */
+    /** Lists return requests only after a signed same-phone session authorizes the order(s). */
     async listForGuest(body: JsonObject) {
-      const order = await repository.findOrderById(asString(body.order_id));
-      if (!order || !hasGuestOrderAccess(order, body)) throw new HttpError(404,"NOT_FOUND","Order not found");
-      const rows = await repository.listReturnsForOrder(order.order_id);
-      const populated: JsonObject[] = [];
-      for (const ret of rows) populated.push(await customerReturnView(repository, ret, order, await hydratedReturnItems(repository, ret.return_id)));
+      const requestedOrderId = asString(body.order_id).trim();
+      if (requestedOrderId) {
+        const order = await repository.findOrderById(requestedOrderId);
+        if (!order || !hasGuestOrderAccess(order, body)) throw new HttpError(404, "NOT_FOUND", "Order not found");
+        const rows = await repository.listReturnsForOrder(order.order_id);
+        return Promise.all(rows.map(async (ret) =>
+          customerReturnView(repository, ret, order, await hydratedReturnItems(repository, ret.return_id))
+        ));
+      }
+      const phone = guestSessionPhone(body.guest_access_token || body.order_access_token);
+      if (!phone) throw new HttpError(401, "GUEST_SESSION_REQUIRED", "Verify your phone to view return requests");
+      const phoneVariants = Array.from(new Set([
+        phone,
+        phone.startsWith("0") ? `84${phone.slice(1)}` : phone,
+        phone.startsWith("0") ? `+84${phone.slice(1)}` : phone
+      ].filter(Boolean)));
+      const orders = repository.listOrdersByPhones ? await repository.listOrdersByPhones(phoneVariants) : [];
+      if (!orders.length) return [];
+      const orderById = new Map(orders.map((o) => [String(o.order_id), o]));
+      const orderIds = Array.from(orderById.keys()).filter(Boolean);
+      const rows = repository.listReturnsForOrders ? await repository.listReturnsForOrders(orderIds) : [];
+      const populated = await Promise.all(rows.map(async (ret) =>
+        customerReturnView(repository, ret, orderById.get(String(ret.order_id)) || null, await hydratedReturnItems(repository, ret.return_id))
+      ));
+      populated.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
       return populated;
     },
     /** Cancels only a request bound to the verified order and its current version. */

@@ -232,4 +232,22 @@ describe('VoucherWallet', () => {
       else Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
     }
   });
+
+  it('shows a role=alert error when manual code does not exist and keeps current applied voucher (DEF-UAT-001)', () => {
+    const applied = walletVoucher({ voucher_id: 'v-vip', code: 'VIP100K', discount_amount: 100000 });
+    const service = stubVoucherService([applied], 'v-vip');
+    vi.spyOn(service, 'applyCode').mockReturnValue(throwError(() => new Error('Mã giảm giá không tồn tại')));
+    const fixture = createWallet(service);
+    const wallet = fixture.componentInstance;
+
+    wallet.manualCode.set('UAT-NOT-EXIST-20261121');
+    wallet.submitManualCode();
+    fixture.detectChanges();
+
+    expect(wallet.applying()).toBe(false);
+    expect(wallet.selected()?.code).toBe('VIP100K');
+    expect(wallet.manualError()).toContain('UAT-NOT-EXIST-20261121');
+    const alert = fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement | null;
+    expect(alert?.textContent).toContain('UAT-NOT-EXIST-20261121');
+  });
 });

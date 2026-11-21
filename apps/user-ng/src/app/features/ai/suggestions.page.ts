@@ -54,8 +54,25 @@ export class AiSuggestionsPage {
   readonly bodyShapeLabel = signal('Chưa khai báo');
   readonly combos = signal<OutfitCombo[]>([]);
   readonly categories = signal<RecommendationCategory[]>([]);
-  readonly activeCategoryId = signal<string | null>(null);
+  readonly activeCategoryId = signal<string | null>('all');
   readonly selectedCombo = signal<OutfitCombo | null>(null);
+  readonly pageSize = signal(8);
+  readonly currentPage = signal(1);
+  readonly totalPages = computed(() => {
+    const total = this.profileProducts().length;
+    return Math.max(1, Math.ceil(total / this.pageSize()));
+  });
+  readonly paginatedProducts = computed(() => {
+    const list = this.profileProducts();
+    const page = this.currentPage();
+    const size = this.pageSize();
+    const start = (page - 1) * size;
+    return list.slice(start, start + size);
+  });
+  readonly pageNumbers = computed(() => {
+    const total = this.totalPages();
+    return Array.from({ length: total }, (_, i) => i + 1);
+  });
   readonly displayName = computed(() => {
     if (this.auth.isLoggedIn()) {
       return this.auth.session()?.fullName || 'Thành viên Velura';
@@ -70,10 +87,34 @@ export class AiSuggestionsPage {
   readonly profileSummary = computed(
     () => `Dáng người: ${this.bodyShapeLabel()} • Phong cách: ${this.styleLabel()}`,
   );
-  readonly activeCategory = computed(
-    () => this.categories().find((row) => row.category_id === this.activeCategoryId()) || this.categories()[0] || null,
-  );
-  readonly profileProducts = computed(() => this.activeCategory()?.products || []);
+  readonly allProducts = computed(() => {
+    const list: ProductSummary[] = [];
+    const seen = new Set<string>();
+    for (const cat of this.categories()) {
+      for (const p of cat.products || []) {
+        if (!seen.has(p.product_id)) {
+          seen.add(p.product_id);
+          list.push(p);
+        }
+      }
+    }
+    return list;
+  });
+  readonly allProductsCount = computed(() => this.allProducts().length);
+  readonly activeCategory = computed(() => {
+    const activeId = this.activeCategoryId();
+    if (activeId === 'all') {
+      return null;
+    }
+    return this.categories().find((row) => row.category_id === activeId) || null;
+  });
+  readonly profileProducts = computed(() => {
+    const activeId = this.activeCategoryId();
+    if (activeId === 'all' || !activeId) {
+      return this.allProducts();
+    }
+    return this.activeCategory()?.products || [];
+  });
 
   constructor() {
     useBodyClass('page-ai');
@@ -90,6 +131,39 @@ export class AiSuggestionsPage {
    */
   selectCategory(categoryId: string): void {
     this.activeCategoryId.set(categoryId);
+    this.currentPage.set(1);
+  }
+
+  /**
+   * Navigates to a specific page number in the Style Profile product grid.
+   */
+  goToPage(page: number): void {
+    if (page < 1 || page > this.totalPages() || page === this.currentPage()) {
+      return;
+    }
+    this.currentPage.set(page);
+    const container = document.getElementById('profile-categories-container');
+    if (container && typeof container.scrollIntoView === 'function') {
+      container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  /**
+   * Navigates to the next page of Style Profile suggestions.
+   */
+  nextPage(): void {
+    if (this.currentPage() < this.totalPages()) {
+      this.goToPage(this.currentPage() + 1);
+    }
+  }
+
+  /**
+   * Navigates to the previous page of Style Profile suggestions.
+   */
+  prevPage(): void {
+    if (this.currentPage() > 1) {
+      this.goToPage(this.currentPage() - 1);
+    }
   }
 
   /**
@@ -219,7 +293,8 @@ export class AiSuggestionsPage {
         this.combos.set(response.combos || []);
         const categories = response.categories || [];
         this.categories.set(categories);
-        this.activeCategoryId.set(categories[0]?.category_id || null);
+        this.activeCategoryId.set('all');
+        this.currentPage.set(1);
         this.loading.set(false);
       }, error: (error: Error) => {
         if (version !== this.requestVersion || session !== this.auth.session()) return;

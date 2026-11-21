@@ -36,11 +36,40 @@ describe('AiImageWorkbench', () => {
     role: 'member',
     isAdmin: false,
   };
+  const createStorageMock = () => {
+    let store: Record<string, string> = {};
+    return {
+      getItem: (key: string) => store[key] || null,
+      setItem: (key: string, value: string) => { store[key] = String(value); },
+      removeItem: (key: string) => { delete store[key]; },
+      clear: () => { store = {}; },
+      length: 0,
+      key: () => null,
+    };
+  };
+
+  beforeAll(() => {
+    try {
+      if (!globalThis.localStorage || typeof globalThis.localStorage.clear !== 'function') {
+        Object.defineProperty(globalThis, 'localStorage', { value: createStorageMock(), configurable: true, writable: true });
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      if (!globalThis.sessionStorage || typeof globalThis.sessionStorage.clear !== 'function') {
+        Object.defineProperty(globalThis, 'sessionStorage', { value: createStorageMock(), configurable: true, writable: true });
+      }
+    } catch {
+      // ignore
+    }
+  });
+
   beforeEach(() => {
-    sessionStorage.clear();
-    localStorage.clear();
-    localStorage.setItem('velura_token', 't');
-    localStorage.setItem('velura_user', JSON.stringify({ user_id: 'u1', role: 'member' }));
+    sessionStorage?.clear?.();
+    localStorage?.clear?.();
+    localStorage?.setItem?.('velura_token', 't');
+    localStorage?.setItem?.('velura_user', JSON.stringify({ user_id: 'u1', role: 'member' }));
     model = {
       upload: vi.fn(() => of({ asset_id: 'asset', expires_at: '' })),
       create: vi.fn(() => of({ job: quality })),

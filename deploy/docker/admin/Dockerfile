@@ -10,7 +10,7 @@ RUN npm ci
 COPY apps/admin-ng ./apps/admin-ng
 RUN npm run build -w @velura/admin-ng
 
-FROM nginxinc/nginx-unprivileged:1.28.2-alpine
+FROM nginxinc/nginx-unprivileged:1.30.6-alpine
 USER root
 RUN apk upgrade --no-cache
 ARG RELEASE_REVISION

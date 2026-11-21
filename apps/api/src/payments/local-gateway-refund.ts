@@ -87,6 +87,23 @@ export async function refundLocalGatewayOrder(orderId: string, options: GatewayR
 
   const credentials = gatewayCredentials(provider);
   const amount = refundAmount ?? Number(payment.amount);
+  if (provider === "MOMO" && (amount < 1000 || amount > 50000000)) {
+    return { status: "failed", message: "Số tiền hoàn ngoài phạm vi MoMo hỗ trợ (1.000đ – 50.000.000đ)." };
+  }
+  if (credentials.simulator) {
+    // Giao dịch được thu bởi bộ giả lập sandbox (không có merchant thật): hoàn tiền ngay trên
+    // sổ ledger nội bộ thay vì gửi sang sandbox thật của VNPay/MoMo với mã VELURASB.
+    const providerRef = `${provider.toLowerCase()}:sim:${transactionNo}`;
+    if (operation) {
+      const changed = await updateReturnRefundOperation(operation, { status: "pending", provider_ref: providerRef });
+      if (!changed.length) return { status: "requested", message: "Đang đối soát giao dịch hoàn tiền" };
+      await completeReturnRefund(operation, providerRef, refundChannelFor(provider));
+    } else {
+      await completeRefund(asString(payment.payment_id), orderId, amount, providerRef);
+    }
+    return { status: "refunded" };
+  }
+
   const fetchImpl = options.fetchImpl ?? fetch;
   let attempt: { url: string; body: JsonObject; provider_ref: string };
   if (provider === "VNPAY") {
@@ -103,7 +120,6 @@ export async function refundLocalGatewayOrder(orderId: string, options: GatewayR
     request.vnp_SecureHash = vnpayPipeHash(VNPAY_REFUND_REQUEST.map(key => asString(request[key])), credentials.secret);
     attempt = { url: gatewayEndpoints("VNPAY").api, body: request, provider_ref: `vnpay:${transactionNo}` };
   } else {
-    if (amount < 1000 || amount > 50000000) return { status: "failed", message: "Số tiền hoàn ngoài phạm vi MoMo hỗ trợ (1.000đ – 50.000.000đ)." };
     // requestId là khoá idempotent của MoMo: lấy refund_id bền vững để retry không tạo hoàn tiền thứ hai.
     const refundReference = asString(operation?.refund_id || payment.payment_id).replace(/-/g, "");
     const fields = {

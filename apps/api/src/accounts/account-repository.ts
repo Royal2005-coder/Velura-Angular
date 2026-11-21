@@ -1,7 +1,7 @@
 import { hashPassword } from "../auth-helper.js";
 import { config } from "../config.js";
 import { HttpError } from "../http.js";
-import { callRpc, insertRow, quotePostgrestValue, selectOne, selectRows } from "../supabase.js";
+import { callRpc, deleteRows, insertRow, quotePostgrestValue, selectOne, selectRows, updateRows } from "../supabase.js";
 import { SEARCH_SCAN_LIMIT, searchMatches } from "../search-text.js";
 import { asJsonObject, asString, isJsonObject, type JsonObject } from "../types.js";
 import { ACCOUNT_SELECT } from "./account-constants.js";
@@ -200,12 +200,14 @@ export function createAccountRepository(): AccountRepository {
           }
         }
         // The profile row alone cannot sign in: /auth/v1/token is issued by Supabase Auth.
-        // Create the GoTrue user first and link it, rolling it back if the profile fails.
+        // Create the GoTrue user first; migration 023's AFTER INSERT trigger on auth.users
+        // automatically inserts a default member row into public.users, so update that row
+        // when present instead of colliding with insertRow (23505 duplicate key).
         const authUserId = input.email
           ? await createAuthIdentity(input.email, input.password, input.fullName)
           : null;
         try {
-          const created = asJsonObject(await insertRow("users", {
+          const profilePayload = {
             email: input.email,
             phone: input.phone,
             full_name: input.fullName,
@@ -215,7 +217,22 @@ export function createAccountRepository(): AccountRepository {
             admin_role: input.adminRole,
             is_active: true,
             is_verified: true
-          }));
+          };
+          const triggeredRow = authUserId
+            ? (await selectOne("users", { auth_user_id: `eq.${authUserId}` }))
+              || (await selectOne("users", { user_id: `eq.${authUserId}` }))
+            : null;
+          let created: JsonObject;
+          if (triggeredRow && asString(triggeredRow.user_id)) {
+            const updatedRows = await updateRows(
+              "users",
+              { user_id: `eq.${asString(triggeredRow.user_id)}` },
+              profilePayload
+            );
+            created = asJsonObject(updatedRows[0] || { ...triggeredRow, ...profilePayload });
+          } else {
+            created = asJsonObject(await insertRow("users", profilePayload));
+          }
           await writeAuditLog({
             actor_id: actorId,
             actor_role: actorRole,
@@ -231,6 +248,7 @@ export function createAccountRepository(): AccountRepository {
           return safeAccount;
         } catch (error) {
           if (authUserId) {
+            await deleteRows("users", { auth_user_id: `eq.${authUserId}` }).catch(() => undefined);
             await deleteAuthIdentity(authUserId).catch(() => undefined);
           }
           throw error;
@@ -419,5 +437,9 @@ function accountErrorMessage(code: string): string {
     AUTH_NOT_CONFIGURED: "Chưa cấu hình Supabase Auth để tạo đăng nhập cho tài khoản.",
     AUTH_CREATE_FAILED: "Không tạo được đăng nhập Supabase cho tài khoản mới."
   };
-  return messages[code] || "Thao tác tài khoản thất bại. Vui lòng thử lại.";
+  if (messages[code]) return messages[code];
+  if (code.includes("23505") || code.toLowerCase().includes("duplicate key")) {
+    return "Email hoặc số điện thoại đã được sử dụng trên hệ thống.";
+  }
+  return "Thao tác tài khoản thất bại. Vui lòng thử lại.";
 }

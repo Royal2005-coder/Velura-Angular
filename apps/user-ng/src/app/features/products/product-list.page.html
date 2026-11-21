@@ -1,11 +1,9 @@
 <main class="product-list-page container">
   <header class="product-list-header">
-    <!-- Dynamic Multi-media Hero Banner Slider/Carousel -->
+    <!-- Single-frame Editorial Hero Banner (1 image or 1 video managed via Admin CMS) -->
     <div
       class="product-list-editorial-hero"
-      [attr.aria-label]="currentBanner().title"
-      (mouseenter)="pauseBannerTimer()"
-      (mouseleave)="resumeBannerTimer()"
+      [attr.aria-label]="'Velura Atelier — ' + currentBanner().title"
     >
       <div class="product-list-editorial-hero__video-wrap">
         @if (currentBanner().media_type === 'video') {
@@ -13,9 +11,9 @@
             #heroVideo
             [src]="currentBanner().media_url"
             autoplay
+            loop
             playsinline
             [muted]="!videoSoundOn()"
-            (ended)="nextBanner()"
             [poster]="currentBanner().poster_url || '/assets/images/auth/model_main.png'"
             class="product-list-editorial-hero__video"
             [style.object-position]="bannerFraming(currentBanner()).objectPosition"
@@ -85,35 +83,6 @@
           }
         </div>
       </div>
-
-      <!-- Carousel Navigation & Indicators -->
-      @if (heroBanners().length > 1) {
-        <button
-          type="button"
-          class="product-list-hero__arrow product-list-hero__arrow--prev"
-          (click)="prevBanner()"
-          aria-label="Banner trước đó"
-          title="Banner trước đó"
-        >‹</button>
-        <button
-          type="button"
-          class="product-list-hero__arrow product-list-hero__arrow--next"
-          (click)="nextBanner()"
-          aria-label="Banner kế tiếp"
-          title="Banner kế tiếp"
-        >›</button>
-        <div class="product-list-hero__dots" aria-label="Chọn banner">
-          @for (b of heroBanners(); track b.banner_id; let bIdx = $index) {
-            <button
-              type="button"
-              class="product-list-hero__dot"
-              [class.is-active]="activeBannerIndex() === bIdx"
-              (click)="setBanner(bIdx)"
-              [attr.aria-label]="'Chuyển đến slide ' + (bIdx + 1)"
-            ></button>
-          }
-        </div>
-      }
     </div>
     <nav class="breadcrumb" aria-label="Breadcrumb">
       <a routerLink="/">Trang chủ</a>

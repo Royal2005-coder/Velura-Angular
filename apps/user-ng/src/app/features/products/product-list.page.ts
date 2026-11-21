@@ -114,44 +114,16 @@ export class ProductListPage implements AfterViewInit {
     {
       banner_id: 'default-product-video',
       placement: 'products_hero',
-      title: 'Timeless Elegance',
+      title: 'Vẻ Đẹp Vượt Thời Gian',
       subtitle: 'Những lựa chọn tinh tế dành cho nhịp sống và phong cách riêng của bạn.',
-      tag_label: 'POWERED BY TRESEMMÉ / SR CELEBRATING LOCAL PRIDE 9',
+      tag_label: 'VELURA ATELIER',
       media_type: 'video',
       media_url: '/assets/videos/hero-bg.mp4',
       poster_url: '/assets/images/auth/model_main.png',
-      button_text: 'Khám phá bộ sưu tập',
-      link_url: '/collections',
+      button_text: '',
+      link_url: '',
       is_active: true,
       sort_order: 0,
-    },
-    {
-      banner_id: 'default-product-silk',
-      placement: 'products_hero',
-      title: 'Velura Silk & Satin Atelier',
-      subtitle: 'Chất liệu lụa satin thượng hạng ôm trọn từng đường nét kiêu sa, tỏa sáng trong mọi khoảnh khắc dạ tiệc.',
-      tag_label: 'HAUTE COUTURE 2027',
-      media_type: 'image',
-      media_url: 'https://cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images@main/categories/set-do/velura_The-Afterglow_cover.png',
-      poster_url: null,
-      button_text: 'Xem bộ sưu tập',
-      link_url: '/collections?collection=the-afterglow',
-      is_active: true,
-      sort_order: 1,
-    },
-    {
-      banner_id: 'default-product-urban',
-      placement: 'products_hero',
-      title: 'Urban Rhythm · Minimal Muse',
-      subtitle: 'Phom dáng tinh gọn, chất liệu thoáng nhẹ sẵn sàng cho nhịp sống hiện đại từ văn phòng đến dạo phố cuối tuần.',
-      tag_label: 'EVERYDAY ICONS',
-      media_type: 'image',
-      media_url: 'https://cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images@main/categories/set-do/Velura_urban-rythm_cover.png',
-      poster_url: null,
-      button_text: 'Xem bộ sưu tập',
-      link_url: '/collections?collection=the-urban-rhythm',
-      is_active: true,
-      sort_order: 2,
     },
   ];
 
@@ -159,8 +131,7 @@ export class ProductListPage implements AfterViewInit {
   readonly activeBannerIndex = signal(0);
   readonly currentBanner = computed(() => {
     const banners = this.heroBanners();
-    const idx = this.activeBannerIndex();
-    return banners[idx] || banners[0] || this.DEFAULT_HERO_BANNERS[0];
+    return banners[0] || this.DEFAULT_HERO_BANNERS[0];
   });
   private bannerTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -732,13 +703,13 @@ export class ProductListPage implements AfterViewInit {
       this.catalog.getBanners('products_hero').pipe(takeUntilDestroyed(this.destroy)).subscribe({
         next: (banners) => {
           if (banners && banners.length > 0) {
-            this.heroBanners.set(banners);
-            this.resumeBannerTimer();
+            this.heroBanners.set([banners[0]]);
+            this.activeBannerIndex.set(0);
+            this.syncHeroVideo();
           }
         },
       });
     }
-    this.resumeBannerTimer();
     this.route.queryParamMap.pipe(tap((params) => {
       const category = params.get('category') || '';
       const slug = CATEGORY_QUERY_MAP[category] || category;

@@ -19,3 +19,11 @@ CVE-2026-9256
 # Review-by: 2027-02-01 (or immediately before any commercial launch), tracked as a torch
 # upgrade task with GPU verification of LEFFA + fashn-vton.
 CVE-2026-24747
+
+# Upstream base image CVEs in nginxinc/nginx-unprivileged:1.30.6-alpine (awaiting 1.30.7-alpine rebuild)
+CVE-2026-113425
+CVE-2026-121810
+CVE-2026-123007
+CVE-2026-123633
+CVE-2026-118899
+CVE-2026-123634

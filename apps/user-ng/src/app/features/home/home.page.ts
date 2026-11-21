@@ -167,6 +167,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private readonly injector = inject(Injector);
   private readonly router = inject(Router);
   private carouselCleanups: Array<() => void> = [];
+  private quizPopupTimer: ReturnType<typeof setTimeout> | null = null;
 
   @ViewChild('categoriesTrack') private categoriesTrack?: ElementRef<HTMLElement>;
   @ViewChild('productsTrack') private productsTrack?: ElementRef<HTMLElement>;
@@ -218,11 +219,12 @@ export class HomePage implements AfterViewInit, OnDestroy {
   constructor() {
     useBodyClass('page-home');
     this.loadHome();
-    if (this.auth.consumeNewMemberWelcome()) {
-      setTimeout(() => {
+    this.quizPopupTimer = setTimeout(() => {
+      this.quizPopupTimer = null;
+      if (this.auth.consumeStyleQuizWelcome()) {
         this.quizPopupOpen.set(true);
-      }, 1200);
-    }
+      }
+    }, 1200);
   }
 
   closeQuizPopup(): void {
@@ -347,6 +349,10 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.quizPopupTimer !== null) {
+      clearTimeout(this.quizPopupTimer);
+      this.quizPopupTimer = null;
+    }
     this.carouselCleanups.forEach((cleanup) => cleanup());
   }
 

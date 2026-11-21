@@ -2,6 +2,8 @@ import { Injectable, computed, signal } from '@angular/core';
 import { UserSession } from '../models/user-session.interface';
 import { rotateGuestSession } from '../utils/guest-session';
 
+const GUEST_STYLE_QUIZ_WELCOME_SEEN_KEY = 'velura_guest_style_quiz_welcome_seen';
+
 /**
  * Session ViewModel store. No HTTP. Auth API belongs in a dedicated command service later.
  */
@@ -78,12 +80,19 @@ export class AuthService {
   }
 
   /**
-   * Consumes the one-time welcome flag created by successful member registration.
-   * The persisted payload is cleared before the banner opens so refresh/login cannot replay it.
+   * Claims the Style Quiz promotion once for each guest tab or once for a newly activated member.
+   * Existing members never receive the onboarding promotion, while a new member remains eligible
+   * independently from a guest impression that happened before registration.
    */
-  consumeNewMemberWelcome(): boolean {
+  consumeStyleQuizWelcome(): boolean {
     const session = this.sessionState();
-    if (!session?.isNewUser || session.role !== 'member') {
+    if (!session) {
+      if (typeof sessionStorage === 'undefined') return false;
+      if (sessionStorage.getItem(GUEST_STYLE_QUIZ_WELCOME_SEEN_KEY) === '1') return false;
+      sessionStorage.setItem(GUEST_STYLE_QUIZ_WELCOME_SEEN_KEY, '1');
+      return true;
+    }
+    if (!session.isNewUser || session.role !== 'member') {
       return false;
     }
     const raw = localStorage.getItem('velura_user');

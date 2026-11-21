@@ -211,7 +211,7 @@ export async function sendGuestTrackingOtp(
   return {
     success: true,
     masked_phone: maskTrackingPhone(phone),
-    masked_email: emailSent ? targetEmails.map(maskEmail).join(", ") : null,
+    masked_email: emailSent ? Array.from(new Set(targetEmails.map(maskEmail))).join(", ") : null,
     expires_in: GUEST_OTP_TTL_SECONDS,
     channel,
     message: developmentOtp

@@ -134,8 +134,8 @@ export class ProductListPage implements AfterViewInit {
       media_type: 'image',
       media_url: 'https://cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images@main/categories/set-do/velura_The-Afterglow_cover.png',
       poster_url: null,
-      button_text: 'Xem sản phẩm mới',
-      link_url: '/products?category=dam-vay',
+      button_text: 'Xem bộ sưu tập',
+      link_url: '/collections?collection=the-afterglow',
       is_active: true,
       sort_order: 1,
     },
@@ -148,8 +148,8 @@ export class ProductListPage implements AfterViewInit {
       media_type: 'image',
       media_url: 'https://cdn.jsdelivr.net/gh/khai0335814880-create/Velura-Images@main/categories/set-do/Velura_urban-rythm_cover.png',
       poster_url: null,
-      button_text: 'Khám phá Set đồ',
-      link_url: '/products?category=set-do',
+      button_text: 'Xem bộ sưu tập',
+      link_url: '/collections?collection=the-urban-rhythm',
       is_active: true,
       sort_order: 2,
     },
@@ -184,6 +184,27 @@ export class ProductListPage implements AfterViewInit {
   setBanner(index: number): void {
     this.activeBannerIndex.set(index);
     this.syncHeroVideo();
+  }
+
+  /**
+   * Extracts the clean route path from a banner link_url without query parameters.
+   */
+  bannerLinkPath(url: string | null | undefined): string {
+    if (!url) return '/collections';
+    return url.split('?')[0] || '/collections';
+  }
+
+  /**
+   * Extracts query parameters from a banner link_url so Angular Router preserves `?` instead of `%3F`.
+   */
+  bannerLinkQuery(url: string | null | undefined): Record<string, string> {
+    if (!url || !url.includes('?')) return {};
+    const params = new URLSearchParams(url.split('?')[1] || '');
+    const out: Record<string, string> = {};
+    params.forEach((value, key) => {
+      out[key] = value;
+    });
+    return out;
   }
 
   pauseBannerTimer(): void {

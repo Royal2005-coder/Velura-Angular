@@ -86,7 +86,7 @@ describe('HomePage', () => {
     expect(looks.map((look) => look.collectionName)).toEqual([1, 2, 3, 4, 5].map((index) => `Bộ sưu tập ${index}`));
     expect(looks.map((look) => look.image)).toEqual([1, 2, 3, 4, 5].map((index) => `/assets/images/models/model_cutout_${index}.png`));
     expect(new Set(looks.map((look) => look.image)).size).toBe(5);
-    expect(looks[0].link).toBe('/products?category=c1');
+    expect(looks[0].link).toBe('/collections?collection=col-1');
     expect(looks[0].eyebrow).toBe('VELURA');
   });
 

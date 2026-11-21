@@ -78,7 +78,7 @@
     </button>
   </div>
   @if (manualError()) {
-    <p class="field__error u-inline-0732c207b2">{{ manualError() }}</p>
+    <p class="field__error u-inline-0732c207b2" role="alert" aria-live="polite">{{ manualError() }}</p>
   }
 
 
@@ -120,7 +120,7 @@
           </button>
         </div>
         @if (manualError()) {
-          <p class="field__error">{{ manualError() }}</p>
+          <p class="field__error" role="alert" aria-live="polite">{{ manualError() }}</p>
         }
       </div>
 

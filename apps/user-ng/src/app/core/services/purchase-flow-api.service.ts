@@ -114,9 +114,19 @@ export class PurchaseFlowApiService {
       order_access_token: orderAccessToken,
     });
   }
-  /** Retries the existing unpaid order through a server-created gateway session. */
-  retryPayment(orderId: string, phone: string, orderAccessToken?: string): Observable<PurchaseCheckoutResponse> {
-    return this.api.post<PurchaseCheckoutResponse>('/api/user/orders/retry-payment', { order_id: orderId, phone, order_access_token: orderAccessToken });
+  /** Retries or switches the existing unpaid order through a server-created gateway session. */
+  retryPayment(
+    orderId: string,
+    phone: string,
+    orderAccessToken?: string,
+    paymentMethod?: 'STRIPE' | 'VNPAY' | 'MOMO',
+  ): Observable<PurchaseCheckoutResponse> {
+    return this.api.post<PurchaseCheckoutResponse>('/api/user/orders/retry-payment', {
+      order_id: orderId,
+      phone,
+      order_access_token: orderAccessToken,
+      ...(paymentMethod ? { payment_method: paymentMethod } : {}),
+    });
   }
   /**
    * Reads a provider-verified result; browser query parameters and snapshots cannot assert payment.

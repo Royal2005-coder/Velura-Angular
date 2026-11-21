@@ -10,10 +10,17 @@
     </button>
     @if (canCreate() && tab() !== 'subscribers') {
       @if (tab() === 'banners') {
-        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCreateBanner()">
-          <app-erp-icon name="plus" [size]="'15'" />
-          Tạo banner mới
-        </button>
+        @if (banners().length > 0) {
+          <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openEditBanner(banners()[0])">
+            <app-erp-icon name="image" [size]="'15'" />
+            Thay ảnh / video khung banner
+          </button>
+        } @else {
+          <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCreateBanner()">
+            <app-erp-icon name="plus" [size]="'15'" />
+            Tạo khung banner
+          </button>
+        }
       } @else if (tab() === 'collections') {
         <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCreateCollection()">
           <app-erp-icon name="plus" [size]="'15'" />

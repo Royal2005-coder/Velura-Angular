@@ -47,7 +47,7 @@
   letter-spacing: -0.2px;
 }
 
-/* Segmented Pill Toolbar */
+/* Segmented Toolbar */
 .flow-toolbar {
   display: inline-flex;
   align-items: center;
@@ -55,7 +55,7 @@
   padding: 5px;
   background: rgba(122, 40, 60, 0.04);
   border: 1px solid rgba(220, 190, 195, 0.45);
-  border-radius: 9999px;
+  border-radius: 10px;
   margin: 0;
   box-shadow: 0 2px 8px rgba(122, 40, 60, 0.02);
 }
@@ -66,7 +66,7 @@
   font-size: 13px;
   font-weight: 500;
   color: #684B37;
-  border-radius: 9999px;
+  border-radius: 8px !important;
   border: 1px solid transparent;
   background: transparent;
   text-decoration: none;
@@ -151,7 +151,7 @@
   width: 100%;
   padding: 12px 38px 12px 44px;
   border: 1.5px solid rgba(220, 190, 195, 0.6);
-  border-radius: 9999px;
+  border-radius: 8px;
   background: #FFF9FA;
   font-size: 13.5px;
   font-family: inherit;
@@ -202,7 +202,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  border-radius: 9999px;
+  border-radius: 8px;
   font-size: 12.5px;
   font-weight: 500;
   border: 1px solid rgba(220, 190, 195, 0.6);
@@ -233,7 +233,7 @@
   align-items: center;
   justify-content: center;
   padding: 1px 6px;
-  border-radius: 9999px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
   background: rgba(122, 40, 60, 0.08);
@@ -311,7 +311,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 14px;
-  border-radius: 9999px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.2px;
@@ -369,7 +369,7 @@
   align-items: center;
   gap: 5px;
   padding: 4px 12px;
-  border-radius: 9999px;
+  border-radius: 6px;
   font-size: 11.5px;
   font-weight: 600;
   white-space: nowrap;
@@ -446,7 +446,7 @@
   font-size: 11px;
   font-weight: 600;
   padding: 3px 10px;
-  border-radius: 9999px;
+  border-radius: 6px;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -502,7 +502,7 @@
   padding: 7px 16px;
   font-size: 12.5px;
   font-weight: 500;
-  border-radius: 9999px;
+  border-radius: 8px !important;
   transition: all 0.2s ease;
   cursor: pointer;
   text-decoration: none;
@@ -644,7 +644,7 @@ button.secondary.btn-compact:hover,
 .lookup-card form button[type='submit'] {
   width: 100%;
   min-height: 46px;
-  border-radius: 9999px;
+  border-radius: 8px !important;
   background: #7A283C;
   color: #FFFFFF;
   font-weight: 600;
@@ -687,7 +687,7 @@ button.secondary.btn-compact:hover,
 .order-list .empty .action {
   min-height: 40px;
   padding: 8px 22px;
-  border-radius: 9999px;
+  border-radius: 8px !important;
   background: #7A283C;
   border: 1px solid #7A283C;
   color: #FFFFFF;
@@ -730,6 +730,235 @@ button.secondary.btn-compact:hover,
   .order-list {
     padding: 24px 20px;
   }
+}
+
+/* --------------------------------------------------------------------------
+   Return Evidence Upload & Preview (Images + Compact Video Player)
+   -------------------------------------------------------------------------- */
+.preview-images {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  margin: 12px 0 20px;
+}
+
+.preview-images .preview-item,
+.preview-images > div {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: #FFFFFF;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(220, 190, 195, 0.7);
+  box-shadow: 0 2px 8px rgba(122, 40, 60, 0.05);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.preview-images .preview-item:hover,
+.preview-images > div:hover {
+  border-color: rgba(122, 40, 60, 0.4);
+  box-shadow: 0 4px 14px rgba(122, 40, 60, 0.09);
+}
+
+.preview-images .preview-media-wrap {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F8F5F5;
+}
+
+.preview-images img {
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+/* Khung video đổi trả: kích thước gọn gàng 180px x 108px (tỷ lệ 16:9), không tràn màn hình */
+.preview-images video {
+  width: 180px;
+  max-width: 100%;
+  height: 108px;
+  object-fit: contain;
+  background: #111111;
+  border-radius: 8px;
+  display: block;
+}
+
+.preview-badge-video {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  color: #FFFFFF;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  pointer-events: none;
+  letter-spacing: 0.04em;
+}
+
+.preview-images button.secondary,
+.preview-images .preview-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 5px 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #7A283C;
+  background: rgba(122, 40, 60, 0.06);
+  border: 1px solid rgba(122, 40, 60, 0.22);
+  border-radius: 8px !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.preview-images button.secondary:hover,
+.preview-images .preview-remove-btn:hover {
+  background: #7A283C;
+  color: #FFFFFF;
+  border-color: #7A283C;
+  transform: translateY(-1px);
+}
+
+/* ─── Real-time Inline Field Validation Errors ─── */
+.field-error-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #D4183D;
+  background: #FFF5F5;
+  border: 1px solid rgba(212, 24, 61, 0.25);
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  margin-top: 6px;
+  line-height: 1.4;
+  animation: fieldErrorFadeIn 0.2s ease-out;
+}
+
+.field-error-text svg {
+  flex-shrink: 0;
+  color: #D4183D;
+}
+
+@keyframes fieldErrorFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.field select.is-invalid,
+.field input.is-invalid,
+.field textarea.is-invalid,
+.field.is-invalid select,
+.field.is-invalid input,
+.field.is-invalid textarea {
+  border-color: #D4183D !important;
+  background-color: #FFFBFB !important;
+  box-shadow: 0 0 0 2px rgba(212, 24, 61, 0.12) !important;
+}
+
+/* ─── Field Label Row & Character Counter ─── */
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.char-counter {
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: #8C827A;
+  background: rgba(140, 130, 122, 0.08);
+  padding: 2px 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.char-counter--max {
+  color: #D4183D !important;
+  background: #FFF0F3 !important;
+  border: 1px solid rgba(212, 24, 61, 0.3) !important;
+  font-weight: 700 !important;
+  animation: pulseWarning 0.3s ease-in-out;
+}
+
+@keyframes pulseWarning {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.field textarea.is-max,
+.field.is-max textarea {
+  border-color: #D4183D !important;
+  box-shadow: 0 0 0 2px rgba(212, 24, 61, 0.12) !important;
+}
+
+.field-error-text--max {
+  background: #FFF0F3;
+  border-color: rgba(212, 24, 61, 0.3);
+}
+
+/* ─── Dimmed & Disabled Submit Button ─── */
+.actions .btn--dimmed,
+.actions button[disabled].btn--dimmed,
+.actions button.btn--dimmed {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.2) !important;
+  box-shadow: none !important;
+  transform: none !important;
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+.return-form-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #8C6A75;
+  background: rgba(122, 40, 60, 0.06);
+  border: 1px solid rgba(122, 40, 60, 0.12);
+  padding: 6px 12px;
+  border-radius: 8px;
+  margin-left: 8px;
+  line-height: 1.35;
+}
+
+.return-form-hint svg {
+  flex-shrink: 0;
+  color: #8C6A75;
+}
+
+.return-form-global-error {
+  margin-bottom: 12px;
 }
 
 @media (max-width: 640px) {

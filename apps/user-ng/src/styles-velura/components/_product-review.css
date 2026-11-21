@@ -189,7 +189,7 @@ body.page-product-review {
 .review-tag-btn {
   background: #F7F3F2;
   border: 1px solid #E8DFD6;
-  border-radius: 9999px;
+  border-radius: 8px !important;
   padding: 8px 20px;
   font-family: "Inter", sans-serif;
   font-size: 0.8125rem;

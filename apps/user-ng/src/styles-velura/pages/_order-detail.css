@@ -270,7 +270,8 @@ body.page-order-detail :is(.detail-card, .detail-action-card) {
 body.page-order-detail .detail-page-title { color: var(--velura-maroon, #7A283C); }
 body.page-order-detail .detail-header-card { border-left: 4px solid var(--velura-rose, #C94F70); }
 body.page-order-detail .detail-tracking-row { background: var(--velura-blush, #FDF2F4); border-radius: var(--radius-md, 16px); }
-body.page-order-detail :is(.detail-status-badge, .detail-track-btn) { border-radius: 999px; }
+body.page-order-detail .detail-status-badge { border-radius: 6px; }
+body.page-order-detail .detail-track-btn { border-radius: 8px !important; }
 body.page-order-detail :is(button, a):focus-visible { outline: 3px solid var(--velura-rose, #C94F70); outline-offset: 3px; }
 
 .detail-timeline-item:last-child .detail-timeline-line {

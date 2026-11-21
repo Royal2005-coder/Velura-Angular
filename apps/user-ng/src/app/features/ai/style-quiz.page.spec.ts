@@ -145,4 +145,27 @@ describe('StyleQuizPage', () => {
 
     fixture.destroy();
   });
+
+  it('dynamically adapts side panel editorial model and quote to the quiz concept flow and user selections', async () => {
+    const page = await createStorefrontPage(StyleQuizPage);
+    // Initial step 1 with default Office context
+    expect(page.step()).toBe(1);
+    expect(page.currentEditorial().model).toBe('/assets/images/models/runway-the-urban-rhythm.png');
+    expect(page.currentEditorial().quote).toBe('Gu thẩm mỹ không cần khuôn mẫu.');
+
+    // Switch context to Party
+    page.selectedContext.set('Party');
+    expect(page.currentEditorial().model).toBe('/assets/images/models/runway-the-afterglow.png');
+
+    // Move to step 2 (Measurements)
+    page.step.set(2);
+    expect(page.currentEditorial().model).toBe('/assets/images/models/runway-soft-ceremony.png');
+    expect(page.currentEditorial().quote).toBe('Sự vừa vặn tạo nên sự thoải mái tự nhiên.');
+
+    // Move to step 6 (Main style) and pick Street
+    page.step.set(6);
+    page.selectedMainStyle.set('Street');
+    expect(page.currentEditorial().model).toBe('/assets/images/models/runway-midnight-mirage.png');
+    expect(page.currentEditorial().collectionName).toBe('Midnight Mirage');
+  });
 });

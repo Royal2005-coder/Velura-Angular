@@ -352,7 +352,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 6px !important;
   background: #f3f4f6;
   color: #1f2937;
   border: 1px solid transparent;
@@ -484,7 +484,7 @@
   display: inline-flex;
   align-items: center;
   border: 1px solid #e5e7eb;
-  border-radius: 999px;
+  border-radius: 8px !important;
   padding: 2px 6px;
   background: #ffffff;
   gap: 4px;
@@ -495,7 +495,7 @@
   place-items: center;
   width: 22px;
   height: 22px;
-  border-radius: 50%;
+  border-radius: 4px;
   border: 0;
   background: transparent;
   color: #374151;
@@ -1034,7 +1034,7 @@ main.checkout-page .details-grid__value { color: var(--ink); }
 main.checkout-page .details-grid__value--accent { color: var(--velura-maroon); }
 main.checkout-page .checkout-step__num--active { background: var(--velura-maroon); border-color: var(--velura-maroon); }
 main.checkout-page .checkout-step__label--active { color: var(--velura-maroon); }
-main.checkout-page .btn--brown-outline { border-color: var(--velura-border); color: var(--velura-maroon); border-radius: 999px; }
+main.checkout-page .btn--brown-outline { border-color: var(--velura-border); color: var(--velura-maroon); border-radius: 8px !important; }
 main.checkout-page .btn--brown-outline:hover { color: #fff; border-color: var(--velura-maroon); background: var(--velura-maroon); }
 /* Main checkout form, isolated from the shared guest order and return forms. */
 .flow--checkout {
@@ -1071,7 +1071,7 @@ main.checkout-page .btn--brown-outline:hover { color: #fff; border-color: var(--
 .flow--checkout .choice input,
 .flow--checkout .check input { accent-color: var(--velura-maroon); }
 .flow--checkout button:not(.text-button):not(app-voucher-wallet *):not(.voucher-wallet *):not(.voucher-modal *),
-.flow--checkout .action { border: 1px solid var(--velura-rose-fill); border-radius: 999px; background: var(--velura-rose-fill); color: #fff; }
+.flow--checkout .action { border: 1px solid var(--velura-rose-fill); border-radius: 8px !important; background: var(--velura-rose-fill); color: #fff; }
 .flow--checkout button:not(.text-button):not(app-voucher-wallet *):not(.voucher-wallet *):not(.voucher-modal *):hover,
 .flow--checkout .action:hover { border-color: var(--velura-maroon-deep); background: var(--velura-maroon-deep); }
 .flow--checkout button.secondary:not(app-voucher-wallet *):not(.voucher-wallet *):not(.voucher-modal *),
@@ -1117,7 +1117,7 @@ app-claim-account-page .claim-account__container input { width: 100%; min-height
 .flow--orders .empty { border-color: var(--velura-border, #F2C2CF); border-radius: var(--radius-lg, 20px); box-shadow: 0 10px 28px rgba(122, 40, 60, .06); }
 .flow--orders .action,
 .flow--orders button[type="submit"],
-.flow--orders .return-track-btn { border-radius: 999px; }
+.flow--orders .return-track-btn { border-radius: 8px !important; }
 .flow--orders button[type="submit"] { color: #fff; background: var(--velura-maroon, #7A283C); border-color: var(--velura-maroon, #7A283C); }
 .flow--orders button[type="submit"]:hover:not(:disabled) { background: var(--velura-maroon-deep, #631F30); }
 .flow--orders .field input,
@@ -1233,7 +1233,7 @@ app-claim-account-page .claim-account__container input { width: 100%; min-height
 }
 .checkout-loyalty-badge {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 6px;
   background: var(--velura-maroon, #7A283C);
   color: #fff;
   font-size: 0.6875rem;
@@ -1352,7 +1352,7 @@ app-claim-account-page .claim-account__container input { width: 100%; min-height
 }
 .guest-benefit-btn {
   padding: 6px 12px;
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: var(--velura-maroon, #7A283C);
   color: #fff;
   font-size: 0.75rem;

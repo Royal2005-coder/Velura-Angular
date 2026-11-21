@@ -69,7 +69,7 @@ export class ChatbotPage {
   readonly draft = signal('');
   readonly loading = signal(false);
   readonly sessionId = signal('');
-  readonly sidebarOpen = signal(false);
+  readonly sidebarOpen = signal(typeof window !== 'undefined' ? window.innerWidth > 992 : true);
   readonly sessions = signal<ChatSession[]>([]);
   readonly productsById = signal<Record<string, ChatProduct>>({});
   readonly blogsById = signal<Record<string, ChatBlog>>({});
@@ -214,7 +214,7 @@ export class ChatbotPage {
     this.summaryProblem.set(''); this.summaryWanted.set(''); this.summarySequence.set(null); this.summaryConfirmed.set(false);
     this.ratingDraft.set(5);
     this.selectedOrderId.set(''); this.otpSent.set(false); this.otpCode.set(''); this.otpTarget.set(''); this.orderFeedback.set(''); this.orderBusy.set(false);
-    this.sidebarOpen.set(false);
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) { this.sidebarOpen.set(false); }
   }
 
   /**
@@ -236,7 +236,7 @@ export class ChatbotPage {
     this.chatbot.activeSession.set(session.session_id);
     this.sessionId.set(session.session_id);
     this.chatbot.saveSessionId(session.session_id);
-    this.sidebarOpen.set(false);
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) { this.sidebarOpen.set(false); }
     this.loading.set(true);
     this.chatbot.listMessages(session.session_id, this.chatbot.guestId()).pipe(takeUntilDestroyed(this.destroy)).subscribe({
       next: (data) => {

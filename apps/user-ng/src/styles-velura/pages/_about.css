@@ -1273,7 +1273,7 @@
 
 .page-about .about-hero__cta,
 .page-about .about-cta__btn {
-  border-radius: 999px;
+  border-radius: 8px !important;
   background: var(--velura-maroon);
   color: #fff;
   box-shadow: 0 8px 24px rgba(60, 20, 30, .16);

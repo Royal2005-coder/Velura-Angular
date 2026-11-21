@@ -110,6 +110,7 @@
   display: flex;
   flex-direction: column;
   flex-grow: 1;
+  min-width: 0;
 }
 
 .cart-item__header-row {
@@ -164,6 +165,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: auto;
 }
 
@@ -303,7 +306,7 @@
   display: flex;
   align-items: center;
   background-color: #f3f3f5;
-  border-radius: 6px;
+  border-radius: 8px !important;
   padding: 8px 12px;
   flex-grow: 1;
   gap: 6px;
@@ -426,7 +429,7 @@
   color: #ffffff;
   width: 100%;
   padding: 12px 20px; /* thu nhỏ nút thanh toán */
-  border-radius: 6px;
+  border-radius: 8px !important;
   font-size: 0.9375rem; /* 15px */
   font-weight: 600;
   text-decoration: none;
@@ -565,10 +568,10 @@
 .cart-page .cart-item__price,
 .cart-page .summary-total__value { color: var(--velura-maroon); }
 .cart-page .summary-card { border-color: rgba(242, 194, 207, .72); background: #fff; }
-.cart-page .coupon-input-wrapper { border-color: rgba(122,40,60,.2); border-radius: 999px; }
+.cart-page .coupon-input-wrapper { border-color: rgba(122,40,60,.2); border-radius: 8px !important; }
 .cart-page .coupon-input-wrapper:focus-within { border-color: var(--velura-rose); box-shadow: 0 0 0 3px rgba(201,79,112,.14); }
 .cart-page .coupon-btn,
-.cart-page .summary-card__btn-checkout { border-radius: 999px; background: var(--velura-rose-fill); }
+.cart-page .summary-card__btn-checkout { border-radius: 8px !important; background: var(--velura-rose-fill); }
 .cart-page .coupon-btn:hover,
 .cart-page .summary-card__btn-checkout:hover { background: var(--velura-maroon-deep); }
 .cart-page .summary-card__divider,
@@ -643,7 +646,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 6px !important;
   background: #f3f4f6;
   color: #1f2937;
   border: 1px solid transparent;
@@ -770,7 +773,7 @@
   display: inline-flex;
   align-items: center;
   border: 1px solid #e5e7eb;
-  border-radius: 999px;
+  border-radius: 8px !important;
   padding: 2px 6px;
   background: #ffffff;
   gap: 4px;
@@ -781,7 +784,7 @@
   place-items: center;
   width: 22px;
   height: 22px;
-  border-radius: 50%;
+  border-radius: 4px;
   border: 0;
   background: transparent;
   color: #374151;
@@ -854,7 +857,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   text-decoration: none;
-  border-radius: 6px;
+  border-radius: 8px !important;
   box-shadow: 0 4px 14px rgba(201, 123, 99, 0.25);
   transition: all 0.2s ease;
 }
@@ -954,7 +957,7 @@
 .cart-delete-modal-close {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: 6px;
   border: none;
   background: transparent;
   color: #8c857e;
@@ -1043,7 +1046,7 @@
   padding: 10px 20px;
   font-size: 0.875rem;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: 8px !important;
   background: #ffffff;
   border: 1px solid #dcd3cb;
   color: #4b443f;
@@ -1060,7 +1063,7 @@
   padding: 10px 22px;
   font-size: 0.875rem;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: 8px !important;
   background: #dc2626;
   border: 1px solid #b91c1c;
   color: #ffffff;

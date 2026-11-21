@@ -790,12 +790,12 @@ body .chatbot-widget {
 }
 
 .chat-product-card__title {
-  font-family: 'Cormorant Garamond', serif !important;
-  font-size: 1rem !important;
-  font-weight: 700 !important;
+  font-family: var(--velura-font-ui, 'Inter', sans-serif) !important;
+  font-size: 0.84rem !important;
+  font-weight: 600 !important;
   color: var(--text-dark, #2A2522);
   margin: 0;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .chat-product-card__price {

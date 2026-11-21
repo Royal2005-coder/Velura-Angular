@@ -160,7 +160,8 @@ export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], 
   }
   let canRequestReturn = false;
   if (order.status === "delivered" && order.delivered_at && order.order_kind !== "exchange") {
-    canRequestReturn = returnWindowOpen(parseUtcDate(order.delivered_at), new Date());
+    const hasEligibleItem = items.length === 0 || items.some((item) => Number(item.available_quantity ?? item.quantity ?? 0) > 0);
+    canRequestReturn = returnWindowOpen(parseUtcDate(order.delivered_at), new Date()) && hasEligibleItem;
   }
   return {
     ...visible,
@@ -362,7 +363,7 @@ export async function handleOrdersRoute(
       const orders = await Promise.all(rows.map(async (order) => {
         const oid = String(order.order_id);
         let itemsWithProduct = itemsByOrder.get(oid) || [];
-        if (order.status === "delivered" && itemsWithProduct.length > 0) {
+        if (["delivered", "completed", "refunded"].includes(String(order.status || "")) && itemsWithProduct.length > 0) {
           try {
             itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
           } catch {}
@@ -408,7 +409,7 @@ export async function handleOrdersRoute(
           selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,payment_provider,gateway_response_code,created_at,refund_amount,refunded_amount" })
         ]);
         let itemsWithProduct = await attachProductMeta(items);
-        if (order.status === "delivered") {
+        if (["delivered", "completed", "refunded"].includes(String(order.status || ""))) {
           itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
         }
         return sendJson(res, 200, { success: true, order_access_token: accessToken, order: presentOrderForCustomer(order, itemsWithProduct, history, payments) }, corsHeaders);
@@ -435,7 +436,7 @@ export async function handleOrdersRoute(
           selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,payment_provider,gateway_response_code,created_at,refund_amount,refunded_amount" })
         ]);
         let itemsWithProduct = await attachProductMeta(items);
-        if (order.status === "delivered") {
+        if (["delivered", "completed", "refunded"].includes(String(order.status || ""))) {
           itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
         }
         return sendJson(res, 200, presentOrderForCustomer(order, itemsWithProduct, history, payments), corsHeaders);
@@ -474,7 +475,7 @@ export async function handleOrdersRoute(
         const ordersWithItems = await Promise.all(orders.map(async (order) => {
           const oid = String(order.order_id);
           let items = itemsByOrder.get(oid) || [];
-          if (order.status === "delivered") {
+          if (["delivered", "completed", "refunded"].includes(String(order.status || ""))) {
             try {
               items = await attachReturnEligibility(userReturnsRepository, order.order_id, items);
             } catch {}

@@ -42,7 +42,7 @@ const SCAN_INTERVAL_MS = 350;
   imports: [AdminErpModal, AdminErpQrCode],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-erp-modal [open]="open()" [title]="title()" size="md" (closed)="dismiss()">
+    <app-erp-modal [open]="open()" [title]="title()" size="md" [elevated]="true" (closed)="dismiss()">
       <div class="scan">
         <ol class="scan__steps">
           @for (step of steps(); track step) {

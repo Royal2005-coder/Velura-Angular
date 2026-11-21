@@ -6,7 +6,10 @@ import { isTopOverlay, pushOverlay } from '../../core/overlay-stack';
 let modalSequence = 0;
 
 /**
- * Accessible modal shell: backdrop close, Escape, initial focus, reactive inert stacking, and a Tab trap.
+ * Accessible modal shell: backdrop close, Escape, initial focus, and a Tab trap.
+ * Note: do NOT set `inert` on `.modal-panel`, because nested modals (e.g. QR scanner
+ * inside ReturnFlowComponent) live inside `<ng-content />` and HTML `inert` disables
+ * the entire descendant subtree irreversibly.
  */
 @Component({
   selector: 'app-erp-modal',
@@ -22,7 +25,6 @@ let modalSequence = 0;
           aria-modal="true"
           [attr.aria-labelledby]="titleId"
           [attr.aria-busy]="busy()"
-          [attr.inert]="!isTop() ? '' : null"
           tabindex="-1"
           (keydown)="onPanelKeydown($event)"
         >

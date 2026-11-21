@@ -512,7 +512,7 @@
   border-radius: var(--radius-md, 8px);
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.78)),
-    url("/src/assets/images/velura-journal-banner.png") center / cover;
+    url("/assets/images/velura-journal-banner.png") center / cover;
   box-shadow: 0 24px 70px rgba(42, 37, 34, 0.05);
   text-align: left;
 }

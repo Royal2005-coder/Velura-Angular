@@ -14,7 +14,7 @@ import type { ReturnBoxForensicsDecision } from "../decision/decision-types.js";
 import { HttpError } from "../http.js";
 import { assertReturnEvidenceOwnership, fetchSafeMediaBytes } from "../security/safe-media-fetch.js";
 import { downloadStorageObject } from "../storage.js";
-import { insertRow, selectRows } from "../supabase.js";
+import { insertRow, selectRows, updateRows } from "../supabase.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { listReturnEvidence, resolveEvidenceRef } from "./return-evidence.js";
 
@@ -201,6 +201,27 @@ export async function listStoredReturnBoxForensics(returnId: string): Promise<Js
   } catch {
     return [];
   }
+}
+
+/**
+ * Persists a Super Admin forensics override audit decision on `public.return_box_forensics`
+ * and lifts `freeze_auto_refund` so the return refund ledger records who approved the bypass.
+ */
+export async function recordReturnBoxForensicsOverride(
+  forensicsId: string,
+  actorId: string | null,
+  overrideReason: string,
+): Promise<void> {
+  if (!config.supabaseUrl || !config.supabaseServiceRoleKey || !forensicsId) return;
+  await updateRows(
+    "return_box_forensics",
+    { forensics_id: `eq.${forensicsId}` },
+    {
+      reviewed_by: actorId && /^[0-9a-f-]{36}$/i.test(actorId) ? actorId : null,
+      human_override_verdict: `SUPER_ADMIN_OVERRIDE: ${overrideReason.trim().slice(0, 500)}`,
+      freeze_auto_refund: false,
+    },
+  );
 }
 
 function decodeImageBase64(raw: string): { bytes: Buffer; mime: "image/jpeg" | "image/png" | "image/webp" } {

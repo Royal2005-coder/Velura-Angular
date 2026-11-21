@@ -413,26 +413,32 @@ function signVnpayResponse(fields: JsonObject, keys: readonly string[], credenti
   return { ...fields, vnp_SecureHash: hash };
 }
 
+/** Creates a signed simulated MoMo checkout response in-process without a public HTTPS self-fetch. */
+export function createSimulatedMomoPayment(body: JsonObject, credentials: GatewayCredentials): JsonObject {
+  const reference = asString(body.orderId);
+  const signed = momoSignature({ ...body, accessKey: credentials.accessKey }, MOMO_CREATE_KEYS, credentials.secret);
+  if (!sameSignature(asString(body.signature), signed)) {
+    return { partnerCode: credentials.merchantId, requestId: asString(body.requestId), orderId: reference, resultCode: 97, message: "Invalid signature", responseTime: Date.now() };
+  }
+  const session: SimulatedSession = {
+    provider: "MOMO", reference, amount: Number(body.amount), orderInfo: asString(body.orderInfo),
+    returnUrl: asString(body.redirectUrl), expiresAtMs: Date.now() + SANDBOX_TTL_MS
+  };
+  const payUrl = `${config.apiPublicOrigin}/api/user/payments/simulator/momo/checkout?t=${encodeURIComponent(sessionToken(session, credentials))}`;
+  const result: JsonObject = {
+    partnerCode: credentials.merchantId, orderId: reference, requestId: asString(body.requestId),
+    amount: session.amount, resultCode: 0, message: "Request thành công", responseTime: Date.now(),
+    payUrl, qrCodeUrl: payUrl, deeplink: payUrl
+  };
+  result.signature = momoSignature({ ...result, accessKey: credentials.accessKey }, MOMO_CREATE_RESPONSE_KEYS, credentials.secret);
+  return result;
+}
+
 /** MoMo ký từng lệnh theo đúng bảng mã của tài liệu; accessKey không nằm trong body query/refund. */
 async function simulatedMomoApi(body: JsonObject, credentials: GatewayCredentials, path: string): Promise<JsonObject> {
   const reference = asString(body.orderId);
   if (path.endsWith("/create")) {
-    const signed = momoSignature({ ...body, accessKey: credentials.accessKey }, MOMO_CREATE_KEYS, credentials.secret);
-    if (!sameSignature(asString(body.signature), signed)) {
-      return { partnerCode: credentials.merchantId, requestId: asString(body.requestId), orderId: reference, resultCode: 97, message: "Invalid signature", responseTime: Date.now() };
-    }
-    const session: SimulatedSession = {
-      provider: "MOMO", reference, amount: Number(body.amount), orderInfo: asString(body.orderInfo),
-      returnUrl: asString(body.redirectUrl), expiresAtMs: Date.now() + SANDBOX_TTL_MS
-    };
-    const payUrl = `${config.apiPublicOrigin}/api/user/payments/simulator/momo/checkout?t=${encodeURIComponent(sessionToken(session, credentials))}`;
-    const result: JsonObject = {
-      partnerCode: credentials.merchantId, orderId: reference, requestId: asString(body.requestId),
-      amount: session.amount, resultCode: 0, message: "Request thành công", responseTime: Date.now(),
-      payUrl, qrCodeUrl: payUrl, deeplink: payUrl
-    };
-    result.signature = momoSignature({ ...result, accessKey: credentials.accessKey }, MOMO_CREATE_RESPONSE_KEYS, credentials.secret);
-    return result;
+    return createSimulatedMomoPayment(body, credentials);
   }
   const isRefundQuery = path.endsWith("/refund/query");
   const isRefund = path.endsWith("/refund");

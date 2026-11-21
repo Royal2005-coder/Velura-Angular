@@ -9,10 +9,27 @@ const DEFAULT_SCAN_STEPS: readonly string[] = [
   'Sau khi quét, mã đơn, ĐVVC, mã vận đơn, tracking URL và người giao được khóa lại để bàn giao đúng label.',
 ];
 
+/** Minimal typing for the browser BarcodeDetector API (Chrome/Edge/Android). */
+interface NativeBarcodeDetector {
+  detect(source: ImageBitmapSource): Promise<Array<{ rawValue?: string }>>;
+}
+interface BarcodeDetectorCtor {
+  new (options?: { formats?: string[] }): NativeBarcodeDetector;
+}
+
+function createBarcodeDetector(): NativeBarcodeDetector | null {
+  try {
+    const ctor = (globalThis as unknown as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
+    return typeof ctor === 'function' ? new ctor({ formats: ['qr_code'] }) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Longest edge decoded from a camera frame or uploaded photo; jsQR cost grows with pixels. */
 const MAX_SCAN_WIDTH = 800;
 const MAX_PHOTO_WIDTH = 1600;
-const SCAN_INTERVAL_MS = 280;
+const SCAN_INTERVAL_MS = 240;
 
 /**
  * Một hộp quét dùng chung: camera sau (điện thoại), ảnh QR đã chụp, hoặc dán nội dung.
@@ -32,23 +49,25 @@ const SCAN_INTERVAL_MS = 280;
             <li>{{ step }}</li>
           }
         </ol>
+        @if (error()) {
+          <p class="scan__error" role="alert">{{ error() }}</p>
+        }
         <div class="scan__stage" [class.scan__stage--ready]="cameraReady()">
           <video #video playsinline muted></video>
           <canvas #frame hidden></canvas>
-          @if (!cameraReady()) {
+          @if (cameraReady()) {
+            <div class="scan__reticle" aria-hidden="true"></div>
+            <span class="scan__live-pill" aria-hidden="true">Đang quét QR tự động…</span>
+          } @else {
             <p class="scan__placeholder">Camera chưa sẵn sàng. Dùng ảnh QR hoặc dán mã bên dưới.</p>
           }
         </div>
         <p class="scan__hint">{{ hint() }}</p>
 
-        @if (error()) {
-          <p class="scan__error" role="alert">{{ error() }}</p>
-        }
-
         <div class="scan__actions">
           <label class="erp-btn erp-btn--sm">
             Tải ảnh QR
-            <input type="file" accept="image/*" capture="environment" (change)="onFile($event)" hidden />
+            <input type="file" accept="image/*" (change)="onFile($event)" hidden />
           </label>
           @if (sample()) {
             <button class="erp-btn erp-btn--sm" type="button" (click)="sampleOpen.set(!sampleOpen())">
@@ -93,7 +112,8 @@ const SCAN_INTERVAL_MS = 280;
         position: relative;
         display: grid;
         place-items: center;
-        min-height: 320px;
+        min-height: 200px;
+        max-height: 260px;
         overflow: hidden;
         border: 1px dashed var(--erp-line);
         border-radius: var(--erp-radius-sm);
@@ -101,8 +121,32 @@ const SCAN_INTERVAL_MS = 280;
       }
       .scan__stage video {
         width: 100%;
-        max-height: 480px;
+        height: 240px;
+        max-height: 260px;
         object-fit: cover;
+      }
+      .scan__reticle {
+        position: absolute;
+        width: 156px;
+        height: 156px;
+        border: 2px solid rgba(255, 255, 255, 0.9);
+        border-radius: 14px;
+        box-shadow: 0 0 0 9999px rgba(18, 12, 16, 0.28);
+        pointer-events: none;
+      }
+      .scan__live-pill {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: rgba(18, 12, 16, 0.72);
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 500;
+        white-space: nowrap;
+        pointer-events: none;
       }
       .scan__stage:not(.scan__stage--ready) video {
         display: none;
@@ -121,8 +165,13 @@ const SCAN_INTERVAL_MS = 280;
       }
       .scan__error {
         margin: 0;
-        color: var(--erp-danger-text);
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: var(--erp-danger-text, #b91c1c);
         font-size: 0.82rem;
+        font-weight: 500;
       }
       .scan__actions {
         display: flex;
@@ -153,6 +202,8 @@ export class AdminErpQrScan {
   private stream: MediaStream | null = null;
   private timer: number | null = null;
   private starting = false;
+  private scanningFrame = false;
+  private readonly detector = createBarcodeDetector();
   /** Invalidates a getUserMedia promise that resolves after the modal was closed. */
   private session = 0;
 
@@ -204,6 +255,19 @@ export class AdminErpQrScan {
     this.error.set(null);
     try {
       const bitmap = await createImageBitmap(file);
+      if (this.detector) {
+        try {
+          const hits = await this.detector.detect(bitmap);
+          const hit = hits.find((item) => item.rawValue)?.rawValue;
+          if (hit) {
+            bitmap.close();
+            this.accept(hit);
+            return;
+          }
+        } catch {
+          // Fall back to jsQR decoding below.
+        }
+      }
       const scale = Math.min(1, MAX_PHOTO_WIDTH / Math.max(bitmap.width, 1));
       const width = Math.max(1, Math.round(bitmap.width * scale));
       const height = Math.max(1, Math.round(bitmap.height * scale));
@@ -269,22 +333,40 @@ export class AdminErpQrScan {
     }
   }
 
-  private tick(video: HTMLVideoElement): void {
+  private async tick(video: HTMLVideoElement): Promise<void> {
+    if (this.scanningFrame) return;
     const canvas = this.frame()?.nativeElement;
     if (!canvas || video.readyState < 2 || !video.videoWidth) return;
-    const scale = Math.min(1, MAX_SCAN_WIDTH / video.videoWidth);
-    const width = Math.max(1, Math.round(video.videoWidth * scale));
-    const height = Math.max(1, Math.round(video.videoHeight * scale));
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
+    this.scanningFrame = true;
+    try {
+      if (this.detector) {
+        try {
+          const hits = await this.detector.detect(video);
+          const hit = hits.find((item) => item.rawValue)?.rawValue;
+          if (hit && this.open()) {
+            this.accept(hit);
+            return;
+          }
+        } catch {
+          // Fall back to jsQR below.
+        }
+      }
+      const scale = Math.min(1, MAX_SCAN_WIDTH / video.videoWidth);
+      const width = Math.max(1, Math.round(video.videoWidth * scale));
+      const height = Math.max(1, Math.round(video.videoHeight * scale));
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) return;
+      context.drawImage(video, 0, 0, width, height);
+      const image = context.getImageData(0, 0, width, height);
+      const code = jsQR(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
+      if (code?.data && this.open()) this.accept(code.data);
+    } finally {
+      this.scanningFrame = false;
     }
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) return;
-    context.drawImage(video, 0, 0, width, height);
-    const image = context.getImageData(0, 0, width, height);
-    const code = jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
-    if (code?.data) this.accept(code.data);
   }
 
   private accept(text: string): void {

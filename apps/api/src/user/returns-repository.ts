@@ -20,6 +20,8 @@ export interface UserReturnsRepository {
   findProduct(productId: unknown): Promise<JsonObject | null>;
   findCategory(categoryId: unknown): Promise<JsonObject | null>;
   listReturnsForOrder(orderId: unknown): Promise<JsonObject[]>;
+  listOrdersByPhones?(phones: string[]): Promise<JsonObject[]>;
+  listReturnsForOrders?(orderIds: string[]): Promise<JsonObject[]>;
   listReturnItemsForReturn(returnId: unknown): Promise<JsonObject[]>;
   findReturnById(returnId: unknown): Promise<JsonObject | null>;
   /** Finds the return request that produced a replacement order, if any. */
@@ -69,6 +71,18 @@ export function createUserReturnsRepository(): UserReturnsRepository {
 
     async listReturnsForOrder(orderId) {
       const { rows } = await selectRows("return_exchange", { order_id: `eq.${orderId}` });
+      return rows;
+    },
+
+    async listOrdersByPhones(phones) {
+      if (!phones.length) return [];
+      const { rows } = await selectRows("orders", { shipping_phone: `in.(${phones.join(",")})`, order: "created_at.desc", limit: 50 });
+      return rows;
+    },
+
+    async listReturnsForOrders(orderIds) {
+      if (!orderIds.length) return [];
+      const { rows } = await selectRows("return_exchange", { order_id: `in.(${orderIds.join(",")})`, order: "created_at.desc", limit: 100 });
       return rows;
     },
 

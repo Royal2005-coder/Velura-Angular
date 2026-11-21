@@ -52,7 +52,14 @@
   @if (error()) {
     <p role="alert" class="error">{{ error() }}</p>
   }
-  @if (model.loading?.()) { <p class="loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải đơn hàng và yêu cầu đổi trả…</span></p> }
+  @if (model.loading?.()) {
+    <div class="loading-overlay" role="status" aria-live="polite">
+      <div class="loading-overlay__card">
+        <span class="spinner spinner--lg" aria-hidden="true"></span>
+        <p class="loading-overlay__text">Đang tải đơn hàng và yêu cầu đổi trả…</p>
+      </div>
+    </div>
+  }
   @if (model.error?.()) {
     <p role="alert" class="error">{{ model.error?.() }} <button type="button" (click)="model.refresh?.()">Thử lại</button></p>
   }

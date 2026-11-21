@@ -119,7 +119,7 @@ describe('OrderAccountApiStore authorization and response ordering', () => {
     expect(post).toHaveBeenCalledWith('/api/user/orders/track-otp-send', { order_code: 'VLR-1' });
     expect(post).toHaveBeenCalledWith('/api/user/orders/track-otp-verify', { order_code: 'VLR-1', otp_code: '123456' });
     expect(get).toHaveBeenCalledWith('/api/user/orders/guest?guest_access_token=verified-proof');
-    expect(get).toHaveBeenCalledWith('/api/user/returns/guest?order_id=uuid-1&guest_access_token=verified-proof');
+    expect(get).toHaveBeenCalledWith('/api/user/returns/guest?guest_access_token=verified-proof');
     expect(model.canAccess(model.orders()[0])).toBe(true);
     expect(localStorage.getItem('guest_order_session')).toBeNull();
   });

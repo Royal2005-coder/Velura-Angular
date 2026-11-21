@@ -1,5 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink, UrlTree } from '@angular/router';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router, RouterLink, UrlTree } from '@angular/router';
 import { COLLECTION_LOOKBOOKS, CollectionLookbook, collectionCoverFraming } from '../../core/models/collection-lookbook';
 import { ProductSummary } from '../../core/models/product.interface';
 import { CartLine, CartStore } from '../../core/services/cart.store';
@@ -20,7 +21,9 @@ export class CollectionsPage {
   private readonly catalog = inject(CatalogService);
   private readonly cart = inject(CartStore);
   private readonly checkout = inject(CheckoutStore);
+  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly loading = signal(true);
   readonly products = signal<ProductSummary[]>([]);
@@ -45,6 +48,20 @@ export class CollectionsPage {
 
   constructor() {
     useBodyClass('page-collections');
+    this.route.queryParamMap?.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      const requested = (params.get('collection') || '').trim();
+      if (requested) {
+        this.filter.set(requested);
+      } else {
+        const frag = this.route.snapshot?.fragment?.trim();
+        this.filter.set(frag || 'all');
+      }
+    });
+    this.route.fragment?.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((frag) => {
+      if (frag && !this.route.snapshot?.queryParamMap?.get('collection')) {
+        this.filter.set(frag.trim());
+      }
+    });
     if (typeof this.catalog.getCollections === 'function') {
       this.catalog.getCollections().subscribe({
         next: (cols) => {
@@ -81,10 +98,37 @@ export class CollectionsPage {
   }
 
   /**
-   * Filters lookbooks using the original collection tabs.
+   * Filters lookbooks using the original collection tabs and syncs the URL query param.
    */
   setFilter(id: string): void {
     this.filter.set(id);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { collection: id === 'all' ? null : id },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+
+  /**
+   * Extracts the clean route path from a link string that may contain query parameters.
+   */
+  linkPath(url: string | null | undefined): string {
+    if (!url) return '/products';
+    return url.split('?')[0] || '/products';
+  }
+
+  /**
+   * Parses query parameters from a link string so Angular Router does not percent-encode `?`.
+   */
+  linkQuery(url: string | null | undefined): Record<string, string> {
+    if (!url || !url.includes('?')) return {};
+    const params = new URLSearchParams(url.split('?')[1] || '');
+    const out: Record<string, string> = {};
+    params.forEach((value, key) => {
+      out[key] = value;
+    });
+    return out;
   }
 
   /**

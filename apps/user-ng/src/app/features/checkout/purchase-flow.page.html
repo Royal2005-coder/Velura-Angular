@@ -495,7 +495,7 @@
           }
           @if (quoteLoading()) { <p role="status">Đang cập nhật tổng thanh toán…</p> }
           @if (quoteError()) { <p role="alert" class="error">{{ quoteError() }}</p><button type="button" (click)="refreshQuote()">Thử tải lại</button> }
-          <app-voucher-wallet [orderValue]="quote().subtotal" [shippingFee]="quote().shipping" [cartItems]="lines()" [autoApply]="!voucherDeclined()" [preferred]="preferredVoucher" (applied)="selectVoucher($event)" (declined)="declineVoucher($event)" />
+          <app-voucher-wallet [orderValue]="quote().subtotal" [shippingFee]="quote().shipping" [cartItems]="lines()" [autoApply]="!voucherDeclined()" [preferred]="preferredVoucher" [guestCheckoutToken]="guestCheckoutToken() || null" (applied)="selectVoucher($event)" (declined)="declineVoucher($event)" />
           @if (member()) {
             <section class="checkout-loyalty-card" aria-labelledby="member-points-label">
               <div class="checkout-loyalty-card__head">

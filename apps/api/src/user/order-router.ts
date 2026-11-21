@@ -787,7 +787,9 @@ export async function handleOrdersRoute(
         voucher_id ? String(voucher_id) : null,
         body.decline_voucher === true || order.decline_voucher === true,
         body.points_spent ?? order.points_spent ?? 0,
-        sessionState.contact.phone
+        sessionState.contact.phone,
+        asString(guestUser.user_id) || null,
+        contact.email || null
       );
 
       // OTP is valid

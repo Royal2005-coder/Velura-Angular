@@ -27,9 +27,9 @@ function createBarcodeDetector(): NativeBarcodeDetector | null {
 }
 
 /** Longest edge decoded from a camera frame or uploaded photo; jsQR cost grows with pixels. */
-const MAX_SCAN_WIDTH = 800;
+const MAX_SCAN_WIDTH = 480;
 const MAX_PHOTO_WIDTH = 1600;
-const SCAN_INTERVAL_MS = 240;
+const SCAN_INTERVAL_MS = 350;
 
 /**
  * Một hộp quét dùng chung: camera sau (điện thoại), ảnh QR đã chụp, hoặc dán nội dung.
@@ -203,6 +203,7 @@ export class AdminErpQrScan {
   private timer: number | null = null;
   private starting = false;
   private scanningFrame = false;
+  private detectorFailed = false;
   private readonly detector = createBarcodeDetector();
   /** Invalidates a getUserMedia promise that resolves after the modal was closed. */
   private session = 0;
@@ -220,6 +221,7 @@ export class AdminErpQrScan {
   }
 
   onManual(event: Event): void {
+    this.error.set(null);
     this.manual.set((event.target as HTMLTextAreaElement).value);
   }
 
@@ -323,7 +325,7 @@ export class AdminErpQrScan {
         return;
       }
       this.cameraReady.set(true);
-      this.timer = window.setInterval(() => this.tick(video), SCAN_INTERVAL_MS);
+      this.scheduleNext(video, session);
     } catch {
       if (session === this.session && this.open()) {
         this.error.set('Không mở được camera (có thể chưa cấp quyền). Dùng ảnh QR hoặc dán mã bên dưới.');
@@ -333,13 +335,28 @@ export class AdminErpQrScan {
     }
   }
 
-  private async tick(video: HTMLVideoElement): Promise<void> {
-    if (this.scanningFrame) return;
+  /**
+   * Schedules the next frame scan after the previous one settles so the main thread
+   * always stays responsive for clicks, typing, and modal controls.
+   */
+  private scheduleNext(video: HTMLVideoElement, session: number): void {
+    if (session !== this.session || !this.open()) return;
+    this.timer = window.setTimeout(() => {
+      this.timer = null;
+      void this.tick(video, session);
+    }, SCAN_INTERVAL_MS);
+  }
+
+  private async tick(video: HTMLVideoElement, session: number): Promise<void> {
+    if (this.scanningFrame || session !== this.session || !this.open()) return;
     const canvas = this.frame()?.nativeElement;
-    if (!canvas || video.readyState < 2 || !video.videoWidth) return;
+    if (!canvas || video.readyState < 2 || !video.videoWidth) {
+      this.scheduleNext(video, session);
+      return;
+    }
     this.scanningFrame = true;
     try {
-      if (this.detector) {
+      if (this.detector && !this.detectorFailed) {
         try {
           const hits = await this.detector.detect(video);
           const hit = hits.find((item) => item.rawValue)?.rawValue;
@@ -347,8 +364,10 @@ export class AdminErpQrScan {
             this.accept(hit);
             return;
           }
+          // Native BarcodeDetector runs off-thread; skip synchronous jsQR to keep UI responsive.
+          return;
         } catch {
-          // Fall back to jsQR below.
+          this.detectorFailed = true;
         }
       }
       const scale = Math.min(1, MAX_SCAN_WIDTH / video.videoWidth);
@@ -362,10 +381,16 @@ export class AdminErpQrScan {
       if (!context) return;
       context.drawImage(video, 0, 0, width, height);
       const image = context.getImageData(0, 0, width, height);
-      const code = jsQR(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
-      if (code?.data && this.open()) this.accept(code.data);
+      const code = jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
+      if (code?.data && this.open()) {
+        this.accept(code.data);
+        return;
+      }
     } finally {
       this.scanningFrame = false;
+      if (session === this.session && this.open()) {
+        this.scheduleNext(video, session);
+      }
     }
   }
 
@@ -377,8 +402,9 @@ export class AdminErpQrScan {
   private stop(): void {
     this.session++;
     this.starting = false;
+    this.scanningFrame = false;
     if (this.timer !== null) {
-      window.clearInterval(this.timer);
+      window.clearTimeout(this.timer);
       this.timer = null;
     }
     if (this.stream) {

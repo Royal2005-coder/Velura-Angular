@@ -616,7 +616,7 @@
                 @if (returnBlockedReason(item); as blockedMsg) {
                   <div class="order-return-locked-notice" role="status">
                     <div class="order-return-locked-notice__info">
-                      <strong>🔒 Đã khóa tạo thêm yêu cầu đổi/trả</strong>
+                      <strong>{{ isReturnQuotaExhausted(item) ? '🔒 Đã đạt giới hạn đổi / trả (2/2 lần trong 7 ngày)' : '🔒 Đã khóa tạo thêm yêu cầu đổi/trả' }}</strong>
                       <p>{{ blockedMsg }}</p>
                     </div>
                     @if (orderActiveReturn(item); as activeReq) {
@@ -624,6 +624,8 @@
                     }
                   </div>
                 }
+              } @else if (remainingReturnQuotaLabel(item); as quotaNote) {
+                <p class="muted" role="status">ℹ {{ quotaNote }}</p>
               }
               <div class="actions">
                 @if (canCancel(item)) {
@@ -723,6 +725,15 @@
         }
         @case ('return') {
           @if (order(); as item) {
+            @if (!canStartReturn(item)) {
+              <section class="panel lookup-card">
+                <h2>{{ isReturnQuotaExhausted(item) ? 'Đã đạt giới hạn đổi / trả (2/2 lần trong 7 ngày)' : 'Không thể tạo thêm yêu cầu đổi / trả' }}</h2>
+                <p class="muted">{{ returnBlockedReason(item) || 'Đơn hàng này hiện không còn sản phẩm khả dụng để đổi/trả.' }}</p>
+                <div class="actions">
+                  <button type="button" class="secondary" (click)="view.set('detail')">← Quay lại chi tiết đơn hàng</button>
+                </div>
+              </section>
+            } @else {
             <section class="panel return-builder">
               <h2>1. Chọn sản phẩm cần đổi / trả</h2>
               <p class="muted">
@@ -1013,6 +1024,7 @@
                 </div>
               }
             </section>
+            }
           }
         }
         @case ('return-summary') {

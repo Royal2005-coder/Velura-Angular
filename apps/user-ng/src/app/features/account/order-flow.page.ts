@@ -500,12 +500,57 @@ export class OrderFlowPage {
     const order = this.order();
     if (order) this.model.scenario?.(order.id, status, days);
   }
+  /** Completed/successful return requests linked to this order. */
+  completedReturnsForOrder(order: DemoOrder | null | undefined): DemoReturn[] {
+    if (!order) return [];
+    return this.model.requests().filter(
+      (r) =>
+        (r.orderId === order.id || r.orderId === order.orderId) &&
+        !r.cancelledAt &&
+        !r.rejectedAt &&
+        (r.status === 'COMPLETED' || r.status === 'REFUNDED' || Boolean(r.completedAt)),
+    );
+  }
+
+  /** True when the order has already used up the 2-successful-return cap in 7 days. */
+  isReturnQuotaExhausted(order: DemoOrder | null | undefined): boolean {
+    if (!order) return false;
+    const items = order.items || [];
+    if (!items.length) return false;
+    if (items.every((l) => (l.availableQuantity ?? 0) < 1 && (l.returnCount ?? 0) >= 2)) return true;
+    const totalUnits = items.reduce((sum, l) => sum + Math.max(0, Number(l.quantity) || 0), 0);
+    const completed = this.completedReturnsForOrder(order);
+    if (totalUnits === 1 && completed.length >= 2) return true;
+    return false;
+  }
+
   /** Returns whether an order has at least one item eligible for a new return request. */
   canStartReturn(order: DemoOrder | null | undefined): boolean {
     if (!order || !this.withinWindow(order)) return false;
+    if (order.id.startsWith('EXC')) return false;
     const items = order.items || [];
     if (!items.length) return false;
+    if (this.isReturnQuotaExhausted(order)) return false;
+    const totalUnits = items.reduce((sum, l) => sum + Math.max(0, Number(l.quantity) || 0), 0);
+    if (totalUnits === 1 && this.completedReturnsForOrder(order).some((r) => r.kind === 'refund' || r.status === 'REFUNDED')) {
+      return false;
+    }
     return items.some((line) => line.availableQuantity > 0);
+  }
+
+  /** Friendly remaining quota note shown on order detail when 1 of 2 successful returns has been used. */
+  remainingReturnQuotaLabel(order: DemoOrder | null | undefined): string | null {
+    if (!order || !this.canStartReturn(order)) return null;
+    const items = order.items || [];
+    const totalUnits = items.reduce((sum, l) => sum + Math.max(0, Number(l.quantity) || 0), 0);
+    const used = Math.max(
+      items.reduce((max, l) => Math.max(max, Number(l.returnCount) || 0), 0),
+      totalUnits === 1 ? this.completedReturnsForOrder(order).length : 0,
+    );
+    if (used === 1) {
+      return 'Đã sử dụng 1/2 lượt đổi/trả thành công · Còn tối đa 1 lượt trong 7 ngày.';
+    }
+    return null;
   }
 
   /** Finds an active (in-progress) return request for the given order. */
@@ -563,6 +608,9 @@ export class OrderFlowPage {
     if (!order || !this.withinWindow(order)) return null;
     const items = order.items || [];
     if (!items.length || this.canStartReturn(order)) return null;
+    if (order.id.startsWith('EXC')) {
+      return 'Đơn hàng đổi mới không áp dụng tạo thêm yêu cầu đổi/trả. Vui lòng theo dõi trực tiếp trên đơn hàng gốc.';
+    }
     const inProg = items.find((l) => l.isInProgress);
     const activeReq = this.orderActiveReturn(order);
     if (inProg || activeReq) {
@@ -578,10 +626,10 @@ export class OrderFlowPage {
       }
       return `Tất cả sản phẩm trong đơn đang trong tiến trình đổi/trả (${statusText}).`;
     }
-    if (items.every((l) => (l.returnCount ?? 0) >= 2)) {
-      return 'Các đơn vị sản phẩm đã sử dụng tối đa 2 lượt đổi/trả trong 7 ngày.';
+    if (this.isReturnQuotaExhausted(order)) {
+      return 'Đơn hàng đã sử dụng tối đa 2/2 lần đổi/trả thành công trong 7 ngày theo chính sách của Velura. Bạn vẫn có thể theo dõi lịch sử các phiếu đổi/trả bên dưới.';
     }
-    return 'Tất cả sản phẩm trong đơn đã được hoàn trả hoặc đổi mới.';
+    return 'Tất cả sản phẩm trong đơn đã được hoàn tiền hoặc đổi trả xong, không còn số lượng khả dụng.';
   }
 
   /** Returns human-readable status for an item's in-progress return. */

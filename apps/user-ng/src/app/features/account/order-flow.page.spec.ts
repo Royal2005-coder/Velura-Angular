@@ -515,4 +515,31 @@ describe('OrderFlowPage with mocked Model', () => {
       expect(fixture.nativeElement.querySelector('input[name="account"]')).toBeNull();
     }
   });
+
+  it('locks the return button and explains the 2/2 limit once 2 completed returns exist within 7 days', () => {
+    const delivered: DemoOrder = {
+      ...order,
+      id: 'VLR-MAX-2',
+      status: 'delivered',
+      deliveredAt: new Date().toISOString(),
+      items: [{ ...order.items[0], quantity: 1, availableQuantity: 1, returnCount: 1 }],
+    };
+    model.orders.set([delivered]);
+    model.requests.set([
+      { ...pendingRequest, id: 'RET-1', orderId: delivered.id, status: 'COMPLETED', completedAt: new Date().toISOString() },
+      { ...pendingRequest, id: 'RET-2', orderId: delivered.id, status: 'COMPLETED', completedAt: new Date().toISOString() },
+    ]);
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    const page = fixture.componentInstance;
+    page.verified.set(true);
+    page.open(delivered.id);
+    fixture.detectChanges();
+
+    expect(page.isReturnQuotaExhausted(delivered)).toBe(true);
+    expect(page.canStartReturn(delivered)).toBe(false);
+    expect(page.returnBlockedReason(delivered)).toContain('2/2 lần đổi/trả thành công');
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>);
+    expect(buttons.some((b) => b.textContent?.includes('Yêu cầu Đổi / Trả'))).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Đã đạt giới hạn đổi / trả (2/2 lần trong 7 ngày)');
+  });
 });

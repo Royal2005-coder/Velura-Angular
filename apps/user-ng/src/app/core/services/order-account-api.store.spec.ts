@@ -19,34 +19,8 @@ describe('OrderAccountApiStore authorization and response ordering', () => {
   const get = vi.fn<(path: string) => Observable<Record<string, unknown>>>();
   const post = vi.fn<(path: string, body: unknown) => Observable<Record<string, unknown>>>();
   const patch = vi.fn<(path: string, body: unknown) => Observable<Record<string, unknown>>>();
-
-  const createStorageMock = () => {
-    let store: Record<string, string> = {};
-    return {
-      getItem: (key: string) => store[key] || null,
-      setItem: (key: string, value: string) => { store[key] = String(value); },
-      removeItem: (key: string) => { delete store[key]; },
-      clear: () => { store = {}; },
-      length: 0,
-      key: () => null,
-    };
-  };
-
-  beforeAll(() => {
-    try {
-      if (!globalThis.localStorage || typeof globalThis.localStorage.clear !== 'function') {
-        Object.defineProperty(globalThis, 'localStorage', { value: createStorageMock(), configurable: true, writable: true });
-      }
-      if (!globalThis.sessionStorage || typeof globalThis.sessionStorage.clear !== 'function') {
-        Object.defineProperty(globalThis, 'sessionStorage', { value: createStorageMock(), configurable: true, writable: true });
-      }
-    } catch {
-      // ignore
-    }
-  });
-
   beforeEach(() => {
-    sessionStorage?.clear?.(); localStorage?.clear?.(); session.set(null);
+    sessionStorage.clear(); localStorage.clear(); session.set(null);
     get.mockReset(); post.mockReset(); patch.mockReset();
     get.mockImplementation((path) => of(path.includes('/returns') ? { returns: [request] } : { orders: [order] }));
     post.mockReturnValue(of({ success: true })); patch.mockReturnValue(of({ success: true }));

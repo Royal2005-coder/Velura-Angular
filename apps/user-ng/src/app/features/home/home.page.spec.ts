@@ -2,8 +2,10 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
+import { vi } from 'vitest';
 import { COLLECTION_LOOKBOOKS, CollectionLookbook, normalizeCollectionLookbook } from '../../core/models/collection-lookbook';
 import { ApiService } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { ChatbotService } from '../../core/services/chatbot.service';
 import { StyleProfileService } from '../../core/services/style-profile.service';
@@ -61,6 +63,11 @@ async function createHomeWith(collections: CollectionLookbook[]): Promise<HomePa
 }
 
 describe('HomePage', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
   it('creates the ViewModel with a stub Model (no HttpClient)', async () => {
     const page = await createStorefrontPage(HomePage);
     expect(page).toBeTruthy();
@@ -93,6 +100,55 @@ describe('HomePage', () => {
   it('keeps HERO_LOOKS when only 4 collections are valid', async () => {
     const page = await createHomeWith([1, 2, 3, 4].map((index) => runwayCollection(index)));
     expect(page.heroLooks()).toEqual(HERO_LOOKS);
+  });
+
+  it('opens the Style Quiz promotion for a guest once the homepage delay completes', async () => {
+    vi.useFakeTimers();
+    try {
+      const page = await createHomeWith([]);
+      expect(page.quizPopupOpen()).toBe(false);
+
+      vi.advanceTimersByTime(1200);
+      expect(page.quizPopupOpen()).toBe(true);
+
+      page.closeQuizPopup();
+      expect(TestBed.inject(AuthService).consumeStyleQuizWelcome()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('opens the Style Quiz promotion once for a newly activated member', async () => {
+    localStorage.setItem('velura_token', 'token');
+    localStorage.setItem('velura_user', JSON.stringify({
+      user_id: 'member-1',
+      role: 'member',
+      is_new_user: true,
+    }));
+    vi.useFakeTimers();
+    try {
+      const page = await createHomeWith([]);
+      vi.advanceTimersByTime(1200);
+
+      expect(page.quizPopupOpen()).toBe(true);
+      expect(JSON.parse(localStorage.getItem('velura_user') || '{}').is_new_user).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not consume the guest promotion when the homepage closes before the delay', async () => {
+    vi.useFakeTimers();
+    try {
+      const page = await createHomeWith([]);
+      page.ngOnDestroy();
+      vi.advanceTimersByTime(1200);
+
+      expect(page.quizPopupOpen()).toBe(false);
+      expect(TestBed.inject(AuthService).consumeStyleQuizWelcome()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -1,17 +1,18 @@
 import { DOCUMENT } from '@angular/common';
-import { Component, effect, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { Component, DestroyRef, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { Meta, Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { map, switchMap } from 'rxjs';
+import { finalize, map, switchMap } from 'rxjs';
 import { BlogCatalogService } from '../../core/services/blog-catalog.service';
 import { BlogPost } from '../../core/models/blog-post';
 import { useBodyClass } from '../../core/utils/body-class';
+import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { SafeHtmlPipe } from '../../shared/pipes/safe-html.pipe';
 
 @Component({
   selector: 'app-blog-detail-page',
-  imports: [RouterLink, SafeHtmlPipe],
+  imports: [RouterLink, SafeHtmlPipe, LoadingOverlay],
   host: { class: 'page-blog-detail' },
   templateUrl: './blog-detail.page.html',
 })
@@ -19,31 +20,41 @@ export class BlogDetailPage {
   private readonly catalog = inject(BlogCatalogService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly titleService = inject(Title);
   private readonly metaService = inject(Meta);
   private readonly document = inject(DOCUMENT);
   readonly copiedVoucher = signal(false);
-
-  constructor() {
-    useBodyClass('page-blog-detail');
-    this.applyArticleSeo();
-  }
+  readonly loading = signal(true);
+  readonly post = signal<BlogPost | null>(null);
 
   readonly slug = toSignal(this.route.paramMap.pipe(map((params) => params.get('slug') || '')), {
     initialValue: '',
   });
-  readonly post = toSignal(
-    this.route.paramMap.pipe(
-      map((params) => params.get('slug') || ''),
-      switchMap((slug) => {
-        const cached = this.catalog.bySlug(slug);
-        // The detail endpoint is the only payload with attached products; keep the list copy
-        // as an offline/failed-request fallback.
-        return this.catalog.fetchBySlug(slug).pipe(map((fresh) => fresh || cached || null));
-      }),
-    ),
-    { initialValue: null as BlogPost | null },
-  );
+
+  constructor() {
+    useBodyClass('page-blog-detail');
+    this.route.paramMap
+      .pipe(
+        map((params) => params.get('slug') || ''),
+        switchMap((slug) => {
+          const cached = this.catalog.bySlug(slug) || null;
+          this.post.set(cached);
+          // Only show the blocking skeleton when no cached copy is available yet; never flash 404 while loading.
+          this.loading.set(!cached);
+          return this.catalog.fetchBySlug(slug).pipe(
+            map((fresh) => fresh || cached || null),
+            finalize(() => this.loading.set(false)),
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((article) => {
+        this.post.set(article);
+        this.loading.set(false);
+      });
+    this.applyArticleSeo();
+  }
 
   /** CMS body is plain text; split for readable paragraphs and let Angular escape it. */
   paragraphs(content?: string): string[] {

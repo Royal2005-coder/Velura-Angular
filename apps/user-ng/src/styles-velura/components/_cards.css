@@ -70,7 +70,7 @@
   color: #fff;
   font-size: 0.625rem;
   text-transform: uppercase;
-  border-radius: 999px;
+  border-radius: 6px;
 }
 
 .address-card__phone,
@@ -270,24 +270,29 @@
    HỆ THỐNG ĐỒNG BỘ FONT CHỮ & KIỂU DÁNG CARD SẢN PHẨM VELURA
    ============================================================ */
 
-/* 1. KHỐI TÊN SẢN PHẨM - TO, ĐẬM, SANG TRỌNG */
+/* 1. KHỐI TÊN SẢN PHẨM - HIỆN ĐẠI, DỄ ĐỌC, CHUẨN DẤU TIẾNG VIỆT */
 .card__title, 
 .product-card__title, 
 .order-item__title,
 .product-section__grid .product-card__title,
-.chatbot-messages .chatbot-message__text .product .title {
-  font-family: 'Cormorant Garamond', serif !important;
-  font-size: 1.125rem !important; /* Tăng size chữ rõ rệt */
-  font-weight: 700 !important;    /* Làm đậm nét */
-  line-height: 1.35;
-  color: #2A2522;                 /* Màu var(--text-dark) */
+.chatbot-messages .chatbot-message__text .product .title,
+.chat-product-card__title {
+  font-family: var(--velura-font-ui, "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif) !important;
+  font-size: 0.9375rem !important;
+  font-weight: 600 !important;
+  line-height: 1.45;
+  color: var(--text-dark, #2A1A1D);
   text-decoration: none;
+  letter-spacing: -0.01em;
 }
 
 /* Overrides cho thẻ thu nhỏ (mini-card) */
 .order-item__title,
-.chatbot-messages .chatbot-message__text .product .title {
-  font-size: 1rem !important;
+.chatbot-messages .chatbot-message__text .product .title,
+.chat-product-card__title {
+  font-size: 0.84rem !important;
+  font-weight: 600 !important;
+  line-height: 1.35;
 }
 
 /* Các thuộc tính cấu trúc cho card__title */
@@ -568,29 +573,34 @@
 }
 
 .card--product .card__actions .btn-buy {
-  flex: 1;
-  display: flex;
+  flex: 1 1 auto;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  background: #FDF2F4;
-  color: var(--terracotta, #844A5A);
-  padding: 11px 16px;
-  border-radius: var(--radius-sm);
-  font-size: 0.875rem;
-  font-weight: 600;
+  gap: 6px;
+  background: var(--velura-maroon, #7A283C);
+  color: #ffffff;
+  border: 1px solid var(--velura-maroon, #7A283C);
+  padding: 0 10px;
+  border-radius: 8px !important;
+  font-size: 0.82rem;
+  font-weight: 700;
   text-decoration: none;
-  border: none;
   cursor: pointer;
   line-height: 1.2;
+  white-space: nowrap !important;
   text-align: center;
-  transition: background 0.2s ease, color 0.2s ease;
-  min-height: 40px;
+  transition: all 0.2s ease;
+  min-height: 38px;
+  height: 38px;
+  box-shadow: 0 2px 6px rgba(122, 40, 60, 0.15);
 }
 
 .card--product .card__actions .btn-buy:hover {
-  background: #e8c9be;
-  color: var(--terracotta-h, #631F30);
+  background: var(--velura-maroon-deep, #631F30);
+  border-color: var(--velura-maroon-deep, #631F30);
+  box-shadow: 0 4px 12px rgba(122, 40, 60, 0.25);
+  transform: translateY(-1px);
 }
 
 .card--product .card__actions .btn-buy svg {
@@ -599,20 +609,22 @@
 }
 
 .card--product .card__btn-cart {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-sm);
-  background: #FDF2F4;
-  display: flex;
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  border-radius: 8px !important;
+  background: #FDF0EC;
+  border: 1px solid #F5D8DF;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--terracotta, #844A5A);
+  color: var(--velura-maroon, #7A283C);
   text-decoration: none;
-  border: none;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: all 0.2s ease;
   padding: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .card--product .card__btn-cart svg {
@@ -623,8 +635,11 @@
 }
 
 .card--product .card__btn-cart:hover {
-  background: var(--terracotta);
-  color: #ffffff;
+  background: #FCE3DC;
+  color: var(--velura-maroon-deep, #631F30);
+  border-color: var(--velura-rose, #C94F70);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(122, 40, 60, 0.15);
 }
 
 .card--product.card--list-view .card__actions {
@@ -678,7 +693,7 @@
 
 @media (max-width: 420px) {
   .card--product .card__actions .btn-buy {
-    white-space: normal;
+    white-space: nowrap !important;
   }
 }
 

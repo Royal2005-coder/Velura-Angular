@@ -33,7 +33,7 @@
   --error: #D4183D;
   --max-w: 1320px;
   --header-h: auto;
-  --radius-sm: 10px;
+  --radius-sm: 8px;
   --radius-md: 16px;
   --radius-lg: 24px;
   --shadow-card: 0 8px 25px rgba(122, 40, 60, 0.10);
@@ -51,7 +51,7 @@
   --velura-footer: #5D423C;
   --velura-border: #F2C2CF;
   --velura-sage: #E6ECD5;
-  --velura-font-display: "Cormorant Garamond", Georgia, serif;
+  --velura-font-display: "Playfair Display", "Cormorant Garamond", Georgia, serif;
   --velura-font-cursive: "Great Vibes", cursive;
   --velura-font-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
 

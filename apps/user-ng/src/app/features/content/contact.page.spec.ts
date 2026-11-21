@@ -6,4 +6,11 @@ describe('ContactPage', () => {
     const page = await createStorefrontPage(ContactPage);
     expect(page).toBeTruthy();
   });
+
+  it('marks message form as submitted on submit event', async () => {
+    const page = await createStorefrontPage(ContactPage);
+    const event = new Event('submit');
+    page.submit(event);
+    expect(page.sent()).toBe(true);
+  });
 });

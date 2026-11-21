@@ -293,11 +293,12 @@
 }
 
 .popular-card__name {
-  font-family: 'Cormorant Garamond', serif !important;
-  font-size: 1.125rem !important;
-  font-weight: 700 !important;
+  font-family: var(--velura-font-ui, 'Inter', sans-serif) !important;
+  font-size: 0.9375rem !important;
+  font-weight: 600 !important;
   color: #fff !important;
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .popular-card__count {

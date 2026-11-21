@@ -67,7 +67,7 @@
 .u-inline-27830d4dc8 { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; background: #fff; color: #111827; }
 .u-inline-27ee14f2f1 { background: #fff; padding: 24px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6); }
 .u-inline-28850714f9 { font-size: 1rem; font-weight: 600; color: #2A2522; margin: 0; }
-.u-inline-28d72ede81 { background: #fef3c7; color: #92400e; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
+.u-inline-28d72ede81 { background: #fef3c7; color: #92400e; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 6px; }
 .u-inline-2a162601ae { background: #2a2522; }
 .u-inline-2a8328f0ad { background: #844A5A; color: white; margin-bottom: 8px; }
 .u-inline-2ac03595f2 { text-align: center; padding: 48px 24px; background: #fff; border-radius: 12px; border: 1px solid var(--line, #e8dfd6); margin-bottom: 32px; }
@@ -109,7 +109,7 @@
 .u-inline-3b4d91096d { display: flex; gap: 14px; align-items: center; padding-bottom: 14px; border-bottom: 1px solid var(--line, #e8dfd6); }
 .u-inline-3b5055ccf9 { display: none; margin-top: 16px; margin-bottom: 0; }
 .u-inline-3d63bb570f { font-family: 'Inter', sans-serif; font-weight: 700; color: var(--terracotta); }
-.u-inline-3e4ecb21cb { font-size: 0.78rem; padding: 4px 10px; border-radius: 999px; background: #f8f4ef; border: 1px solid #e5d9cc; color: #4a3f39; text-decoration: none; }
+.u-inline-3e4ecb21cb { font-size: 0.78rem; padding: 4px 10px; border-radius: 6px; background: #f8f4ef; border: 1px solid #e5d9cc; color: #4a3f39; text-decoration: none; }
 .u-inline-3e9750973b { font-family: 'Cormorant Garamond', serif; font-size: 1.375rem; color: #2A2522; margin: 0 0 6px; }
 .u-inline-3ef6f52b3a { display: flex; gap: 8px; margin-top: 12px; }
 .u-inline-3f02c0f732 { max-width: 840px; margin: 0 auto 20px; padding: 14px 20px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; color: #991B1B; font-size: 0.875rem; display: flex; justify-content: space-between; align-items: center; }
@@ -129,7 +129,7 @@
 .u-inline-47193afa38 { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.875rem; color: #4a4039; font-weight: 500; }
 .u-inline-478fadd8b9 { color: var(--soft); font-size: 0.875rem; margin-bottom: 20px; line-height: 1.5; }
 .u-inline-4811ea4c0f { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0 6px; }
-.u-inline-48dea983ca { background: #fee2e2; color: #991b1b; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
+.u-inline-48dea983ca { background: #fee2e2; color: #991b1b; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 6px; }
 .u-inline-491c3ceee5 { width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #E8DFD6; }
 .u-inline-4942368fd1 { background-image: linear-gradient(rgba(30, 25, 22, 0.48), rgba(30, 25, 22, 0.68)), url('/assets/images/about-ca-nhan-hoa.png'); background-size: cover; background-position: center; border: none; }
 .u-inline-49fcd855ce { margin-top:24px }
@@ -195,7 +195,7 @@
 .u-inline-697f86dffa { display:flex;flex-direction:column;flex:1 }
 .u-inline-69fcbc5468 { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .u-inline-6a00364557 { display: block; font-size: 0.8125rem; font-weight: 600; color: var(--dark, #2a2522); margin-bottom: 6px; }
-.u-inline-6a1101c8f9 { display: inline-block; background: #FAF6F2; color: #7D562D; border: 1px solid #E8DFD6; padding: 4px 14px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; margin-bottom: 8px; }
+.u-inline-6a1101c8f9 { display: inline-block; background: #FAF6F2; color: #7D562D; border: 1px solid #E8DFD6; padding: 4px 14px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; margin-bottom: 8px; }
 .u-inline-6b82cf24aa { display: flex; }
 .u-inline-6bafb0cb58 { height: 14px; width: 100%; margin-bottom: 8px; border-radius: 4px; }
 .u-inline-6c9e79af20 { color: #581c87; font-size: 0.95rem; }
@@ -259,7 +259,7 @@
 .u-inline-8a359a76eb { margin-top:16px; }
 .u-inline-8bc13d6c95 { display: flex; align-items: center; justify-content: space-between; font-size: 0.8125rem; background: #fffcf9; padding: 8px 12px; border-radius: 8px; border: 1px solid #ebd9c8; gap: 8px; }
 .u-inline-8c1890a8a7 { max-width: 840px; margin: 0 auto; background: #fff; border: 1px dashed #D4C4B7; border-radius: 12px; padding: 48px 24px; text-align: center; }
-.u-inline-8c229cf566 { background: #e8f5e9; color: #2e7d32; font-size: 0.6875rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.u-inline-8c229cf566 { background: #e8f5e9; color: #2e7d32; font-size: 0.6875rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
 .u-inline-8c32d50b1d { font-weight: 600; color: var(--text-dark); font-size: 0.8125rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .u-inline-8ced61860a { position: relative; width: 72px; height: 72px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color, #d5c4b5); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .u-inline-8ced7fc683 { display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 6px; }
@@ -325,7 +325,7 @@
 .u-inline-a807098533 { margin: 8px 16px; padding: 12px 16px; background: #FAF7F5; border: 1px solid #EAE3DE; border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
 .u-inline-a81faf84fe { background: #fff3cd; color: #856404; padding: 14px 16px; border-radius: 8px; margin: 12px 0 16px 0; border: 1px solid #ffeeba; display: flex; flex-direction: column; gap: 8px; }
 .u-inline-a8672c7b1e { width: 2px; flex: 1; background: #e8dfd6; min-height: 24px; margin-top: 4px; }
-.u-inline-a86d4ea94e { display: inline-block; background: #e8f5e9; color: #166534; font-size: 0.6875rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; margin-bottom: 6px; letter-spacing: 0.5px; }
+.u-inline-a86d4ea94e { display: inline-block; background: #e8f5e9; color: #166534; font-size: 0.6875rem; font-weight: 700; padding: 2px 10px; border-radius: 6px; margin-bottom: 6px; letter-spacing: 0.5px; }
 .u-inline-a8b0d92d35 { padding: 0; min-height: auto; background: transparent; }
 .u-inline-abad28abfe { color: #2e7d32; font-weight: 500; }
 .u-inline-ad812c1120 { margin: 8px 0 0; font-size: 0.8125rem; color: var(--soft); }
@@ -395,7 +395,7 @@
 .u-inline-c871574325 { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .u-inline-c8be1ccba6 { display:none; }
 .u-inline-c937f3b834 { margin-left: 8px; }
-.u-inline-ca1aada3a7 { background: #e8f5e9; color: #2e7d32; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
+.u-inline-ca1aada3a7 { background: #e8f5e9; color: #2e7d32; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 6px; }
 .u-inline-cae1da51b3 { font-size:0.8rem;line-height:1.4;color:#2A2522; }
 .u-inline-cb38e3a040 { font-weight: 700; color: #222; font-size: 1rem; }
 .u-inline-cb3aa6d98a { background: #fff; border: 1px solid #E8DFD6; border-radius: 16px; padding: 48px; text-align: center; }

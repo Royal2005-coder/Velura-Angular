@@ -1,7 +1,7 @@
 import { HttpError, readJson, sendJson } from "../http.js";
 import { FREESHIP_THRESHOLD, shippingFeeFor, shippingMethodFromClaim } from "./order-pricing.js";
 import { loadVoucherCart, parseCartItems } from "./cart-catalog.js";
-import { buildWallet } from "./vouchers.js";
+import { buildWallet, verifiedGuestFromToken } from "./vouchers.js";
 import type { EvaluatedVoucher } from "./voucher-engine.js";
 import { chooseOrderVoucher, readVoucherRequest, type VoucherChange } from "./voucher-choice.js";
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse, JsonObject } from "../types.js";
@@ -82,10 +82,19 @@ export async function handleCheckoutRoute(
     throw new HttpError(400, "INVALID_ITEMS", "Một số sản phẩm trong giỏ hàng không tồn tại hoặc đã ngừng kinh doanh.");
   }
   const shippingFee = shippingFeeFor(cart.orderValue, shippingMethodFromClaim(body.shipping_fee, body.shipping_method));
-  const wallet = await buildWallet(context, cart.orderValue, shippingFee, {
-    lines: cart.lines,
-    categoryNameById: cart.categoryNameById
-  });
+  const guest = verifiedGuestFromToken(body.guest_checkout_token || req.headers?.["x-guest-checkout-token"]);
+  const wallet = await buildWallet(
+    context,
+    cart.orderValue,
+    shippingFee,
+    {
+      lines: cart.lines,
+      categoryNameById: cart.categoryNameById
+    },
+    guest.phone,
+    null,
+    guest.email
+  );
   const { applied, change } = chooseOrderVoucher(wallet, readVoucherRequest(body));
   const summary = summarizeQuote(cart.orderValue, shippingFee, applied, change);
   const loyalty = await loyaltyService.quote(context, summary.subtotal, summary.shippingFee, applied?.discountType === "free_shipping" ? 0 : summary.discountAmount, body.points_spent);

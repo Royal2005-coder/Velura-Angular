@@ -1,3 +1,4 @@
+import { verifyJwt } from "../auth-helper.js";
 import { HttpError, readJson, sendJson } from "../http.js";
 import { callRpc, quotePostgrestValue, selectRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
@@ -14,6 +15,8 @@ import {
 import { loadVoucherCart, parseCartItems } from "./cart-catalog.js";
 import { chooseOrderVoucher } from "./voucher-choice.js";
 import {
+  asJsonObject,
+  asString,
   type AuthContext,
   type HeaderMap,
   type HttpRequest,
@@ -24,6 +27,21 @@ import {
 
 import { loyaltyActor } from "../loyalty/loyalty-service.js";
 import { listConfirmedSupportVoucherIds } from "../chatbot/chatbot-promotions.js";
+/**
+ * Xác thực token OTP checkout của khách vãng lai (JWT ký HMAC) để tra cứu đúng
+ * lượt dùng voucher theo số điện thoại/email mà không cần tra phiên trong bộ nhớ.
+ */
+export function verifiedGuestFromToken(tokenInput: unknown): { phone: string | null; email: string | null } {
+  const raw = typeof tokenInput === "string" ? tokenInput.trim() : "";
+  if (!raw) return { phone: null, email: null };
+  const claims = verifyJwt(raw);
+  if (!claims || claims.purpose !== "guest_checkout") return { phone: null, email: null };
+  const phone = asString(claims.phone).trim() || null;
+  const contact = asJsonObject(claims.contact);
+  const email = asString(contact.email).trim().toLowerCase() || null;
+  return { phone, email };
+}
+
 /**
  * Ví voucher và engine chọn mã tốt nhất — dùng chung cho khách vãng lai và thành viên.
  *
@@ -41,10 +59,13 @@ export async function handleVouchersRoute(
   corsHeaders: HeaderMap,
   context: AuthContext
 ): Promise<void> {
+  const headerGuestToken = req.headers?.["x-guest-checkout-token"];
+
   if (!action && req.method === "GET") {
     const shippingFee = normalizeShippingFee(readQueryParam(req, "shippingFee"));
     const { orderValue, cart } = await readCart(readQueryParam(req, "items"), readQueryParam(req, "orderValue"));
-    const wallet = await buildWallet(context, orderValue, shippingFee, cart);
+    const guest = verifiedGuestFromToken(readQueryParam(req, "guestCheckoutToken") || headerGuestToken);
+    const wallet = await buildWallet(context, orderValue, shippingFee, cart, guest.phone, null, guest.email);
     return sendJson(res, 200, {
       success: true,
       order_value: orderValue,
@@ -59,7 +80,8 @@ export async function handleVouchersRoute(
     const body = await readJson(req) as JsonObject;
     const shippingFee = normalizeShippingFee(body.shipping_fee);
     const { orderValue, cart } = await readCart(body.items, body.order_value);
-    const wallet = await buildWallet(context, orderValue, shippingFee, cart);
+    const guest = verifiedGuestFromToken(body.guest_checkout_token || headerGuestToken);
+    const wallet = await buildWallet(context, orderValue, shippingFee, cart, guest.phone, null, guest.email);
 
     if (!wallet.best) {
       return sendJson(res, 200, {
@@ -85,7 +107,8 @@ export async function handleVouchersRoute(
 
     const shippingFee = normalizeShippingFee(body.shipping_fee);
     const { orderValue, cart } = await readCart(body.items, body.order_value);
-    const wallet = await buildWallet(context, orderValue, shippingFee, cart);
+    const guest = verifiedGuestFromToken(body.guest_checkout_token || headerGuestToken);
+    const wallet = await buildWallet(context, orderValue, shippingFee, cart, guest.phone, null, guest.email);
     const match = wallet.items.find((item) => item.code.toUpperCase() === code);
 
     if (!match) throw new HttpError(404, "NOT_FOUND", "Mã giảm giá không tồn tại");
@@ -119,10 +142,12 @@ export async function resolveOrderVoucher(
   requestedVoucherId: string | null,
   decline: boolean,
   cart: VoucherCart | null = null,
-  verifiedGuestPhone: string | null = null
+  verifiedGuestPhone: string | null = null,
+  resolvedUserId: string | null = null,
+  verifiedGuestEmail: string | null = null
 ): Promise<{ voucherId: string | null; discountAmount: number; merchandiseDiscount: number }> {
   if (decline) return { voucherId: null, discountAmount: 0, merchandiseDiscount: 0 };
-  const wallet = await buildWallet(context, orderValue, shippingFee, cart, verifiedGuestPhone);
+  const wallet = await buildWallet(context, orderValue, shippingFee, cart, verifiedGuestPhone, resolvedUserId, verifiedGuestEmail);
   const { applied, change } = chooseOrderVoucher(wallet, { voucherId: requestedVoucherId, code: null, decline });
   if (change) {
     throw new HttpError(409, "VOUCHER_CHANGED", change.reasonText, {
@@ -142,16 +167,18 @@ export async function resolveOrderVoucher(
 /**
  * Dựng ví voucher cho người gọi hiện tại.
  *
- * Khách vãng lai vẫn nhận đủ danh sách mã công khai — chỉ khác ở chỗ không tra được
- * lịch sử dùng mã theo tài khoản, nên các mã giới hạn theo thành viên sẽ báo rõ là
- * cần đăng nhập thay vì biến mất khỏi danh sách.
+ * Khách vãng lai vẫn nhận đủ danh sách mã công khai — chỉ khác ở chỗ trước khi xác
+ * thực SĐT thì chưa có lịch sử dùng mã; sau khi xác thực OTP (có `verifiedGuestPhone`
+ * hoặc `resolvedUserId`), hệ thống tra đúng lượt đã dùng để khớp 100% với ràng buộc DB.
  */
 export async function buildWallet(
   context: AuthContext,
   orderValue: number,
   shippingFee: number,
   cart: VoucherCart | null = null,
-  verifiedGuestPhone: string | null = null
+  verifiedGuestPhone: string | null = null,
+  resolvedUserId: string | null = null,
+  verifiedGuestEmail: string | null = null
 ): Promise<{ items: EvaluatedVoucher[]; best: EvaluatedVoucher | null }> {
   const profile = resolveProfile(context);
 
@@ -172,22 +199,38 @@ export async function buildWallet(
     if (profile?.user_id) {
       return selectRows("orders", { user_id: `eq.${profile.user_id}`, limit: 500 });
     }
-    if (!verifiedGuestPhone) {
+    const cleanPhone = (verifiedGuestPhone || "").trim();
+    const cleanEmail = (verifiedGuestEmail || "").trim().toLowerCase();
+    const cleanResolvedUserId = (resolvedUserId || "").trim();
+    if (!cleanPhone && !cleanResolvedUserId && !cleanEmail) {
       return { rows: [] as JsonObject[] };
     }
-    const cleanPhone = verifiedGuestPhone.trim();
-    const phoneVariants = Array.from(new Set([
-      cleanPhone,
-      cleanPhone.startsWith("0") ? `84${cleanPhone.slice(1)}` : cleanPhone,
-      cleanPhone.startsWith("0") ? `+84${cleanPhone.slice(1)}` : cleanPhone
-    ].filter(Boolean)));
-    const [byPhone, matchedUsers] = await Promise.all([
-      selectRows("orders", { shipping_phone: `in.(${phoneVariants.join(",")})`, limit: 500 }).catch(() => ({ rows: [] as JsonObject[] })),
-      selectRows("users", { phone: `in.(${phoneVariants.join(",")})`, select: "user_id", limit: 10 }).catch(() => ({ rows: [] as JsonObject[] }))
+    const phoneVariants = cleanPhone
+      ? Array.from(new Set([
+          cleanPhone,
+          cleanPhone.startsWith("0") ? `84${cleanPhone.slice(1)}` : cleanPhone,
+          cleanPhone.startsWith("0") ? `+84${cleanPhone.slice(1)}` : cleanPhone
+        ].filter(Boolean)))
+      : [];
+    const quotedPhones = phoneVariants.map(quotePostgrestValue).join(",");
+    const [byPhone, matchedByPhone, matchedByEmail] = await Promise.all([
+      quotedPhones
+        ? selectRows("orders", { shipping_phone: `in.(${quotedPhones})`, limit: 500 }).catch(() => ({ rows: [] as JsonObject[] }))
+        : Promise.resolve({ rows: [] as JsonObject[] }),
+      quotedPhones
+        ? selectRows("users", { phone: `in.(${quotedPhones})`, select: "user_id", limit: 10 }).catch(() => ({ rows: [] as JsonObject[] }))
+        : Promise.resolve({ rows: [] as JsonObject[] }),
+      cleanEmail
+        ? selectRows("users", { email: `eq.${cleanEmail}`, select: "user_id", limit: 5 }).catch(() => ({ rows: [] as JsonObject[] }))
+        : Promise.resolve({ rows: [] as JsonObject[] })
     ]);
-    const userIds = Array.from(new Set(matchedUsers.rows.map((u) => String(u.user_id || "")).filter(Boolean)));
+    const userIds = Array.from(new Set([
+      ...(cleanResolvedUserId ? [cleanResolvedUserId] : []),
+      ...matchedByPhone.rows.map((u) => String(u.user_id || "")),
+      ...matchedByEmail.rows.map((u) => String(u.user_id || ""))
+    ].filter(Boolean)));
     const byUser = userIds.length
-      ? await selectRows("orders", { user_id: `in.(${userIds.join(",")})`, limit: 500 }).catch(() => ({ rows: [] as JsonObject[] }))
+      ? await selectRows("orders", { user_id: `in.(${userIds.map(quotePostgrestValue).join(",")})`, limit: 500 }).catch(() => ({ rows: [] as JsonObject[] }))
       : { rows: [] as JsonObject[] };
     const merged = new Map<string, JsonObject>();
     for (const row of [...byPhone.rows, ...byUser.rows]) {
@@ -250,7 +293,7 @@ export async function buildWallet(
     isBirthdayMonth,
     hasBirthday,
     birthMonth,
-    enforcePerUserLimit: Boolean(profile?.user_id || verifiedGuestPhone)
+    enforcePerUserLimit: Boolean(profile?.user_id || resolvedUserId || verifiedGuestPhone)
   };
 
   const items = evaluateVouchers(activeVouchers, evaluationContext);

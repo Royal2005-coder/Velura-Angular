@@ -1,7 +1,8 @@
 import { config } from "./config.js";
 import { isEmailUnconfirmed } from "./auth-profile.js";
-import { signJwt } from "./auth-helper.js";
+import { signJwt, verifyPassword } from "./auth-helper.js";
 import { getRequestIp, HttpError } from "./http.js";
+import { updateRows } from "./supabase.js";
 import { writeAuditLog, type AuditLogRow } from "./audit.js";
 import { asString, errorMessage, type AuthContext, type HttpRequest, type JsonObject } from "./types.js";
 import {
@@ -86,21 +87,43 @@ export async function completeAdminPasswordSignIn(body: JsonObject, ipAddress?: 
     }
   }
 
-  let response: Response | null = null;
-  let payload: JsonObject = {};
-  try {
-    response = await fetch(`${config.supabaseUrl}/auth/v1/token?grant_type=password`, {
-      method: "POST",
-      headers: {
-        apikey: config.supabaseAnonKey,
-        Authorization: `Bearer ${config.supabaseAnonKey}`,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({ email, password })
-    });
-    payload = (await response.json().catch(() => ({}))) as JsonObject;
-  } catch {
-    response = null;
+  const requestPasswordGrant = async (): Promise<{ response: Response | null; payload: JsonObject }> => {
+    try {
+      const res = await fetch(`${config.supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: {
+          apikey: config.supabaseAnonKey,
+          Authorization: `Bearer ${config.supabaseAnonKey}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ email, password })
+      });
+      const data = (await res.json().catch(() => ({}))) as JsonObject;
+      return { response: res, payload: data };
+    } catch {
+      return { response: null, payload: {} };
+    }
+  };
+
+  let { response, payload } = await requestPasswordGrant();
+
+  // If GoTrue rejects a valid active user whose password cryptographically matches
+  // public.users.password_hash (e.g., seeded/migrated account missing auth_user_id or out of sync),
+  // auto-sync the GoTrue identity and retry once so real Supabase JWT sign-in succeeds.
+  if (
+    (!response?.ok || !payload.access_token) &&
+    user &&
+    user.is_active !== false &&
+    typeof user.password_hash === "string" &&
+    user.password_hash.length > 0 &&
+    verifyPassword(password, user.password_hash) &&
+    config.supabaseUrl &&
+    config.supabaseServiceRoleKey
+  ) {
+    const synced = await syncVerifiedGoTrueIdentity(email, password, user);
+    if (synced) {
+      ({ response, payload } = await requestPasswordGrant());
+    }
   }
 
   if (!response?.ok || !payload.access_token) {
@@ -222,4 +245,81 @@ export async function recordAdminSignOut(req: HttpRequest, context: AuthContext)
     new_value: { session: "cleared" },
     ip_address: getRequestIp(req)
   });
+}
+
+/**
+ * Syncs a cryptographically verified public.users password into Supabase Auth (GoTrue)
+ * when a seeded or legacy admin row is missing its GoTrue identity or has a stale hash.
+ */
+async function syncVerifiedGoTrueIdentity(
+  email: string,
+  password: string,
+  user: LoginLockUser
+): Promise<boolean> {
+  const headers = {
+    apikey: config.supabaseServiceRoleKey,
+    authorization: `Bearer ${config.supabaseServiceRoleKey}`,
+    "content-type": "application/json"
+  };
+  const existingAuthId = asString(user.auth_user_id).trim();
+  try {
+    if (existingAuthId) {
+      const res = await fetch(`${config.supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(existingAuthId)}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ password, email_confirm: true }),
+        signal: AbortSignal.timeout(10_000)
+      });
+      if (res.ok) return true;
+    }
+    const createRes = await fetch(`${config.supabaseUrl}/auth/v1/admin/users`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: asString(user.full_name) || email }
+      }),
+      signal: AbortSignal.timeout(10_000)
+    });
+    const created = (await createRes.json().catch(() => ({}))) as JsonObject;
+    const createdId = asString(created.id).trim();
+    if (createRes.ok && createdId) {
+      await updateRows("users", { user_id: `eq.${user.user_id}` }, {
+        auth_user_id: createdId,
+        is_verified: true
+      }).catch(() => undefined);
+      return true;
+    }
+    // If GoTrue already has an identity for this email (422), look it up and sync password + link auth_user_id.
+    const listRes = await fetch(`${config.supabaseUrl}/auth/v1/admin/users?page=1&per_page=100`, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(10_000)
+    });
+    if (!listRes.ok) return false;
+    const listPayload = (await listRes.json().catch(() => ({}))) as JsonObject;
+    const users = Array.isArray(listPayload.users) ? listPayload.users : [];
+    const matched = users.find((u) => {
+      const row = u as JsonObject;
+      return asString(row.email).trim().toLowerCase() === email.toLowerCase();
+    }) as JsonObject | undefined;
+    const matchedId = matched ? asString(matched.id).trim() : "";
+    if (!matchedId) return false;
+    const updateRes = await fetch(`${config.supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(matchedId)}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ password, email_confirm: true }),
+      signal: AbortSignal.timeout(10_000)
+    });
+    if (!updateRes.ok) return false;
+    await updateRows("users", { user_id: `eq.${user.user_id}` }, {
+      auth_user_id: matchedId,
+      is_verified: true
+    }).catch(() => undefined);
+    return true;
+  } catch {
+    return false;
+  }
 }

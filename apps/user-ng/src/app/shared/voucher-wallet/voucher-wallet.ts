@@ -283,6 +283,7 @@ export class VoucherWallet {
       this.manualError.set('Nhập mã giảm giá.');
       return;
     }
+    this.manualError.set(null);
     this.applying.set(true);
     const version = ++this.manualVersion;
     const cartKey = this.cartKey();

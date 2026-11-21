@@ -883,10 +883,12 @@ export class PurchaseFlowPage {
           const details = (error.details || {}) as Partial<VoucherChangedDetails>;
           const replacement = details?.replacement ?? null;
           this.voucherId.set(replacement?.voucher_id ?? null);
+          this.voucherDeclined.set(!replacement?.voucher_id);
           if (replacement?.voucher_id) {
             localStorage.setItem('checkout_voucher_id', replacement.voucher_id);
           } else {
             localStorage.removeItem('checkout_voucher_id');
+            localStorage.removeItem('checkout_voucher_code');
           }
           this.refreshQuote();
           const requested = details?.requested_code ? `Mã ${details.requested_code}` : 'Mã giảm giá đã chọn';
@@ -977,16 +979,31 @@ export class PurchaseFlowPage {
       this.busy.set(false);
     }, 800);
   }
-  /** Retry the same payment; its order code remains unchanged. */
-  retry(): void {
+  /** Enabled online providers available to switch to from the current payment/result screen. */
+  readonly switchableOnlineProviders = computed(() => {
+    const active = this.gateway().provider || this.order()?.payment || this.payment;
+    return this.paymentProviders().filter(
+      (provider) => provider.enabled && provider.code !== 'COD' && provider.code !== active,
+    );
+  });
+
+  /** Retry the same payment or switch to another enabled online gateway; order code remains unchanged. */
+  retry(method?: 'STRIPE' | 'VNPAY' | 'MOMO'): void {
     const order = this.order();
     if (!order || this.busy()) return;
     this.busy.set(true);
+    this.error.set('');
     const userId = this.model.userId();
-    this.purchaseApi.retryPayment(order.orderId || order.id, normalizePhone(this.address.phone), this.checkout.readCreatedOrder()?.order_access_token).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    this.purchaseApi.retryPayment(order.orderId || order.id, normalizePhone(this.address.phone), this.checkout.readCreatedOrder()?.order_access_token, method).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (response) => {
         if (userId !== this.model.userId()) return;
         this.busy.set(false);
+        if (method) {
+          this.payment = method;
+          const updated: DemoOrder = { ...order, payment: method, paymentState: 'pending', status: 'pending_payment' };
+          this.order.set(updated);
+          this.persistPaymentSnapshot(updated, response.payment?.expires_at);
+        }
         if (this.applyHostedPayment(response.payment)) return;
         const url = response.stripe?.url;
         if (url) window.location.assign(url);

@@ -40,7 +40,7 @@ export const HERO_LOOKS: HeroLook[] = [
     badge: 'ELEGANT',
     looksCount: '10 LOOKS',
     image: '/assets/images/models/model_cutout_1.png',
-    link: '/products?category=dam-vay',
+    link: '/collections?collection=soft-ceremony',
   },
   {
     id: 'weekend-escape',
@@ -52,10 +52,10 @@ export const HERO_LOOKS: HeroLook[] = [
     badge: 'TRAVEL',
     looksCount: '14 LOOKS',
     image: '/assets/images/models/model_cutout_2.png',
-    link: '/products?category=set-do',
+    link: '/collections?collection=weekend-escape',
   },
   {
-    id: 'in-bloom',
+    id: 'the-afterglow',
     collectionName: 'The Afterglow',
     title: 'In Bloom.',
     eyebrow: 'VELURA',
@@ -64,10 +64,10 @@ export const HERO_LOOKS: HeroLook[] = [
     badge: 'ELEGANT',
     looksCount: '12 LOOKS',
     image: '/assets/images/models/model_cutout_3.png',
-    link: '/collections',
+    link: '/collections?collection=the-afterglow',
   },
   {
-    id: 'urban-rhythm',
+    id: 'the-urban-rhythm',
     collectionName: 'The Urban Rhythm',
     title: 'Urban Rhythm.',
     eyebrow: 'VELURA',
@@ -76,7 +76,7 @@ export const HERO_LOOKS: HeroLook[] = [
     badge: 'CASUAL',
     looksCount: '16 LOOKS',
     image: '/assets/images/models/model_cutout_4.png',
-    link: '/products?category=quan',
+    link: '/collections?collection=the-urban-rhythm',
   },
   {
     id: 'midnight-mirage',
@@ -88,7 +88,7 @@ export const HERO_LOOKS: HeroLook[] = [
     badge: 'STREET',
     looksCount: '8 LOOKS',
     image: '/assets/images/models/model_cutout_5.png',
-    link: '/products?category=ao',
+    link: '/collections?collection=midnight-mirage',
   },
 ];
 
@@ -304,7 +304,12 @@ export class HomePage implements AfterViewInit, OnDestroy {
         .subscribe((collections) => {
           const runway = buildHomeRunwayLooks(collections ?? []);
           if (runway) {
-            this.heroLooks.set(runway);
+            this.heroLooks.set(
+              runway.map((look) => ({
+                ...look,
+                link: `/collections?collection=${encodeURIComponent(look.id)}`,
+              }))
+            );
           }
         });
     }

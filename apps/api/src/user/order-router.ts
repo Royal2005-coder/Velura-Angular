@@ -237,14 +237,13 @@ export async function attachReturnEligibility(
   _orderId: unknown,
   items: JsonObject[]
 ): Promise<JsonObject[]> {
-  const result: JsonObject[] = [];
-  for (const item of items) {
+  return Promise.all(items.map(async (item) => {
     const units = await repository.listReturnUnits(item.item_id);
     const held = units.filter((unit) => !!unit.active_return_item_id);
     const available = units.length
       ? units.filter((unit) => !unit.refunded && !unit.active_return_item_id && Number(unit.success_count) < 2).length
       : Math.max(0, Number(item.quantity) || 0);
-    result.push({
+    return {
       ...item,
       return_count: units.length ? Math.max(...units.map((unit) => Number(unit.success_count) || 0)) : 0,
       available_quantity: available,
@@ -255,9 +254,8 @@ export async function attachReturnEligibility(
       is_in_progress: held.length > 0,
       in_progress_return_code: null,
       in_progress_status: held.length ? "IN_PROGRESS" : null
-    });
-  }
-  return result;
+    };
+  }));
 }
 
 /**
@@ -329,20 +327,47 @@ export async function handleOrdersRoute(
       const phone = guestSessionPhone(token);
       if (!phone) throw new HttpError(401, "GUEST_SESSION_REQUIRED", "Verify your phone to view orders");
       const phoneVariants = [...new Set([phone, `84${phone.slice(1)}`, `+84${phone.slice(1)}`])];
-      const { rows } = await selectRows("orders", { shipping_phone: `in.(${phoneVariants.join(",")})`, order: "created_at.desc", limit: "50" });
+      const { rows } = await selectRows("orders", { shipping_phone: `in.(${phoneVariants.join(",")})`, order: "created_at.desc", limit: "30" });
+      if (!rows.length) {
+        return sendJson(res, 200, { success: true, orders: [], guest_access_token: token }, corsHeaders);
+      }
+      const orderIds = rows.map((o) => String(o.order_id)).filter(Boolean);
+      const [allItemsRes, allHistoryRes, allPaymentsRes] = await Promise.all([
+        selectRows("order_item", { order_id: `in.(${orderIds.join(",")})` }),
+        selectRows("order_status_history", { order_id: `in.(${orderIds.join(",")})`, select: "order_id,new_status,changed_at" }),
+        selectRows("payment", { order_id: `in.(${orderIds.join(",")})`, select: "order_id,payment_status,payment_provider,created_at,refund_amount,refunded_amount" })
+      ]);
+      const hydratedItems = await attachProductMeta(allItemsRes.rows);
+      const itemsByOrder = new Map<string, JsonObject[]>();
+      for (const it of hydratedItems) {
+        const oid = String(it.order_id);
+        const list = itemsByOrder.get(oid) || [];
+        list.push(it);
+        itemsByOrder.set(oid, list);
+      }
+      const historyByOrder = new Map<string, JsonObject[]>();
+      for (const h of allHistoryRes.rows) {
+        const oid = String(h.order_id);
+        const list = historyByOrder.get(oid) || [];
+        list.push(h);
+        historyByOrder.set(oid, list);
+      }
+      const paymentsByOrder = new Map<string, JsonObject[]>();
+      for (const p of allPaymentsRes.rows) {
+        const oid = String(p.order_id);
+        const list = paymentsByOrder.get(oid) || [];
+        list.push(p);
+        paymentsByOrder.set(oid, list);
+      }
       const orders = await Promise.all(rows.map(async (order) => {
-        const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
-          selectRows("order_item", { order_id: "eq." + order.order_id }),
-          selectRows("order_status_history", { order_id: "eq." + order.order_id, select: "new_status,changed_at" }),
-          selectRows("payment", { order_id: "eq." + order.order_id, select: "payment_status,payment_provider,created_at,refund_amount,refunded_amount" })
-        ]);
-        let itemsWithProduct = await attachProductMeta(items);
-        if (order.status === "delivered") {
+        const oid = String(order.order_id);
+        let itemsWithProduct = itemsByOrder.get(oid) || [];
+        if (order.status === "delivered" && itemsWithProduct.length > 0) {
           try {
             itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
           } catch {}
         }
-        return presentOrderForCustomer(order, itemsWithProduct, history, payments);
+        return presentOrderForCustomer(order, itemsWithProduct, historyByOrder.get(oid) || [], paymentsByOrder.get(oid) || []);
       }));
       return sendJson(res, 200, { success: true, orders, guest_access_token: token }, corsHeaders);
     }
@@ -542,12 +567,23 @@ export async function handleOrdersRoute(
       if (!presentOrderForCustomer(order,[],[],payments).can_pay_again || payments.some(p => ["paid","refunded","refund_pending"].includes(asString(p.payment_status)))) throw new HttpError(409,"PAY_AGAIN_NOT_ALLOWED","Order is not awaiting payment");
       const method = asString(body.payment_method || payments.find(p => ["stripe","vnpay","momo"].includes(asString(p.payment_provider)))?.payment_provider || "STRIPE").toUpperCase();
       assertStripeReady(method);
+      const targetProvider = method.toLowerCase();
+      // When switching to another online gateway, close pending attempts of the previous provider
+      // so the customer can freely switch between VNPay, MoMo, and Stripe on the same unpaid order.
+      const otherPending = payments.filter(
+        (p) => p.payment_status === "pending" && asString(p.payment_provider).toLowerCase() !== targetProvider
+      );
+      for (const stale of otherPending) {
+        await updateRows(
+          "payment",
+          { payment_id: "eq." + stale.payment_id, payment_status: "eq.pending" },
+          { payment_status: "failed", gateway_response_code: "switched_provider" }
+        );
+      }
       if (method === "VNPAY" || method === "MOMO") {
         const payment = await openLocalGateway(asString(order.order_id), method, checkoutClientIp(req.headers,req.socket?.remoteAddress));
         return sendJson(res,200,{success:true,payment,stripe:null,order:presentOrderForCustomer(order,[],[],payments)},corsHeaders);
       }
-      const liveLocal = payments.some(p => p.payment_status === "pending" && ["vnpay","momo"].includes(asString(p.payment_provider)) && Date.parse(asString(p.gateway_expires_at)) > Date.now());
-      if (liveLocal) throw new HttpError(409,"PAYMENT_SESSION_OPEN","Phiên thanh toán trước vẫn còn hiệu lực.");
       const pending = payments.filter(p => p.payment_status === "pending" && p.payment_provider === "stripe");
       if (hasOpenStripeSession(pending)) {
         const openSession = pending.find(p => p.gateway_session_id && hasOpenStripeSession([p]));

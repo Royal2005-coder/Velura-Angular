@@ -18,8 +18,8 @@ export class LoyaltyWalletComponent {
   private readonly auth = inject(AuthService);
   private readonly destroy = inject(DestroyRef);
   private generation = 0;
-  /** Render the stable zero-state immediately; the server snapshot replaces it when available. */
-  readonly wallet = signal<LoyaltyWallet | null>(this.emptyWallet());
+  /** Only an authoritative server snapshot is rendered; an API failure must never look like a zero balance. */
+  readonly wallet = signal<LoyaltyWallet | null>(null);
   readonly busy = signal(false);
   readonly error = signal('');
   readonly notice = signal('');
@@ -31,26 +31,8 @@ export class LoyaltyWalletComponent {
   private syncProfileAndReload(): void {
     // Attempt wallet load directly; the server validates member role atomically.
     // Profile pre-flight is redundant and fails before session fully populates.
-    this.wallet.set(this.emptyWallet());
+    this.wallet.set(null);
     this.reload();
-  }
-  private emptyWallet(): LoyaltyWallet {
-    return {
-      balance_points: 0,
-      available_points: 0,
-      amount_vnd: 0,
-      referral_code: '—',
-      policy: {
-        spending_enabled: true,
-        policy_approved_at: new Date().toISOString(),
-        used_reward_reversal_policy: 'manual_review',
-        used_reward_reversal_approved: false
-      },
-      expiries: [],
-      history: [],
-      referrals: [],
-      reward_vouchers: []
-    };
   }
   /** Refresh balances, expiry lots and rewards from the authenticated server. */
   reload(): void { this.load(); }
@@ -97,7 +79,16 @@ export class LoyaltyWalletComponent {
         this.wallet.set({ ...wallet, history: [...previous, ...wallet.history] });
         this.busy.set(false);
       },
-      error: (error: Error & { code?: string }) => { if (generation === this.generation) { this.busy.set(false); this.error.set(error.code === 'LOYALTY_MEMBER_REQUIRED' ? 'Ví Point chỉ dành cho tài khoản member. Tài khoản hiện tại không có quyền truy cập ví Point.' : (error.message || 'Chưa tải được ví điểm.')); } },
+      error: (error: Error & { code?: string }) => {
+        if (generation !== this.generation) return;
+        this.busy.set(false);
+        this.wallet.set(null);
+        this.error.set(error.code === 'LOYALTY_MEMBER_REQUIRED'
+          ? 'Tài khoản này chưa đủ điều kiện thành viên để sử dụng Ví Point.'
+          : error.code === 'MEMBER_PROFILE_UNAVAILABLE'
+            ? 'Phiên đăng nhập chưa đồng bộ được hồ sơ thành viên. Vui lòng nhấn Làm mới; nếu vẫn còn lỗi, hãy đăng xuất rồi đăng nhập lại.'
+            : (error.message || 'Chưa tải được ví điểm.'));
+      },
     });
   }
   private async copy(value: string, success: string): Promise<void> {

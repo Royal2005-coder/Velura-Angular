@@ -265,6 +265,18 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
     profile = null;
   }
 
+  // The bearer token is already verified by GoTrue above. A stale/missing self-read RLS
+  // policy must not silently downgrade a real member to a profile-less pseudo member.
+  // Retry through the API's service credential; ownership still comes exclusively from
+  // the verified auth id/email and every downstream member rule checks the canonical row.
+  if (!profile) {
+    try {
+      profile = await loadProfileForAuthUser(authUser);
+    } catch {
+      profile = null;
+    }
+  }
+
   if (!profile) {
     return {
       authUser,

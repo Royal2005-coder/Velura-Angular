@@ -166,6 +166,9 @@
                     @if (otpError()) {
                       <p class="error" role="alert">{{ otpError() }}</p>
                     }
+                    @if (otpNotice()) {
+                      <p class="otp-notice" role="status">{{ otpNotice() }}</p>
+                    }
                   }
                 </section>
                 <section class="form-section">

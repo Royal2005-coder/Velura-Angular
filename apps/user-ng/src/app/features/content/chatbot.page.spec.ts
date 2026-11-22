@@ -54,12 +54,12 @@ describe('ChatbotPage', () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it('keeps optimistic pending content neutral and removes it when sending fails', async () => {
+  it('keeps the author optimistic text visible and removes it when sending fails', async () => {
     const page = await createStorefrontPage(ChatbotPage);
     const response = new Subject<ChatSendResponse>();
     vi.spyOn(TestBed.inject(ChatbotService), 'sendMessage').mockReturnValue(response);
     page.send('raw private draft');
-    expect(page.messages().some(message => message.text.includes('raw private draft'))).toBe(false);
+    expect(page.messages().some(message => message.text.includes('raw private draft') && message.metadata?.local_pending)).toBe(true);
     expect(page.messages().some(message => message.moderation_status === 'pending')).toBe(true);
     response.error(new Error('unavailable'));
     expect(page.messages().some(message => message.moderation_status === 'pending')).toBe(false);
@@ -99,6 +99,28 @@ describe('ChatbotPage', () => {
     response.next({ session: { session_id: 'closed-case', handoff_status: 'requested' }, messages: [] });
     expect(page.sessionId()).toBe('closed-case');
     expect(page.handoffStatus()).toBe('requested');
+  });
+
+  it('keeps the customer text and AI thinking indicator while background polling sees moderation pending', async () => {
+    const page = await createStorefrontPage(ChatbotPage);
+    const response = new Subject<ChatSendResponse>();
+    vi.spyOn(TestBed.inject(ChatbotService), 'sendMessage').mockReturnValue(response);
+    page.sessionId.set('session');
+
+    page.send('50 20 20');
+    const adopt = (page as unknown as { adoptTranscript(data: ChatSendResponse): void }).adoptTranscript.bind(page);
+    adopt({
+      session: { session_id: 'session', handoff_status: 'ai' },
+      messages: [{ message_id: 'server-pending', session_id: 'session', sender: 'user', text: 'server-private-copy', created_at: '', moderation_status: 'pending' }],
+    });
+
+    expect(page.messages().find((message) => message.sender === 'user')?.text).toBe('50 20 20');
+    expect(page.messages().some((message) => message.metadata?.typing && message.text === 'AI đang suy nghĩ')).toBe(true);
+    const fixture = lastStorefrontFixture();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('50 20 20');
+    expect(fixture.nativeElement.textContent).toContain('AI đang suy nghĩ');
+    expect(fixture.nativeElement.textContent).not.toContain('Tin nhắn đang được xử lý');
   });
 
   it('never renders raw text or images returned with pending moderation', async () => {

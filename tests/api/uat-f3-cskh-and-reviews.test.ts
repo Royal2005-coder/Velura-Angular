@@ -116,7 +116,7 @@ test("F3.2: decideCskhSentiment routes POSITIVE/NEUTRAL/NEGATIVE branches, clamp
   assert.equal(critical.urgency, "CRITICAL");
 });
 
-test("F3.3: createLLMService escalates CRITICAL chat turns to L3 and blocks product upselling on NEGATIVE sentiment", async () => {
+test("F3.3: createLLMService preserves corroborated CRITICAL handoff and blocks product upselling on NEGATIVE sentiment", async () => {
   await withScrubbedAiEnv({ AI_DECISION_ROLLOUT_MODE: "active" }, async () => {
     const llm = createLLMService({
       isDecisionConfigured: () => true,
@@ -153,9 +153,9 @@ test("F3.3: createLLMService escalates CRITICAL chat turns to L3 and blocks prod
               },
               sentiment: "neutral",
               emotion: { state: "angry", confidence: 0.9, reasons: ["late_delivery"] },
-              risk: "green",
+              risk: "red",
               riskAssessment: { confidence: 0.9, reasons: [] },
-              moderation: "none",
+              moderation: "threat",
               filtered: { text: "Giao hàng trễ quá cho gặp nhân viên", problem: "Giao trễ", wanted: "Gặp nhân viên", failedApproaches: [] },
               confidence: 0.88,
               reasons: ["initial"],
@@ -172,7 +172,7 @@ test("F3.3: createLLMService escalates CRITICAL chat turns to L3 and blocks prod
 
     const analysis = await llm.analyze("Giao hàng trễ quá cho gặp nhân viên!", []);
     assert.equal(analysis.sentiment, "negative");
-    assert.equal(analysis.risk, "yellow");
+    assert.equal(analysis.risk, "red");
     assert.equal(analysis.intent, "policy_problem");
     assert.equal(analysis.level, "L3", "escalate_to_human MUST force L3 human handoff");
 
@@ -196,7 +196,65 @@ test("F3.3: createLLMService escalates CRITICAL chat turns to L3 and blocks prod
   });
 });
 
-test("F3.4: createReviewService.suggestReply injects branch guidelines in active mode and omits branch override in shadow mode", async () => {
+test("F3.4: an uncorroborated Decision Engine score cannot hand a safe styling question to CSKH", async () => {
+  await withScrubbedAiEnv({ AI_DECISION_ROLLOUT_MODE: "active" }, async () => {
+    const llm = createLLMService({
+      isDecisionConfigured: () => true,
+      decisionService: {
+        decideCskhSentiment: async () => ({
+          sentiment: "NEUTRAL",
+          routing_branch: "EDUCATE_AND_LOYALTY_HOOK",
+          intent: "INQUIRY",
+          urgency: "CRITICAL",
+          escalate_to_human: true,
+          confidence_score: 0.93,
+          requires_human_review: true,
+          sentiment_probabilities: { POSITIVE: 0.02, NEUTRAL: 0.93, NEGATIVE: 0.05 },
+          response_guidelines: ["Answer the styling question"],
+        }),
+      },
+      requestChat: async () => ({
+        value: {
+          intent: "catalog",
+          level: "L1",
+          issue: "catalog",
+          context: {
+            issueKey: "style-blazer",
+            problem: "Phối đồ với áo blazer",
+            wanted: "Gợi ý cách phối đồ với áo blazer",
+            failedApproaches: [],
+            compromiseFailed: false,
+            authorityExceeded: false,
+            repeatCount: 1,
+            escalationTrend: "stable",
+            rejectedApproach: false,
+          },
+          sentiment: "neutral",
+          emotion: { state: "calm", confidence: 0.95, reasons: ["styling_question"] },
+          risk: "green",
+          riskAssessment: { confidence: 0.95, reasons: [] },
+          moderation: "none",
+          filtered: {
+            text: "Phối đồ với áo blazer",
+            problem: "Phối đồ với áo blazer",
+            wanted: "Gợi ý cách phối đồ với áo blazer",
+            failedApproaches: [],
+          },
+          confidence: 0.95,
+          reasons: ["catalog_styling"],
+        },
+        trace: { stage: "analysis", provider: "mistral", model: "mistral-small", durationMs: 5, outcome: "ok" },
+      }),
+    });
+
+    const analysis = await llm.analyze("Phối đồ với áo blazer", []);
+    assert.equal(analysis.intent, "catalog");
+    assert.equal(analysis.level, "L1");
+    assert.equal(analysis.risk, "green");
+  });
+});
+
+test("F3.5: createReviewService.suggestReply injects branch guidelines in active mode and omits branch override in shadow mode", async () => {
   const reviewAccess = accessForRole("admin_operator_danhgia_review");
   const reviewCtx: AuthContext = {
     authUser: { id: "cskh-1", email: "cskh@velura.test" },

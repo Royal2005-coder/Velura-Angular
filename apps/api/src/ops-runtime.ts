@@ -7,6 +7,7 @@ import { readAiGatewayMetrics } from "./gemini-client.js";
 import { readDecisionEngineMetrics } from "./decision/gemini-decision-client.js";
 import { renderAuditMetrics } from "./audit-metrics.js";
 import { refreshLedgerMetrics, renderPaymentMetrics } from "./payments/payment-metrics.js";
+import { isSmsConfigured } from "./sms/twilio.js";
 import type { HeaderMap } from "./types.js";
 
 const bounds = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 60];
@@ -122,8 +123,13 @@ async function chatbotSchemaReadiness(url: string, key: string): Promise<boolean
   } catch { return false; }
 }
 
-/** Verify the installed catalog contract, chatbot schema and gateway without reading customer rows. */
-export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { database: boolean; gateway: boolean; chatbotSchema: boolean } }> {
+/** Business-critical delivery channels required by production checkout. */
+function smsDeliveryReady(): boolean {
+  return config.nodeEnv !== "production" || isSmsConfigured();
+}
+
+/** Verify the installed catalog contract, chatbot schema, gateway and checkout SMS configuration without reading customer rows. */
+export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { database: boolean; gateway: boolean; chatbotSchema: boolean; smsDelivery: boolean } }> {
   async function check(url: string, headers: Record<string, string>): Promise<boolean> {
     try { const response = await fetch(url, { headers, redirect: "error", signal: AbortSignal.timeout(3000) }); await response.body?.cancel(); return response.ok; } catch { return false; }
   }
@@ -146,7 +152,8 @@ export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { da
     endpoint && process.env.LITELLM_API_KEY ? check(`${endpoint}/health/readiness`, { authorization: `Bearer ${process.env.LITELLM_API_KEY}` }) : false,
     chatbotSchemaReady(),
   ]);
-  return { ready: database && gateway && chatbotSchema, checks: { database, gateway, chatbotSchema } };
+  const smsDelivery = smsDeliveryReady();
+  return { ready: database && gateway && chatbotSchema && smsDelivery, checks: { database, gateway, chatbotSchema, smsDelivery } };
 }
 
 /** Keep private metrics separate from owner-authenticated release verification; neither claims Flux proof. */

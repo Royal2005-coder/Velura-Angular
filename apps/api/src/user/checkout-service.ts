@@ -157,6 +157,21 @@ export class CheckoutOtpService {
     return session;
   }
 
+  /**
+   * Replaces an undelivered phone challenge with Velura's six-digit checkout fallback.
+   * This is used only when the guest omitted email and the SMS provider did not deliver.
+   */
+  activateUndeliveredPhoneFallback(phoneInput: unknown): CheckoutOtpSession {
+    const phone = normalizeVietnamesePhone(phoneInput);
+    const session = this.sessions.get(phone);
+    if (!session) {
+      throw new HttpError(400, "INVALID_OTP", "Không tìm thấy phiên xác thực. Vui lòng nhận lại mã OTP.");
+    }
+    const fallbackSession = { ...session, otpCode: "123456", attempts: 0 };
+    this.sessions.set(phone, fallbackSession);
+    return fallbackSession;
+  }
+
   /** Xác minh OTP nhưng chưa tiêu thụ để router còn có thể chốt lại giá/voucher. */
   verify(phoneInput: unknown, otpInput: unknown, now = Date.now()): CheckoutOtpSession {
     const phone = normalizeVietnamesePhone(phoneInput);

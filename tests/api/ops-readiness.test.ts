@@ -80,7 +80,7 @@ test("missing catalog migrations fail readiness even when chatbot and gateway ar
   };
   try {
     const state = await runtimeReadiness();
-    assert.deepEqual(state.checks, { database: false, gateway: true, chatbotSchema: true });
+    assert.deepEqual(state.checks, { database: false, gateway: true, chatbotSchema: true, smsDelivery: true });
     assert.equal(state.ready, false);
   } finally {
     globalThis.fetch = originalFetch;
@@ -140,7 +140,7 @@ test("a configured release SHA cannot certify an image without baked release ide
     assert.equal(body.buildRevision, null);
     assert.equal(body.buildId, null);
     assert.equal(body.databaseProjectRef, "stageproject");
-    assert.deepEqual(body.checks, { database: true, gateway: true, chatbotSchema: true });
+    assert.deepEqual(body.checks, { database: true, gateway: true, chatbotSchema: true, smsDelivery: true });
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
@@ -196,7 +196,7 @@ test("release certification distinguishes rebuilds of the same revision using ba
       assert.equal(body.buildRevision, revision);
       assert.equal(body.buildId, baked.buildId, "configured expectations must not replace baked identity");
       assert.equal(body.databaseProjectRef, null, "custom hosts must not invent a hosted Supabase project");
-      assert.deepEqual(body.checks, { database: true, gateway: true, chatbotSchema: true });
+      assert.deepEqual(body.checks, { database: true, gateway: true, chatbotSchema: true, smsDelivery: true });
     }
   } finally {
     if (server) {
@@ -210,5 +210,50 @@ test("release certification distinguishes rebuilds of the same revision using ba
     for (const key of keys) {
       if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key];
     }
+  }
+});
+
+test("production readiness requires a real checkout SMS provider", async () => {
+  const originalFetch = globalThis.fetch;
+  const savedConfig = { ...config };
+  const endpoint = process.env.LITELLM_ENDPOINT;
+  const key = process.env.LITELLM_API_KEY;
+  Object.assign(config, {
+    nodeEnv: "production",
+    supabaseUrl: "https://db.example.test",
+    supabaseServiceRoleKey: "service-test",
+    smsProvider: "twilio",
+    twilioAccountSid: "",
+    twilioAuthToken: "",
+    twilioApiKeySid: "",
+    twilioApiKeySecret: "",
+    twilioPhoneNumber: "",
+    twilioMessagingServiceSid: "",
+    esmsApiKey: "",
+    esmsSecretKey: "",
+    esmsBrandname: "",
+  });
+  process.env.LITELLM_ENDPOINT = "https://gateway.example.test";
+  process.env.LITELLM_API_KEY = "gateway-test";
+  globalThis.fetch = async input => String(input).includes("/rpc/chat_schema_readiness")
+    ? Response.json(installed) : new Response(null, { status: 200 });
+  try {
+    const missing = await runtimeReadiness();
+    assert.equal(missing.checks.smsDelivery, false);
+    assert.equal(missing.ready, false);
+
+    Object.assign(config, {
+      twilioAccountSid: `AC${"1".repeat(32)}`,
+      twilioAuthToken: "configured-auth-token",
+      twilioPhoneNumber: "+15005550006",
+    });
+    const configured = await runtimeReadiness();
+    assert.equal(configured.checks.smsDelivery, true);
+    assert.equal(configured.ready, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    Object.assign(config, savedConfig);
+    if (endpoint === undefined) delete process.env.LITELLM_ENDPOINT; else process.env.LITELLM_ENDPOINT = endpoint;
+    if (key === undefined) delete process.env.LITELLM_API_KEY; else process.env.LITELLM_API_KEY = key;
   }
 });

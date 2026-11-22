@@ -207,7 +207,7 @@ export function createChatbotService({ repository, model = createLLMService(), i
       const rejected = asNumber(state.l2_attempts) > 0 && rejectionText;
       const additionalAttempt = analysis.level === "L2" && asNumber(state.l2_attempts) === 1 && analysis.context.compromiseFailed && !rejected;
       if (additionalAttempt) analysis.context.compromiseFailed = false;
-      if (session.handoff_status === "ai" && (analysis.intent === "human" || analysis.level === "L3" || analysis.context.authorityExceeded || analysis.context.compromiseFailed || rejected || analysis.risk === "red" || (analysis.level === "L2" && asNumber(state.l2_attempts) >= 2) || asNumber(state.occurrences) >= 3)) {
+      if (session.handoff_status === "ai" && (analysis.intent === "human" || analysis.level === "L3" || analysis.context.authorityExceeded || analysis.context.compromiseFailed || rejected || analysis.risk === "red" || (analysis.level === "L2" && asNumber(state.l2_attempts) >= 2))) {
         return escalate(session, actor, userMessage, analysis, history, rejected ? "COMPROMISE_REJECTED" : analysis.context.authorityExceeded ? "AUTHORITY_EXCEEDED" : analysis.context.compromiseFailed ? "COMPROMISE_FAILED" : analysis.risk === "red" ? "SEVERE_CONTENT" : "ISSUE_ATTEMPTS_EXHAUSTED", Boolean(order));
       }
       if (session.handoff_status === "ai" && analysis.risk === "orange" && analysis.moderation !== "none") return escalate(session, actor, userMessage, analysis, history, "CONTENT_MODERATION", Boolean(order));

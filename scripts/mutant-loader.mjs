@@ -44,10 +44,10 @@ export const AI_MUTATION_CATALOG = {
   M4: {
     id: "M4",
     domain: "F3 · Chatbot L3 Escalation",
-    description: "Suppress L3 human handoff when Decision Engine flags CRITICAL escalate_to_human",
+    description: "Suppress corroborated L3 human handoff when Decision Engine flags escalate_to_human",
     fileSuffix: "apps/api/src/chatbot/llm-service.ts",
-    target: "if (sentimentDecision.escalate_to_human) {",
-    replacement: "if (false && sentimentDecision.escalate_to_human) {",
+    target: "if (sentimentDecision.escalate_to_human && corroboratesHumanEscalation(analysis)) {",
+    replacement: "if (false && sentimentDecision.escalate_to_human && corroboratesHumanEscalation(analysis)) {",
     spec: "tests/api/uat-f3-cskh-and-reviews.test.ts",
   },
   M5: {

@@ -84,6 +84,11 @@ test("LoyaltyService.snapshot requires member and validates cursor", async () =>
   const service = new LoyaltyService(repo);
 
   await assert.rejects(
+    () => service.snapshot({ ...memberContext, profile: null }),
+    { status: 503, code: "MEMBER_PROFILE_UNAVAILABLE" }
+  );
+
+  await assert.rejects(
     () => service.snapshot(guestContext),
     { status: 403, code: "LOYALTY_MEMBER_REQUIRED" }
   );

@@ -36,7 +36,7 @@ export const HERO_LOOKS: HeroLook[] = [
     title: 'Soft Ceremony.',
     eyebrow: 'VELURA',
     season: 'SPRING / SUMMER 2027',
-    description: 'Những thiết kế mềm mại, tinh tế cho những dịp tiệc nhẹ, hẹn hò và các buổi gặp gỡ đặc biệt — sang trọng, hiện đại, dễ ứng dụng.',
+    description: 'Soft, refined designs for intimate celebrations, dates, and special gatherings — elegant, modern, and effortless to wear.',
     badge: 'ELEGANT',
     looksCount: '10 LOOKS',
     image: '/assets/images/models/runway-soft-ceremony.png',
@@ -48,7 +48,7 @@ export const HERO_LOOKS: HeroLook[] = [
     title: 'Urban Rhythm.',
     eyebrow: 'VELURA',
     season: 'SPRING / SUMMER 2027',
-    description: 'Phom dáng hiện đại, đường cắt sắc sảo — bảng màu beige, charcoal, olive dễ mix-and-match cho cả ngày làm việc bận rộn lẫn buổi dạo phố cuối tuần.',
+    description: 'Modern silhouettes and sharp tailoring in beige, charcoal, and olive — easy to style from busy workdays to weekend city strolls.',
     badge: 'CASUAL',
     looksCount: '16 LOOKS',
     image: '/assets/images/models/runway-the-urban-rhythm.png',
@@ -60,7 +60,7 @@ export const HERO_LOOKS: HeroLook[] = [
     title: 'Weekend Escape.',
     eyebrow: 'VELURA',
     season: 'SPRING / SUMMER 2027',
-    description: 'Phom dáng nhẹ nhàng, chất liệu thoáng mát — dạo phố, cà phê hay du lịch đều thoải mái, thanh lịch trong mọi hành trình.',
+    description: 'Light silhouettes and breathable fabrics — effortless elegance for city walks, café dates, and weekend getaways.',
     badge: 'TRAVEL',
     looksCount: '14 LOOKS',
     image: '/assets/images/models/runway-weekend-escape.png',
@@ -72,7 +72,7 @@ export const HERO_LOOKS: HeroLook[] = [
     title: 'Midnight Mirage.',
     eyebrow: 'VELURA',
     season: 'SPRING / SUMMER 2027',
-    description: 'Street style Hàn Quốc — kết hợp nét cá tính, tối giản và hiện đại. Bảng màu trung tính pha pastel, trẻ trung và dễ phối đồ mọi ngày.',
+    description: 'Korean street style with a bold, minimalist edge and a youthful neutral-and-pastel palette made for everyday styling.',
     badge: 'STREET',
     looksCount: '8 LOOKS',
     image: '/assets/images/models/runway-midnight-mirage.png',
@@ -84,7 +84,7 @@ export const HERO_LOOKS: HeroLook[] = [
     title: 'The Afterglow.',
     eyebrow: 'VELURA',
     season: 'SPRING / SUMMER 2027',
-    description: 'Dư âm vương giả — lụa satin, corset tinh tế và sắc hồng tulle cùng xanh Sapphire tôn vinh vẻ đẹp kiêu sa, lộng lẫy như một tiểu thư vương giả.',
+    description: 'A regal afterglow — satin silk, refined corsetry, pink tulle, and sapphire blue celebrate unapologetic glamour.',
     badge: 'COUTURE',
     looksCount: '12 LOOKS',
     image: '/assets/images/models/runway-the-afterglow.png',
@@ -114,18 +114,21 @@ export function buildHomeRunwayLooks(collections: readonly CollectionLookbook[])
     .sort((a, b) => a.collection.homeSortOrder - b.collection.homeSortOrder || a.order - b.order)
     .slice(0, HOME_RUNWAY_SIZE);
   if (eligible.length !== HOME_RUNWAY_SIZE) return null;
-  return eligible.map(({ collection }) => ({
-    id: collection.id,
-    collectionName: collection.name || 'Velura Collection',
-    title: collection.storyHeadline || collection.name,
-    eyebrow: 'VELURA',
-    season: collection.colNumber || 'SPRING / SUMMER 2027',
-    description: homeDescription(collection),
-    badge: collection.badge || 'ELEGANT',
-    looksCount: collection.kicker || '10 LOOKS',
-    image: collection.homeModel,
-    link: collection.categoryLink || `/collections#${collection.id}`,
-  }));
+  return eligible.map(({ collection }) => {
+    const editorial = HERO_LOOKS.find((look) => look.id === collection.id);
+    return {
+      id: collection.id,
+      collectionName: editorial?.collectionName || collection.name || 'Velura Collection',
+      title: editorial?.title || collection.storyHeadline || collection.name,
+      eyebrow: 'VELURA',
+      season: editorial?.season || collection.colNumber || 'SPRING / SUMMER 2027',
+      description: editorial?.description || homeDescription(collection),
+      badge: editorial?.badge || collection.badge || 'ELEGANT',
+      looksCount: editorial?.looksCount || collection.kicker || '10 LOOKS',
+      image: collection.homeModel,
+      link: collection.categoryLink || `/collections#${collection.id}`,
+    };
+  });
 }
 
 interface UnpaidNotice {
@@ -167,6 +170,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private readonly injector = inject(Injector);
   private readonly router = inject(Router);
   private carouselCleanups: Array<() => void> = [];
+  private quizPopupTimer: ReturnType<typeof setTimeout> | null = null;
 
   @ViewChild('categoriesTrack') private categoriesTrack?: ElementRef<HTMLElement>;
   @ViewChild('productsTrack') private productsTrack?: ElementRef<HTMLElement>;
@@ -218,11 +222,12 @@ export class HomePage implements AfterViewInit, OnDestroy {
   constructor() {
     useBodyClass('page-home');
     this.loadHome();
-    if (this.auth.consumeNewMemberWelcome()) {
-      setTimeout(() => {
+    this.quizPopupTimer = setTimeout(() => {
+      this.quizPopupTimer = null;
+      if (this.auth.consumeStyleQuizWelcome()) {
         this.quizPopupOpen.set(true);
-      }, 1200);
-    }
+      }
+    }, 1200);
   }
 
   closeQuizPopup(): void {
@@ -347,6 +352,10 @@ export class HomePage implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.quizPopupTimer !== null) {
+      clearTimeout(this.quizPopupTimer);
+      this.quizPopupTimer = null;
+    }
     this.carouselCleanups.forEach((cleanup) => cleanup());
   }
 

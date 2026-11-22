@@ -18,9 +18,33 @@ describe('AuthService', () => {
     }));
     const auth = TestBed.inject(AuthService);
 
-    expect(auth.consumeNewMemberWelcome()).toBe(true);
-    expect(auth.consumeNewMemberWelcome()).toBe(false);
+    expect(auth.consumeStyleQuizWelcome()).toBe(true);
+    expect(auth.consumeStyleQuizWelcome()).toBe(false);
     expect(JSON.parse(localStorage.getItem('velura_user') || '{}').is_new_user).toBe(false);
+  });
+
+  it('shows the Style Quiz promotion to a guest once per tab session', () => {
+    const auth = TestBed.inject(AuthService);
+
+    expect(auth.consumeStyleQuizWelcome()).toBe(true);
+    expect(auth.consumeStyleQuizWelcome()).toBe(false);
+
+    sessionStorage.clear();
+    expect(auth.consumeStyleQuizWelcome()).toBe(true);
+  });
+
+  it('keeps a newly activated member eligible after the guest promotion was shown', () => {
+    const auth = TestBed.inject(AuthService);
+    expect(auth.consumeStyleQuizWelcome()).toBe(true);
+
+    auth.applySession('token', {
+      user_id: 'member-1',
+      role: 'member',
+      is_new_user: true,
+    });
+
+    expect(auth.consumeStyleQuizWelcome()).toBe(true);
+    expect(auth.consumeStyleQuizWelcome()).toBe(false);
   });
 
   it('does not show the welcome banner for a normal member login', () => {
@@ -32,7 +56,7 @@ describe('AuthService', () => {
     }));
     const auth = TestBed.inject(AuthService);
 
-    expect(auth.consumeNewMemberWelcome()).toBe(false);
+    expect(auth.consumeStyleQuizWelcome()).toBe(false);
   });
 
   it('rotates to a new guest identity immediately when a member signs out', () => {

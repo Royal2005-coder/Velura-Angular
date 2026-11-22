@@ -213,7 +213,7 @@ test("release certification distinguishes rebuilds of the same revision using ba
   }
 });
 
-test("production readiness requires a real checkout SMS provider", async () => {
+test("production reports missing checkout SMS without taking API traffic offline", async () => {
   const originalFetch = globalThis.fetch;
   const savedConfig = { ...config };
   const endpoint = process.env.LITELLM_ENDPOINT;
@@ -240,7 +240,7 @@ test("production readiness requires a real checkout SMS provider", async () => {
   try {
     const missing = await runtimeReadiness();
     assert.equal(missing.checks.smsDelivery, false);
-    assert.equal(missing.ready, false);
+    assert.equal(missing.ready, true);
 
     Object.assign(config, {
       twilioAccountSid: `AC${"1".repeat(32)}`,

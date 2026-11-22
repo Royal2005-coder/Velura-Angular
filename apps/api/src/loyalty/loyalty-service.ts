@@ -41,6 +41,9 @@ export class LoyaltyService {
 
   /** Expires due lots before returning this member's balance and append-only history. */
   async snapshot(context: AuthContext, before?: string): Promise<JsonObject> {
+    if (context.authUser && !context.profile) {
+      throw new HttpError(503, "MEMBER_PROFILE_UNAVAILABLE", "Chưa đồng bộ được hồ sơ thành viên. Vui lòng thử lại.");
+    }
     const actor = loyaltyActor(context);
     if (!actor) throw new HttpError(403, "LOYALTY_MEMBER_REQUIRED", "Vui lòng đăng nhập tài khoản thành viên.");
     if (before && !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(before)) throw new HttpError(422, "INVALID_HISTORY_CURSOR", "Mốc lịch sử không hợp lệ.");

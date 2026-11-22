@@ -13,6 +13,10 @@
   @if (error()) { <p class="loyalty__message loyalty__message--error" role="alert">{{ error() }}</p> }
   @if (notice()) { <p class="loyalty__message loyalty__message--success" role="status">{{ notice() }}</p> }
 
+  @if (busy() && !wallet()) {
+    <p class="loyalty__message" role="status">Đang đồng bộ Ví Point…</p>
+  }
+
   @if (wallet(); as wallet) {
     <div class="loyalty__summary">
       <article class="loyalty__balance">

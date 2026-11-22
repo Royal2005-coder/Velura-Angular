@@ -15,6 +15,22 @@ export interface LLMServiceDeps {
   readonly requestChat?: typeof requestChatJson;
 }
 
+/**
+ * Accepts a probabilistic human-escalation signal only when the governed chat
+ * analysis independently found a business reason for L3. Styling and catalog
+ * questions must not become support tickets from an uncorroborated score.
+ */
+function corroboratesHumanEscalation(analysis: ChatAnalysis): boolean {
+  return analysis.intent === "human" ||
+    analysis.level === "L3" ||
+    analysis.context.authorityExceeded ||
+    analysis.context.rejectedApproach ||
+    (analysis.context.repeatCount ?? 1) >= 3 ||
+    analysis.risk === "red" ||
+    analysis.moderation === "threat" ||
+    analysis.moderation === "illegal";
+}
+
 /** Classifies with Mistral + `gemini-decision-1` calibrated sentiment routing, independently verifies staff filtering, and rejects every unverified output. */
 export function createLLMService(deps: LLMServiceDeps = {}): ChatModel {
   const decisionSvc = deps.decisionService ?? unifiedDecisionService;
@@ -50,7 +66,7 @@ export function createLLMService(deps: LLMServiceDeps = {}): ChatModel {
               if (analysis.level !== "L3") analysis.level = "L2";
             }
           }
-          if (sentimentDecision.escalate_to_human) {
+          if (sentimentDecision.escalate_to_human && corroboratesHumanEscalation(analysis)) {
             analysis.level = "L3";
           }
           analysis.reasons = Array.from(new Set([...analysis.reasons, `decision_${sentimentDecision.routing_branch.toLowerCase()}`])).slice(0, 12);

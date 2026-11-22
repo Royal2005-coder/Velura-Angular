@@ -128,7 +128,7 @@ function smsDeliveryReady(): boolean {
   return config.nodeEnv !== "production" || isSmsConfigured();
 }
 
-/** Verify the installed catalog contract, chatbot schema, gateway and checkout SMS configuration without reading customer rows. */
+/** Verify runtime dependencies without taking API traffic offline for a missing optional delivery channel. */
 export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { database: boolean; gateway: boolean; chatbotSchema: boolean; smsDelivery: boolean } }> {
   async function check(url: string, headers: Record<string, string>): Promise<boolean> {
     try { const response = await fetch(url, { headers, redirect: "error", signal: AbortSignal.timeout(3000) }); await response.body?.cancel(); return response.ok; } catch { return false; }
@@ -153,7 +153,7 @@ export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { da
     chatbotSchemaReady(),
   ]);
   const smsDelivery = smsDeliveryReady();
-  return { ready: database && gateway && chatbotSchema && smsDelivery, checks: { database, gateway, chatbotSchema, smsDelivery } };
+  return { ready: database && gateway && chatbotSchema, checks: { database, gateway, chatbotSchema, smsDelivery } };
 }
 
 /** Keep private metrics separate from owner-authenticated release verification; neither claims Flux proof. */

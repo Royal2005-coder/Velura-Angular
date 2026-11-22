@@ -76,6 +76,7 @@ export class ChatbotPage {
   readonly previewName = signal('');
   readonly previewUrl = signal('');
   readonly messages = signal<ChatMessage[]>([localGreeting()]);
+  private pendingUserMessage: ChatMessage | null = null;
   private attachment: ChatAttachment | null = null;
 
   constructor() {
@@ -118,10 +119,12 @@ export class ChatbotPage {
     const userMessage: ChatMessage = {
       message_id: `tmp-user-${Date.now()}`,
       sender: 'user',
-      text: 'Đang gửi và kiểm tra nội dung…',
+      text: payloadText,
       created_at: new Date().toISOString(),
       moderation_status: 'pending',
+      metadata: { local_pending: true },
     };
+    this.pendingUserMessage = userMessage;
     const typing: ChatMessage = {
       message_id: 'typing',
       sender: 'bot',
@@ -159,8 +162,9 @@ export class ChatbotPage {
             this.chatbot.saveSessionId(data.session.session_id);
           }
           const staleRouting = this.handoffStatus() !== 'ai' && data.session?.handoff_status === 'ai';
-          if (!staleRouting) this.adoptTranscript(data);
           this.loading.set(false);
+          this.pendingUserMessage = null;
+          if (!staleRouting) this.adoptTranscript(data);
           if (staleRouting) this.refreshMessages();
           this.refreshSessions();
           this.scrollToBottom();
@@ -168,6 +172,7 @@ export class ChatbotPage {
         error: () => {
           if (generation !== this.generation || identity !== this.auth.session()) return;
           this.transcriptEpoch++;
+          this.pendingUserMessage = null;
           this.messages.update(rows => rows.filter(row => row.message_id !== 'typing' && row.message_id !== userMessage.message_id));
           this.draft.set(message);
           this.chatError.set('Chưa gửi được tin nhắn. Vui lòng thử lại hoặc liên hệ CSKH.');
@@ -199,6 +204,7 @@ export class ChatbotPage {
   newChat(): void {
     this.generation++;
     this.loading.set(false);
+    this.pendingUserMessage = null;
     this.handoffStatus.set('ai');
     this.chatbot.activeHandoff.set('ai');
     this.chatbot.activeSession.set('');
@@ -290,8 +296,18 @@ export class ChatbotPage {
     this.rememberBlogs(data.blogs || []);
     const rows = (data.messages || []).filter(message => !message.session_id || message.session_id === this.sessionId()).map<ChatMessage>(message => {
       if (message.moderation_status !== 'pending' && message.moderation_status !== 'restricted') return message;
+      if (message.moderation_status === 'pending' && message.sender === 'user' && this.pendingUserMessage) {
+        return {
+          ...message,
+          text: this.pendingUserMessage.text,
+          metadata: { ...message.metadata, local_pending: true },
+        };
+      }
       return { message_id: message.message_id, session_id: message.session_id, sender: message.sender, created_at: message.created_at, moderation_status: message.moderation_status, text: message.moderation_status === 'pending' ? 'Tin nhắn đang được xử lý…' : 'Nội dung không thể hiển thị.' };
     }).filter(message => !message.metadata?.typing || status === 'ai');
+    if (this.pendingUserMessage && status === 'ai' && !rows.some(message => message.metadata?.typing)) {
+      rows.push({ message_id: 'typing', sender: 'bot', text: 'AI đang suy nghĩ', created_at: new Date().toISOString(), metadata: { typing: true } });
+    }
     this.messages.set(rows.length ? rows : status === 'ai' ? [localGreeting()] : []);
   }
 

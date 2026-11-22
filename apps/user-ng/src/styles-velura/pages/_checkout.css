@@ -1080,6 +1080,14 @@ main.checkout-page .btn--brown-outline:hover { color: #fff; border-color: var(--
 .flow--checkout .edit-cart { color: var(--velura-maroon); }
 .flow--checkout .selected-address { border-color: var(--velura-border); border-left-color: var(--velura-maroon); border-radius: 14px; background: #fff9fa; }
 .flow--checkout .error { border-left-color: var(--danger); border-radius: 12px; }
+.flow--checkout .otp-notice {
+  margin-top: 10px;
+  padding: 10px 12px;
+  color: var(--wine, #7d2137);
+  background: color-mix(in srgb, var(--wine, #7d2137) 8%, white);
+  border: 1px solid color-mix(in srgb, var(--wine, #7d2137) 24%, white);
+  border-radius: 12px;
+}
 .flow--checkout :is(button, a, input, select, textarea):focus-visible { outline-color: var(--velura-rose); }
 body.page-checkout .otp-overlay { background: rgba(53,29,37,.56); backdrop-filter: blur(5px); }
 body.page-checkout .otp-modal { border-color: var(--velura-border); border-radius: var(--radius-lg); }

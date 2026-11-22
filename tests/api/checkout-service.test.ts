@@ -133,6 +133,21 @@ test("checkout OTP uses the simulated SMS code when email is omitted", () => {
   assert.equal(service.verify("0912345678", "123456"), session);
 });
 
+test("checkout OTP activates the six-digit fallback after an undelivered guest phone challenge", () => {
+  const service = new CheckoutOtpService();
+  service.issue({
+    fullName: "Nguyễn Văn An",
+    phone: "0987654321",
+    email: "",
+    ip: "203.0.113.12"
+  });
+
+  const fallback = service.activateUndeliveredPhoneFallback("0987654321");
+
+  assert.equal(fallback.otpCode, "123456");
+  assert.equal(service.verify("0987654321", "123456"), fallback);
+});
+
 test("UAT #745: the client cannot pick its own rate-limit key through proxy headers", () => {
   // Only the hop appended by the closest proxy counts; the first entry is client-controlled.
   assert.equal(checkoutClientIp({ "x-forwarded-for": "1.1.1.1, 203.0.113.3" }, "127.0.0.1"), "203.0.113.3");

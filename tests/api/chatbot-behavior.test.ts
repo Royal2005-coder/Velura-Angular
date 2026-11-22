@@ -276,13 +276,14 @@ test("a policy complaint remains AI-resolvable and does not imply a direct human
   assert.equal(f.state.reviewCalls, 1);
 });
 
-test("a third sizing issue escalates instead of repeating catalog advice", async () => {
+test("follow-up sizing details remain with AI instead of being mistaken for a handoff request", async () => {
   const f = fixture({ analyze: async () => analysis({ intent: "catalog", level: "L1", issue: "sizing" }) });
-  await f.send("Size M chưa phù hợp, tư vấn lại giúp tôi");
-  await f.send("Size M vẫn chưa phù hợp, tư vấn lại giúp tôi");
-  const result = await f.send("Size M vẫn chưa phù hợp lần thứ ba");
-  assert.equal(session(result).handoff_status, "requested");
-  assert.equal(f.state.reviewCalls, 2);
+  await f.send("Tôi cao 1m50, tư vấn đầm dự tiệc giúp tôi");
+  await f.send("Vòng ngực 80 cm");
+  const result = await f.send("Số đo ba vòng là 80 60 84");
+  assert.equal(session(result).handoff_status, "ai");
+  assert.equal(f.state.tickets.size, 0);
+  assert.equal(f.state.reviewCalls, 3);
 });
 
 test("failed compromise and requests beyond authority escalate without drafting a transaction", async () => {
@@ -628,7 +629,7 @@ test("customer summary confirmation validates sourceSequence and staff correctio
   );
 });
 
-test("parseChatAnalysis enforces independent emotion/risk fields and escalates angry order complaints or third repeats", () => {
+test("parseChatAnalysis enforces independent emotion/risk fields without escalating repeated sizing context", () => {
   const angryOrder = parseChatAnalysis({
     intent: "order",
     level: "L0",
@@ -691,6 +692,6 @@ test("parseChatAnalysis enforces independent emotion/risk fields and escalates a
     confidence: 0.86,
     reasons: ["repeat_limit"]
   });
-  assert.equal(repeated.level, "L3");
+  assert.equal(repeated.level, "L1");
   assert.equal(repeated.risk, "yellow");
 });

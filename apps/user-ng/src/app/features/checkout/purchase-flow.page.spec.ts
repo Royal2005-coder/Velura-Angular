@@ -205,6 +205,25 @@ describe('PurchaseFlowPage with mocked Model', () => {
     expect(page.fieldErrors()['email']).toBeUndefined();
     expect(page.otpPhone()).toBe('0912345678');
   });
+  it('shows the fixed six-digit fallback when guest SMS cannot be delivered', () => {
+    sendOtp.mockReturnValue(of({
+      success: true,
+      channel: 'fallback',
+      message: 'SMS hiện chưa gửi được. Nhập mã OTP mặc định 123456 để tiếp tục.',
+    }));
+    const fixture = createCheckoutFixture();
+    const page = fixture.componentInstance;
+    page.address.name = 'Nguyễn Văn An';
+    page.address.phone = '0912345678';
+    page.address.email = '';
+
+    page.sendOtp();
+    fixture.detectChanges();
+
+    expect(page.otpNotice()).toContain('123456');
+    expect(fixture.nativeElement.textContent).toContain('123456');
+    expect(page.fieldErrors()['email']).toBeUndefined();
+  });
   it('never displays success on a failed create and ignores duplicate clicks', () => {
     const request = new Subject<never>();
     checkoutMember.mockReturnValue(request);

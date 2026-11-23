@@ -367,10 +367,11 @@ test("prices and variants are freshly loaded and depleted products are not recom
   empty.state.products[0].variants = [{ variant_id: POLICY, stock_quantity: 1, reserved_quantity: 1 }];
   const rejected = await empty.send("Gợi ý đầm công sở");
   assert.equal(rows(rejected, "products").length, 0);
-  assert.equal(session(rejected).handoff_status, "requested");
+  assert.equal(session(rejected).handoff_status, "ai");
+  assert.equal(asJsonObject(rows(rejected).find((message) => message.sender === "bot")?.metadata).approach, "clarify_catalog_preferences_after_temporary_failure");
 });
 
-test("a price, variant stock, policy-version or approval change prevents a stale answer", async () => {
+test("stale catalog answers stay with AI while stale policy answers hand off", async () => {
   for (const change of ["price", "stock", "policy", "approval"] as const) {
     const f = fixture({
       analyze: async () => analysis({ intent: change === "price" || change === "stock" ? "catalog" : "policy_problem", level: change === "price" || change === "stock" ? "L1" : "L2" }),
@@ -384,9 +385,12 @@ test("a price, variant stock, policy-version or approval change prevents a stale
     });
     f.state.approvals.push({ policy_id: POLICY, source_updated_at: VERSION });
     const result = await f.send("Hỗ trợ yêu cầu này");
-    assert.equal(session(result).handoff_status, "requested");
+    const catalogChange = change === "price" || change === "stock";
+    assert.equal(session(result).handoff_status, catalogChange ? "ai" : "requested");
     assert.equal(f.state.reviewCalls, 0);
-    assert.equal(rows(result).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 0);
+    const botMessages = rows(result).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system);
+    assert.equal(botMessages.length, catalogChange ? 1 : 0);
+    if (catalogChange) assert.equal(asJsonObject(botMessages[0].metadata).approach, "clarify_catalog_preferences_after_temporary_failure");
   }
 });
 
@@ -477,6 +481,54 @@ test("malformed drafts and unavailable risk reviewers hand off without publishin
     const result = await f.send("Chính sách đổi trả");
     assert.equal(session(result).handoff_status, "requested");
     assert.equal(rows(result).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 0);
+  }
+});
+
+test("safe catalog response failures stay with AI and never create a support ticket", async () => {
+  const catalogAnalysis = () => analysis({
+    intent: "catalog",
+    level: "L1",
+    issue: "catalog",
+    context: {
+      issueKey: "party_dress",
+      problem: "Tìm váy dự tiệc",
+      wanted: "Gợi ý váy dự tiệc phù hợp",
+      failedApproaches: [],
+      compromiseFailed: false,
+      authorityExceeded: false,
+    },
+    filtered: {
+      text: "Tìm váy dự tiệc",
+      problem: "Tìm váy dự tiệc",
+      wanted: "Gợi ý váy dự tiệc phù hợp",
+      failedApproaches: [],
+    },
+  });
+  const validClarification = () => draft({
+    text: "Bạn thích kiểu dáng, màu sắc hoặc ngân sách nào?",
+    productIds: [],
+    claims: [],
+    approach: "clarify_catalog_preferences",
+  });
+
+  for (const overrides of [
+    { draft: async () => { throw new Error("draft unavailable"); } },
+    { draft: async () => validClarification(), review: async () => { throw new Error("review unavailable"); } },
+    { draft: async () => draft({ promisedActions: ["issue_voucher"] }) },
+    { draft: async () => validClarification(), review: async () => ({ safe: false, reasons: ["UNSUPPORTED_TEXT_FACT"] }) },
+  ]) {
+    const f = fixture({ analyze: async () => catalogAnalysis(), ...overrides });
+    const first = await f.send("Tìm váy dự tiệc");
+    const second = await f.send("Màu đen, ngân sách dưới một triệu");
+
+    assert.equal(session(first).handoff_status, "ai");
+    assert.equal(session(second).handoff_status, "ai");
+    assert.equal(f.state.tickets.size, 0);
+    assert.equal(f.state.handoffReasons.length, 0);
+    const botMessages = rows(second).filter((message) => message.sender === "bot");
+    assert.equal(botMessages.length, 2);
+    assert.ok(botMessages.every((message) => asJsonObject(message.metadata).approach === "clarify_catalog_preferences_after_temporary_failure"));
+    assert.ok(botMessages.every((message) => asString(message.text).includes("cuộc trò chuyện vẫn ở AI Stylist")));
   }
 });
 

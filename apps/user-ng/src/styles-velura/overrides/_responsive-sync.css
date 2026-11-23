@@ -66,8 +66,8 @@ body:not(.page-signin) {
 
 .site-header__search {
   width: 100%;
-  max-width: 560px;
-  justify-self: center;
+  max-width: 100%;
+  justify-self: stretch;
 }
 
 .site-header__actions {

@@ -99,7 +99,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: ghcr.io/royal2005-coder/velura-ai-worker@sha256:5091de409336c52514f47add5e9314c7b7e7728503c3c37d3838de6cf27905e6
+          image: ghcr.io/royal2005-coder/velura-ai-worker@sha256:9d3451ff7a14cbb1d8e51b202310ddf947a760551b2be03c1bacd566dfd27a0c
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

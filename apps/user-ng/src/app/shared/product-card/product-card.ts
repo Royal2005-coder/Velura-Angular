@@ -115,10 +115,10 @@ export class ProductCard {
       return;
     }
     this.checkout.setCheckoutItems([line], 'buy_now');
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('checkout_discount');
-      localStorage.removeItem('checkout_voucher_id');
-      localStorage.removeItem('checkout_voucher_code');
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('checkout_discount');
+      sessionStorage.removeItem('checkout_voucher_id');
+      sessionStorage.removeItem('checkout_voucher_code');
     }
     void this.router.navigateByUrl('/checkout/shipping');
   }

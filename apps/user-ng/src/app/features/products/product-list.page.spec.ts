@@ -88,7 +88,7 @@ describe('ProductListPage', () => {
 
     page.clearActiveVoucher();
     expect(page.activeVoucherCode()).toBeNull();
-    expect(localStorage.getItem('checkout_voucher_code')).toBeNull();
+    expect(sessionStorage.getItem('checkout_voucher_code')).toBeNull();
   });
 
   it('finds a renamed product by its new name and no longer by the old name (UAT 3.1.10-25)', async () => {

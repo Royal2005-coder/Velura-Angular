@@ -29,12 +29,12 @@ describe('CartPage', () => {
     page.toggleAll({ target: { checked: true } } as unknown as Event);
     vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     page.onVoucherApplied({ voucher_id: 'v-ao', code: 'AO20', name: 'Giảm 20% áo', discount_amount: 40000, discount_type: 'percentage' });
-    localStorage.setItem('checkout_voucher_declined', '1');
+    sessionStorage.setItem('checkout_voucher_declined', '1');
 
     page.checkout();
 
-    expect(localStorage.getItem('checkout_voucher_id')).toBe('v-ao');
-    expect(localStorage.getItem('checkout_voucher_declined')).toBeNull();
+    expect(sessionStorage.getItem('checkout_voucher_id')).toBe('v-ao');
+    expect(sessionStorage.getItem('checkout_voucher_declined')).toBeNull();
   });
 
   it('khách bỏ mã ở giỏ thì trang thanh toán không tự áp lại', async () => {
@@ -50,8 +50,8 @@ describe('CartPage', () => {
 
     page.checkout();
 
-    expect(localStorage.getItem('checkout_voucher_id')).toBeNull();
-    expect(localStorage.getItem('checkout_voucher_declined')).toBe('true');
+    expect(sessionStorage.getItem('checkout_voucher_id')).toBeNull();
+    expect(sessionStorage.getItem('checkout_voucher_declined')).toBe('true');
   });
 
   it('tiền giảm ước tính ở giỏ không trừ mã miễn phí vận chuyển', async () => {
@@ -297,4 +297,3 @@ describe('CartPage', () => {
     expect(page.expectedCartPoints()).toBe(25);
   });
 });
-

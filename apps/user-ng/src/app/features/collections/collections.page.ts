@@ -209,9 +209,9 @@ export class CollectionsPage {
       size: variant?.size,
     };
     this.checkout.setCheckoutItems([line], 'buy_now');
-    localStorage.removeItem('checkout_discount');
-    localStorage.removeItem('checkout_voucher_id');
-    localStorage.removeItem('checkout_voucher_code');
+    sessionStorage.removeItem('checkout_discount');
+    sessionStorage.removeItem('checkout_voucher_id');
+    sessionStorage.removeItem('checkout_voucher_code');
     void this.router.navigateByUrl('/checkout/shipping');
   }
 

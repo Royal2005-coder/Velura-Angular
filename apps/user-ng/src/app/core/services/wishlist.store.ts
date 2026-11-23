@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { catchError, of } from 'rxjs';
 import { ApiService } from './api.service';
+import { guestSessionId } from '../utils/guest-session';
 
 const GUEST_KEY = 'velura_guest_wishlist';
 const COUNT_KEY = 'velura_wishlist_count';
@@ -15,7 +16,7 @@ export interface WishlistItem {
 }
 
 /**
- * Wishlist badge and guest/member lists. Uses the same localStorage keys as vanilla.
+ * Wishlist badge and guest/member lists. Guest choices belong only to the current tab session.
  */
 @Injectable({ providedIn: 'root' })
 export class WishlistStore {
@@ -25,6 +26,10 @@ export class WishlistStore {
   readonly itemCount = computed(() => this.items().length);
 
   constructor() {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(GUEST_KEY);
+      localStorage.removeItem(COUNT_KEY);
+    }
     this.refresh();
   }
 
@@ -44,9 +49,7 @@ export class WishlistStore {
       .subscribe((data) => {
         const items = data.items || [];
         this.items.set(items);
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(COUNT_KEY, String(items.length));
-        }
+        if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(COUNT_KEY, String(items.length));
       });
   }
 
@@ -65,9 +68,7 @@ export class WishlistStore {
     if (!token) {
       const ids = this.readGuestIds();
       const next = ids.includes(productId) ? ids.filter((id) => id !== productId) : [...ids, productId];
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(GUEST_KEY, JSON.stringify(next));
-      }
+      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(this.guestKey(), JSON.stringify(next));
       this.items.set(next.map((product_id) => ({ product_id, name: '' })));
       return;
     }
@@ -96,11 +97,15 @@ export class WishlistStore {
 
   private readGuestIds(): string[] {
     try {
-      if (typeof localStorage === 'undefined') return [];
-      const raw = JSON.parse(localStorage.getItem(GUEST_KEY) || '[]') as unknown;
+      if (typeof sessionStorage === 'undefined') return [];
+      const raw = JSON.parse(sessionStorage.getItem(this.guestKey()) || '[]') as unknown;
       return Array.isArray(raw) ? raw.map((id) => String(id)) : [];
     } catch {
       return [];
     }
+  }
+
+  private guestKey(): string {
+    return `${GUEST_KEY}:${guestSessionId()}`;
   }
 }

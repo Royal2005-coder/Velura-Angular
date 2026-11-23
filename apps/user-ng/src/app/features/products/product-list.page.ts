@@ -373,7 +373,7 @@ export class ProductListPage implements AfterViewInit {
   readonly currentPage = signal(1);
   readonly viewMode = signal<CatalogView>('grid');
   readonly quiz = signal<StyleQuiz | null>(null);
-  readonly suggestionsEnabled = signal(localStorage.getItem(SUGGESTIONS_KEY) !== 'false');
+  readonly suggestionsEnabled = signal(sessionStorage.getItem(SUGGESTIONS_KEY) !== 'false');
   readonly featuredFallback = computed(() => this.imageMatches() !== null
     ? this.visualFeatured()
     : this.allProducts().filter(item => item.is_featured && item.status === 'on_sale').slice(0, 4));
@@ -733,10 +733,10 @@ export class ProductListPage implements AfterViewInit {
       const voucherParam = params.get('voucher');
       if (voucherParam) {
         this.activeVoucherCode.set(voucherParam.trim());
-        localStorage.setItem('checkout_voucher_code', voucherParam.trim());
-        localStorage.removeItem('checkout_voucher_declined');
+      sessionStorage.setItem('checkout_voucher_code', voucherParam.trim());
+      sessionStorage.removeItem('checkout_voucher_declined');
       } else {
-        const stored = localStorage.getItem('checkout_voucher_code');
+    const stored = sessionStorage.getItem('checkout_voucher_code');
         if (stored) {
           this.activeVoucherCode.set(stored.trim());
         }
@@ -778,9 +778,9 @@ export class ProductListPage implements AfterViewInit {
         next: (data) => {
           const quiz = data.quiz ? this.normalizeQuiz(data.quiz) : null;
           this.quiz.set(quiz);
-          if (quiz && localStorage.getItem(SUGGESTIONS_KEY) === null) {
+    if (quiz && sessionStorage.getItem(SUGGESTIONS_KEY) === null) {
             this.suggestionsEnabled.set(true);
-            localStorage.setItem(SUGGESTIONS_KEY, 'true');
+      sessionStorage.setItem(SUGGESTIONS_KEY, 'true');
           }
           const hasExplicitSearch = Boolean(this.searchQuery().trim());
           if (this.suggestionsEnabled() && quiz && !hasExplicitSearch) {
@@ -812,7 +812,7 @@ export class ProductListPage implements AfterViewInit {
     this.currentPage.set(1);
     if (this.hasStyleProfile()) {
       this.suggestionsEnabled.set(false);
-      localStorage.setItem(SUGGESTIONS_KEY, 'false');
+    sessionStorage.setItem(SUGGESTIONS_KEY, 'false');
     }
     showToast('Đã xóa toàn bộ bộ lọc');
   }
@@ -907,8 +907,8 @@ export class ProductListPage implements AfterViewInit {
    */
   clearActiveVoucher(): void {
     this.activeVoucherCode.set(null);
-    localStorage.removeItem('checkout_voucher_code');
-    localStorage.removeItem('checkout_voucher_id');
+    sessionStorage.removeItem('checkout_voucher_code');
+    sessionStorage.removeItem('checkout_voucher_id');
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { voucher: null },
@@ -939,7 +939,7 @@ export class ProductListPage implements AfterViewInit {
     }
     const enabled = (event.target as HTMLInputElement).checked;
     this.suggestionsEnabled.set(enabled);
-    localStorage.setItem(SUGGESTIONS_KEY, String(enabled));
+    sessionStorage.setItem(SUGGESTIONS_KEY, String(enabled));
     this.applyProfileFilters(enabled);
   }
 
@@ -951,7 +951,7 @@ export class ProductListPage implements AfterViewInit {
       return;
     }
     this.suggestionsEnabled.set(enabled);
-    localStorage.setItem(SUGGESTIONS_KEY, String(enabled));
+    sessionStorage.setItem(SUGGESTIONS_KEY, String(enabled));
     this.applyProfileFilters(enabled);
   }
 

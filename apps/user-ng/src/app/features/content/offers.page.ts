@@ -458,11 +458,11 @@ export class OffersPage {
   }
 
   onUseVoucher(voucher: OfferVoucher): void {
-    localStorage.setItem('checkout_voucher_code', voucher.code);
+    sessionStorage.setItem('checkout_voucher_code', voucher.code);
     if (voucher.voucher_id) {
-      localStorage.setItem('checkout_voucher_id', voucher.voucher_id);
+      sessionStorage.setItem('checkout_voucher_id', voucher.voucher_id);
     }
-    localStorage.removeItem('checkout_voucher_declined');
+    sessionStorage.removeItem('checkout_voucher_declined');
     showToast(`Đã lưu mã ${voucher.code}! Hãy chọn sản phẩm thỏa điều kiện để áp dụng mã.`);
   }
 

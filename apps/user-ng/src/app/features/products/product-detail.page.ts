@@ -500,11 +500,11 @@ export class ProductDetailPage {
       }
     }
     try {
-      const raw = localStorage.getItem('velura_recently_viewed');
+      const raw = sessionStorage.getItem('velura_recently_viewed');
       const list = raw ? (JSON.parse(raw) as ProductSummary[]) : [];
       const filtered = list.filter((p) => p.product_id !== row.product_id);
       filtered.unshift(row);
-      localStorage.setItem('velura_recently_viewed', JSON.stringify(filtered.slice(0, 8)));
+      sessionStorage.setItem('velura_recently_viewed', JSON.stringify(filtered.slice(0, 8)));
     } catch {}
     this.quantity.set(1);
     this.comboExpanded.set(null);
@@ -557,7 +557,7 @@ export class ProductDetailPage {
   }
 
   /**
-   * Adds the current variant to the original localStorage cart.
+   * Adds the current variant to the current identity's cart.
    */
   addToCart(): boolean {
     if (this.isDiscontinued()) {
@@ -601,9 +601,9 @@ export class ProductDetailPage {
       return;
     }
     this.checkout.setCheckoutItems([item], 'buy_now');
-    localStorage.removeItem('checkout_discount');
-    localStorage.removeItem('checkout_voucher_id');
-    localStorage.removeItem('checkout_voucher_code');
+    sessionStorage.removeItem('checkout_discount');
+    sessionStorage.removeItem('checkout_voucher_id');
+    sessionStorage.removeItem('checkout_voucher_code');
     void this.router.navigateByUrl('/checkout/shipping');
   }
 
@@ -651,9 +651,9 @@ export class ProductDetailPage {
       return;
     }
     this.checkout.setCheckoutItems(lines, 'buy_now');
-    localStorage.removeItem('checkout_discount');
-    localStorage.removeItem('checkout_voucher_id');
-    localStorage.removeItem('checkout_voucher_code');
+    sessionStorage.removeItem('checkout_discount');
+    sessionStorage.removeItem('checkout_voucher_id');
+    sessionStorage.removeItem('checkout_voucher_code');
     void this.router.navigateByUrl('/checkout/shipping');
   }
 
@@ -901,7 +901,7 @@ export class ProductDetailPage {
     this.likedReviews.set(nextMap);
     this.likeCounts.update((counts) => ({ ...counts, [id]: nextCount }));
     try {
-      localStorage.setItem('velura_liked_reviews', JSON.stringify(nextMap));
+    sessionStorage.setItem('velura_liked_reviews', JSON.stringify(nextMap));
     } catch {}
 
     this.catalog.likeReview(id, nextLiked).subscribe({
@@ -1077,7 +1077,7 @@ export class ProductDetailPage {
   }
   private readLikedReviews(): Record<string, boolean> {
     try {
-      const raw = localStorage.getItem('velura_liked_reviews');
+      const raw = sessionStorage.getItem('velura_liked_reviews');
       if (raw) {
         const parsed: unknown = JSON.parse(raw);
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {

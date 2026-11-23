@@ -9,6 +9,7 @@ import type { ChatActor, ChatAnalysis, ChatModel, ChatSource } from "./chatbot-t
 import { createLLMService, responseRiskCheck } from "./llm-service.js";
 import { confirmSupportOffer, listEligibleSupportOffers } from "./chatbot-promotions.js";
 import { enqueueChatReport, retryChatReport } from "./chatbot-reports.js";
+import { extractQueryAttributes } from "../ai-search/ai-search-text.js";
 
 /** Validated public turn; OTP tokens never enter model context or message metadata. */
 export interface ChatInput {
@@ -173,6 +174,36 @@ export function createChatbotService({ repository, model = createLLMService(), i
     );
   }
 
+  function catalogClassifierFallback(message: string): ChatAnalysis | null {
+    const attributes = extractQueryAttributes(message);
+    if (!attributes.category && !attributes.allowedCategories?.length && !attributes.colorFamily && !attributes.style && !attributes.occasion && !attributes.fit && !attributes.sleeve) return null;
+    const filteredText = "Yêu cầu tư vấn thời trang đang được xử lý lại vì bộ lọc AI tạm thời gián đoạn.";
+    return {
+      intent: "catalog",
+      level: "L1",
+      issue: "catalog",
+      context: {
+        issueKey: "catalog_classifier_fallback",
+        problem: filteredText,
+        wanted: "Tiếp tục tư vấn sản phẩm với AI Stylist",
+        failedApproaches: [],
+        compromiseFailed: false,
+        authorityExceeded: false,
+      },
+      sentiment: "neutral",
+      risk: "yellow",
+      moderation: "sensitive",
+      filtered: {
+        text: filteredText,
+        problem: filteredText,
+        wanted: "Tiếp tục tư vấn sản phẩm với AI Stylist",
+        failedApproaches: [],
+      },
+      confidence: 0,
+      reasons: ["classifier_unavailable_local_catalog_fallback"],
+    };
+  }
+
   return {
     async listSessions(context, searchParams) {
       const actor = resolveChatActor(context, { guestId: searchParams.get("guestId") });
@@ -244,6 +275,17 @@ export function createChatbotService({ repository, model = createLLMService(), i
         const prior = asJsonObject(asJsonObject(session.metadata).handoff_summary);
         const failureKey = `unclassified:${input.orderId || asString(prior.issue_key) || "conversation"}`;
         const failureTrace = error instanceof Error && "trace" in error && Array.isArray(error.trace) ? error.trace : [];
+        const fallbackAnalysis = !input.attachment && !input.orderId && !explicitHuman ? catalogClassifierFallback(input.message) : null;
+        if (fallbackAnalysis && session.handoff_status === "ai") {
+          const fallbackKey = `catalog:${input.orderId || "conversation"}:${fallbackAnalysis.context.issueKey}`;
+          const filtered = await repository.recordAnalysis(sessionId, asString(userMessage.message_id), fallbackKey, fallbackAnalysis as unknown as JsonObject, false);
+          session = asJsonObject(filtered.session);
+          const failure = await repository.recordAnalysis(sessionId, asString(userMessage.message_id), fallbackKey, { trace: failureTrace }, true);
+          session = asJsonObject(failure.session);
+          await enqueueChatReport(sessionId, "warning");
+          if (session.handoff_status !== "ai") return transcript(session);
+          return commitCatalogFailureFallback(session, turn, userMessage, fallbackKey, fallbackAnalysis, failureTrace);
+        }
         const state = await repository.recordAnalysis(sessionId, asString(userMessage.message_id), failureKey, { trace: failureTrace }, true);
         session = asJsonObject(state.session);
         await enqueueChatReport(sessionId, "warning");

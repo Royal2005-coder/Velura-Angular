@@ -106,7 +106,8 @@ function sessionToken(user: JsonObject): string {
   return signJwt({
     user_id: user.user_id,
     email: user.email,
-    role: user.role,
+    role: "member",
+    surface: "storefront",
     tv: Number(user.token_epoch ?? 0)
   });
 }
@@ -370,6 +371,7 @@ export async function handleAuthRoute(
       user_id: user.user_id,
       email: user.email || `${user.phone}@velura.vn`,
       role: "member",
+      surface: "storefront",
       tv: Number(user.token_epoch ?? 0)
     });
     try {
@@ -582,7 +584,7 @@ export async function handleAuthRoute(
         email: user.email,
         phone: user.phone,
         full_name: user.full_name,
-        role: user.role,
+        role: "member",
         is_new_user: wasInactive
       }
     }, corsHeaders);
@@ -665,7 +667,7 @@ export async function handleAuthRoute(
         email: user.email,
         phone: user.phone,
         full_name: user.full_name,
-        role: user.role,
+        role: "member",
         is_new_user: false
       }
     }, corsHeaders);
@@ -829,6 +831,7 @@ export async function handleAuthRoute(
       user_id: user.user_id,
       email: user.email || `${user.phone}@velura.vn`,
       role: "member",
+      surface: "storefront",
       tv: Number(user.token_epoch ?? 0)
     });
     return sendJson(res, 200, {
@@ -944,7 +947,7 @@ export async function handleAuthRoute(
         email: user.email,
         phone: user.phone,
         full_name: user.full_name || safeName,
-        role: user.role,
+        role: "member",
         avatar: user.avatar || avatar
       }
     }, corsHeaders);

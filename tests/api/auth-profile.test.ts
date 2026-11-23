@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { isEmailUnconfirmed, preferLinkedProfile } from "../../apps/api/src/auth-profile.js";
+import { roleCodeForSession } from "../../apps/api/src/rbac.js";
 import type { UserProfile } from "../../apps/api/src/types.js";
 
 const ROOT = process.cwd();
@@ -34,6 +35,16 @@ test("preferLinkedProfile keeps a linked admin when the email row is only a memb
   assert.equal(preferLinkedProfile(adminAuth, memberEmail)?.user_id, "admin-row");
 });
 
+test("storefront session uses member persona without granting admin capabilities", () => {
+  const admin = profile({
+    user_id: "admin-row",
+    role: "admin",
+    admin_role: "super_admin"
+  });
+  assert.equal(roleCodeForSession(admin, { surface: "storefront" }), "member");
+  assert.equal(roleCodeForSession(admin, null), "super_admin");
+});
+
 test("GoTrue email_not_confirmed maps onto the admin login copy", () => {
   assert.equal(isEmailUnconfirmed({ error_code: "email_not_confirmed" }), true);
   assert.equal(isEmailUnconfirmed({ error_description: "Email not confirmed" }), true);
@@ -41,14 +52,16 @@ test("GoTrue email_not_confirmed maps onto the admin login copy", () => {
 });
 
 test("auth sign-in and /me attach Auth onto the operator profile", async () => {
-  const [signin, rbac, migration] = await Promise.all([
+  const [signin, storefrontAuth, rbac, migration] = await Promise.all([
     readFile(path.join(ROOT, "apps/api/src/auth-signin.ts"), "utf8"),
+    readFile(path.join(ROOT, "apps/api/src/user/auth.ts"), "utf8"),
     readFile(path.join(ROOT, "apps/api/src/rbac.ts"), "utf8"),
     readFile(path.join(ROOT, "database/migrations/023_auth_profile_verify_sync.sql"), "utf8")
   ]);
   assert.match(signin, /EMAIL_NOT_CONFIRMED/);
   assert.match(signin, /isEmailUnconfirmed/);
   assert.match(rbac, /loadProfileForAuthUser/);
+  assert.match(storefrontAuth, /surface: "storefront"/);
   assert.match(migration, /velura_sync_auth_user_verified/);
   assert.match(migration, /lower\(u\.email\) = lower\(new\.email\)/);
 });

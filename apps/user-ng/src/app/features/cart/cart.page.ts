@@ -46,7 +46,7 @@ export class CartPage {
   private readonly route = inject(ActivatedRoute);
 
   /** Mã mang theo từ nút "Dùng mã" ở trang Ưu đãi hoặc lưu trong phiên. */
-  readonly preferredVoucher = this.route.snapshot.queryParamMap.get('voucher') || localStorage.getItem('checkout_voucher_code') || localStorage.getItem('checkout_voucher_id');
+  readonly preferredVoucher = this.route.snapshot.queryParamMap.get('voucher') || sessionStorage.getItem('checkout_voucher_code') || sessionStorage.getItem('checkout_voucher_id');
   readonly appliedVoucher = signal<AppliedVoucher | null>(null);
   readonly voucherDeclined = signal(false);
 
@@ -573,20 +573,20 @@ export class CartPage {
     const expanded = this.cart.expandGroupedItems(selected);
     this.checkoutStore.setCheckoutItems(expanded, 'cart');
     sessionStorage.setItem(CHECKOUT_ITEMS_KEY, JSON.stringify(expanded));
-    localStorage.removeItem('checkout_discount');
-    localStorage.removeItem('checkout_voucher_code');
+    sessionStorage.removeItem('checkout_discount');
+    sessionStorage.removeItem('checkout_voucher_code');
     // Mang lựa chọn mã sang trang thanh toán. Trước đây bước này xoá mã đi, nên mã khách
     // chọn ở giỏ bị ví ở trang thanh toán thay bằng mã tốt nhất mà không nói gì.
     const voucher = this.appliedVoucher();
     if (voucher) {
-      localStorage.setItem(VOUCHER_ID_KEY, voucher.voucher_id);
+      sessionStorage.setItem(VOUCHER_ID_KEY, voucher.voucher_id);
     } else {
-      localStorage.removeItem(VOUCHER_ID_KEY);
+      sessionStorage.removeItem(VOUCHER_ID_KEY);
     }
     if (this.voucherDeclined()) {
-      localStorage.setItem(VOUCHER_DECLINED_KEY, 'true');
+      sessionStorage.setItem(VOUCHER_DECLINED_KEY, 'true');
     } else {
-      localStorage.removeItem(VOUCHER_DECLINED_KEY);
+      sessionStorage.removeItem(VOUCHER_DECLINED_KEY);
     }
     void this.router.navigateByUrl('/checkout/shipping');
   }

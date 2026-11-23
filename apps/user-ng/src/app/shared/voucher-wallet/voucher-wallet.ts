@@ -6,7 +6,7 @@ import type { AppliedVoucher, CartItemRef, WalletVoucher } from '../../core/mode
 
 function safeStorage(): Storage | null {
   try {
-    return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null;
+    return typeof window !== 'undefined' && window.sessionStorage ? window.sessionStorage : null;
   } catch {
     return null;
   }

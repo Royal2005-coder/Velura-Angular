@@ -80,9 +80,9 @@ export class PurchaseFlowPage {
   readonly quoteError = signal('');
   readonly requestedPoints = signal(0);
   readonly shippingMethod = signal('standard');
-  readonly voucherId = signal<string | null>(localStorage.getItem('checkout_voucher_id'));
-  readonly voucherDeclined = signal(['true', '1'].includes(localStorage.getItem('checkout_voucher_declined') || ''));
-  readonly preferredVoucher = localStorage.getItem('checkout_voucher_code') || this.voucherId();
+  readonly voucherId = signal<string | null>(sessionStorage.getItem('checkout_voucher_id'));
+  readonly voucherDeclined = signal(['true', '1'].includes(sessionStorage.getItem('checkout_voucher_declined') || ''));
+  readonly preferredVoucher = sessionStorage.getItem('checkout_voucher_code') || this.voucherId();
   private quoteVersion = 0;
   readonly guestCheckoutToken = signal('');
   readonly quote = computed(() => this.order() || {
@@ -743,7 +743,7 @@ export class PurchaseFlowPage {
   /** Persists a customer's explicit refusal so automatic best-selection cannot undo it. */
   declineVoucher(declined: boolean): void {
     this.voucherDeclined.set(declined);
-    localStorage.setItem('checkout_voucher_declined', String(declined));
+    sessionStorage.setItem('checkout_voucher_declined', String(declined));
   }
   /** Accept whole points within the last authoritative balance and merchandise limit. */
   setPoints(event: Event): void {
@@ -900,13 +900,13 @@ export class PurchaseFlowPage {
           const replacement = details?.replacement ?? null;
           this.voucherId.set(replacement?.voucher_id ?? null);
           this.voucherDeclined.set(!replacement?.voucher_id);
-          localStorage.setItem('checkout_voucher_declined', String(!replacement?.voucher_id));
+      sessionStorage.setItem('checkout_voucher_declined', String(!replacement?.voucher_id));
           if (replacement?.voucher_id) {
-            localStorage.setItem('checkout_voucher_id', replacement.voucher_id);
-            localStorage.setItem('checkout_voucher_code', replacement.code);
+        sessionStorage.setItem('checkout_voucher_id', replacement.voucher_id);
+        sessionStorage.setItem('checkout_voucher_code', replacement.code);
           } else {
-            localStorage.removeItem('checkout_voucher_id');
-            localStorage.removeItem('checkout_voucher_code');
+        sessionStorage.removeItem('checkout_voucher_id');
+        sessionStorage.removeItem('checkout_voucher_code');
           }
           this.refreshQuote();
           const requested = details?.requested_code ? `Mã ${details.requested_code}` : 'Mã giảm giá đã chọn';

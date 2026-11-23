@@ -60,8 +60,10 @@ test("no OTP route fires SMS without awaiting the provider", async () => {
   assert.doesNotMatch(orders, /sendTwilioSms\([^;]+activationUrl/s);
   assert.match(auth, /await\s+deliverAuthOtp\(/);
   assert.match(auth, /OTP_SEND_RATE_LIMIT/);
-  // Route chỉ trả 200 khi ít nhất một kênh thật sự nhận được tin.
-  assert.match(orders, /if \(!allowDevOtpBypass\(\) && !smsSent && !emailSent\)/);
+  // Guest không nhập email được dùng fallback 6 số khi SMS không giao được.
+  assert.match(orders, /const phoneFallback = !otpEmail && !smsSent/);
+  assert.match(orders, /activateUndeliveredPhoneFallback\(phone\)/);
+  assert.match(orders, /if \(!allowDevOtpBypass\(\) && !smsSent && !emailSent && !phoneFallback\)/);
   assert.doesNotMatch(orders, /const smsSent = smsResult\.success \|\| !isSmsConfigured\(\)/, "chưa cấu hình SMS không phải đã gửi");
   assert.doesNotMatch(orders, /if \(!emailSent\) \{\s*emailSent = true;/, "SMTP từ chối không được báo là đã gửi email");
   assert.doesNotMatch(orders, /OTP_SEND_FAILED/, "502 khiến CDN thay thân đáp, UI chỉ còn lỗi chung");
@@ -70,10 +72,10 @@ test("no OTP route fires SMS without awaiting the provider", async () => {
   assert.doesNotMatch(orders, /if \(!emailSent\) \{\s*emailSent = true;/);
 });
 
-test("checkout OTP is never a fixed 123456 outside a development environment", async () => {
+test("checkout OTP is random by default and exposes 123456 only through the undelivered-phone fallback", async () => {
   const checkout = await source("apps/api/src/user/checkout-service.ts");
   assert.match(checkout, /otpCode: allowDevOtpBypass\(\) \? "123456" : generateCheckoutOtp\(\)/, "mã cứng ai cũng đoán được");
-  assert.doesNotMatch(checkout, /otpCode: "123456",/);
+  assert.match(checkout, /fallbackSession = \{ \.\.\.session, otpCode: "123456", attempts: 0 \}/);
 });
 
 test("Twilio credentials are documented in the env template", async () => {

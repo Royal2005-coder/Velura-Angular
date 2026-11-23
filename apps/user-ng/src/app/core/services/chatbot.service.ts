@@ -18,6 +18,8 @@ export interface ChatMessage {
   moderation_status?: 'pending' | 'visible' | 'restricted';
   metadata?: {
     local_greeting?: boolean;
+    /** Browser-only author copy shown while the server moderates this exact outbound turn. */
+    local_pending?: boolean;
     typing?: boolean;
     error?: boolean;
     product_ids?: string[];

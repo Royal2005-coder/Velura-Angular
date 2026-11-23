@@ -236,14 +236,14 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
     // chưa từng có `tv`) không còn là phiên hợp lệ — không cần bảng thu hồi theo từng token.
     if (Number(decoded.tv ?? 0) !== Number(profile.token_epoch ?? 0)) return buildGuestContext(ipAddress);
 
-    const roleCode = roleCodeOf(profile);
+    const roleCode = roleCodeForSession(profile, decoded);
     const access = accessForRole(roleCode);
     return {
       authUser: { id: profile.user_id, email: typeof profile.email === "string" ? profile.email : null },
       profile,
       roleCode,
       roleName: roleNames[roleCode] || "Member",
-      isAdmin: profile.role === "admin",
+      isAdmin: roleCode !== "member" && profile.role === "admin",
       allowedPages: access.allowedPages,
       allowedModules: access.allowedModules,
       capabilities: access.capabilities,
@@ -263,6 +263,18 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
     profile = await loadProfileForAuthUser(authUser, token);
   } catch {
     profile = null;
+  }
+
+  // The bearer token is already verified by GoTrue above. A stale/missing self-read RLS
+  // policy must not silently downgrade a real member to a profile-less pseudo member.
+  // Retry through the API's service credential; ownership still comes exclusively from
+  // the verified auth id/email and every downstream member rule checks the canonical row.
+  if (!profile) {
+    try {
+      profile = await loadProfileForAuthUser(authUser);
+    } catch {
+      profile = null;
+    }
   }
 
   if (!profile) {
@@ -364,6 +376,17 @@ function roleCodeOf(profile: UserProfile): string {
     return profile.admin_role;
   }
   return typeof profile.role === "string" && profile.role ? profile.role : "member";
+}
+
+/**
+ * Chooses the effective persona carried by a server-signed session.
+ * Storefront sign-in deliberately drops admin capabilities while retaining the same account owner.
+ */
+export function roleCodeForSession(
+  profile: UserProfile,
+  claims: Record<string, unknown> | null
+): string {
+  return claims?.surface === "storefront" ? "member" : roleCodeOf(profile);
 }
 
 const roleNames: Record<string, string> = {

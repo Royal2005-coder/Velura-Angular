@@ -21,6 +21,8 @@ interface MemberProfile {
   phone?: string;
   date_of_birth?: string;
   gender?: string;
+  role?: string;
+  is_active?: boolean;
   saved_addresses?: Array<{
     id?: string;
     name?: string;
@@ -93,6 +95,7 @@ export class AccountProfilePage {
   readonly tab = signal('profile');
   readonly displayName = signal(this.auth.session()?.fullName || 'Tên khách hàng');
   readonly memberMeta = signal(this.auth.session()?.email || this.auth.session()?.phone || 'Thành viên Velura');
+  readonly memberBadge = signal('Đang xác minh');
   readonly addressModalOpen = signal(false);
   readonly addressGeography = signal<AddressGeographySelection>({ province: '', district: '', ward: '', mode: 'current', valid: false });
   readonly savedAddresses = signal<NonNullable<MemberProfile['saved_addresses']>>([]);
@@ -397,6 +400,13 @@ export class AccountProfilePage {
       this.displayName.set(profile.full_name);
     }
     this.memberMeta.set(profile?.email || profile?.phone || this.auth.session()?.email || this.auth.session()?.phone || 'Thành viên Velura');
+    this.memberBadge.set(!profile
+      ? 'Chưa đồng bộ hồ sơ'
+      : profile.is_active === false
+        ? 'Tài khoản tạm khóa'
+        : profile.role === 'member' || !profile.role
+          ? 'Thành viên Velura'
+          : 'Tài khoản quản trị');
     const name = document.getElementById('profile-name') as HTMLInputElement | null;
     const email = document.getElementById('profile-email') as HTMLInputElement | null;
     const phone = document.getElementById('profile-phone') as HTMLInputElement | null;

@@ -19,7 +19,7 @@ describe('StyleQuizPage', () => {
     await TestBed.configureTestingModule({
       imports: [StyleQuizPage],
       providers: [provideRouter([]), { provide: StyleProfileService, useValue: {
-        saveQuiz: post, guestDraft: () => null, saveGuestDraft: () => undefined,
+        saveQuiz: post, guestDraft: () => null, guestAnswers: () => null, saveGuestDraft: () => undefined,
       } }],
     }).compileComponents();
     const fixture = TestBed.createComponent(StyleQuizPage);
@@ -37,6 +37,33 @@ describe('StyleQuizPage', () => {
     expect(localStorage.getItem('velura_guest_quiz_completed')).toBeNull();
     expect(navigate).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('Service unavailable');
+    fixture.destroy();
+  });
+
+  it('restores an accepted guest quiz when the customer chooses to update it', async () => {
+    TestBed.resetTestingModule();
+    const accepted = {
+      height_cm: 158, weight_kg: 49, chest_cm: 80, waist_cm: 60, hip_cm: 84,
+      body_shape: 'Rectangle', skin_tone: 'Warm', style_tags: ['Elegant'],
+      preferred_occasions: ['Party'], favorite_brands: [], budget_range: '700k_1.5m',
+      age_group: '25-34', favorite_colors: ['Camel'],
+    };
+    await TestBed.configureTestingModule({
+      imports: [StyleQuizPage],
+      providers: [provideRouter([]), { provide: StyleProfileService, useValue: {
+        guestDraft: () => null, guestAnswers: () => accepted, saveGuestDraft: () => undefined,
+        saveQuiz: () => of(undefined),
+      } }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(StyleQuizPage);
+    fixture.detectChanges();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('#input-height') as HTMLInputElement).value).toBe('158');
+    expect(fixture.nativeElement.querySelector('[data-group="context"] .is-selected')?.getAttribute('data-value')).toBe('Party');
+    expect(fixture.nativeElement.querySelector('[data-group="skin-tone"] .is-selected')?.getAttribute('data-value')).toBe('Warm');
+    expect(fixture.componentInstance.quizSaved()).toBe(true);
     fixture.destroy();
   });
 

@@ -611,10 +611,16 @@ export class StyleQuizPage {
       return;
     }
     const draft: StyleQuizDraft | null = this.profile.guestDraft();
-    if (!draft) return;
-    this.step.set(Math.min(8, Math.max(1, draft.step || 1)));
-    this.applyAnswers(draft.answers);
-    this.draftDirty.set(true);
+    if (draft) {
+      this.step.set(Math.min(8, Math.max(1, draft.step || 1)));
+      this.applyAnswers(draft.answers);
+      this.draftDirty.set(true);
+      return;
+    }
+    const accepted = this.profile.guestAnswers();
+    if (!accepted) return;
+    this.applyAnswers(accepted);
+    this.quizSaved.set(true);
   }
 
   private applyAnswers(answers: Partial<StyleQuizAnswers>): void {

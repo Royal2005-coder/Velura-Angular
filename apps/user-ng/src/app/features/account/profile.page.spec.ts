@@ -23,13 +23,14 @@ describe('AccountProfilePage', () => {
 
   it('replaces the member loading placeholder with loaded account information', async () => {
     await createStorefrontPage(AccountProfilePage, { get: (path: string) => of(path === '/api/user/profile'
-      ? { full_name: 'Test2', phone: '0855808333', email: '' }
+      ? { full_name: 'Test2', phone: '0855808333', email: '', role: 'member', is_active: true }
       : {}) });
     const root: HTMLElement = lastStorefrontFixture().nativeElement;
 
     expect(root.querySelector('.profile-avatar-name')?.textContent).toContain('Test2');
     expect(root.querySelector('.profile-avatar-meta')?.textContent).toContain('0855808333');
     expect(root.querySelector('.profile-avatar-meta')?.textContent).not.toContain('Đang tải');
+    expect(root.querySelector('.account-sidebar__badge')?.textContent).toContain('Thành viên Velura');
   });
 
   it('keeps spending analytics and exposes the loyalty wallet in its own tab', async () => {

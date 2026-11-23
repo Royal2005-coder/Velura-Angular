@@ -28,6 +28,10 @@ export interface PersonalColorAnalysis { id: string; status: 'RUNNING' | 'SUCCES
 /** Current version protects profile edits and simultaneous confirmation. */
 export interface PersonalColorProfile { version: number; personal_color: ConfirmedPersonalColor | null; }
 
+interface GuestColorSnapshot { sessionId: string; personalColor: ConfirmedPersonalColor; }
+
+const GUEST_COLOR_SNAPSHOT_KEY = 'velura_session_personal_color';
+
 /** Personal Color HTTP Model delegates existing private uploads and rejects stale-account callbacks. */
 @Injectable({ providedIn: 'root' })
 export class PersonalColorModel {
@@ -37,8 +41,19 @@ export class PersonalColorModel {
 
   /** Read actual production policy approval and gateway readiness. */
   capabilities(): Observable<ColorCapabilities> { return this.api.get<ColorCapabilities>('/api/user/personal-color/capabilities'); }
-  /** Read the same member/session profile used by the Style Quiz. */
-  profile(): Observable<PersonalColorProfile> { return this.scoped(() => this.api.get<PersonalColorProfile>('/api/user/personal-color/profile')); }
+  /** Read the same member/session profile used by the Style Quiz, restoring only a server-confirmed guest display snapshot after an API restart. */
+  profile(): Observable<PersonalColorProfile> {
+    return this.scoped(() => this.api.get<PersonalColorProfile>('/api/user/personal-color/profile')).pipe(map((profile) => {
+      if (this.auth.session()) return profile;
+      if (profile.personal_color) {
+        this.rememberGuestColor(profile.personal_color);
+        return profile;
+      }
+      const recovered = this.readGuestColor();
+      // Keep the live server version for every future write; the tab snapshot is display-only.
+      return recovered ? { ...profile, personal_color: recovered } : profile;
+    }));
+  }
   /** Upload portrait image directly to personal color uploads endpoint (supports guest sessions and members). */
   upload(file: File): Observable<{ asset_id: string; expires_at: string }> {
     return this.scoped(() => {
@@ -66,6 +81,7 @@ export class PersonalColorModel {
   confirm(analysis: PersonalColorAnalysis): Observable<PersonalColorProfile> {
     return this.scoped(() => this.api.post<PersonalColorProfile>(`/api/user/personal-color/analyses/${encodeURIComponent(analysis.id)}/confirm`, { expected_version: analysis.profile_version })).pipe(map((profile) => {
       if (profile.personal_color?.status !== 'CONFIRMED' || profile.personal_color.analysis_id !== analysis.id) throw new Error('Kết quả chưa được xác nhận.');
+      this.rememberGuestColor(profile.personal_color);
       this.profileModel.revision.update((revision) => revision + 1);
       return profile;
     }));
@@ -78,6 +94,7 @@ export class PersonalColorModel {
       expected_version: version,
     })).pipe(map((profile) => {
       if (profile.personal_color?.status !== 'CONFIRMED') throw new Error('Kết quả chưa được xác nhận.');
+      this.rememberGuestColor(profile.personal_color);
       this.profileModel.revision.update((revision) => revision + 1);
       return profile;
     }));
@@ -90,5 +107,26 @@ export class PersonalColorModel {
         return value;
       }));
     });
+  }
+
+  private rememberGuestColor(color: ConfirmedPersonalColor): void {
+    if (this.auth.session() || typeof sessionStorage === 'undefined') return;
+    sessionStorage.setItem(GUEST_COLOR_SNAPSHOT_KEY, JSON.stringify({ sessionId: guestSessionId(), personalColor: color } satisfies GuestColorSnapshot));
+  }
+
+  private readGuestColor(): ConfirmedPersonalColor | null {
+    if (this.auth.session() || typeof sessionStorage === 'undefined') return null;
+    try {
+      const value = JSON.parse(sessionStorage.getItem(GUEST_COLOR_SNAPSHOT_KEY) || 'null') as unknown;
+      if (!value || typeof value !== 'object') return null;
+      const snapshot = value as { sessionId?: unknown; personalColor?: unknown };
+      if (snapshot.sessionId !== guestSessionId() || !snapshot.personalColor || typeof snapshot.personalColor !== 'object') return null;
+      const color = snapshot.personalColor as Record<string, unknown>;
+      if (color['status'] !== 'CONFIRMED' || !['Spring', 'Summer', 'Autumn', 'Winter'].includes(String(color['season'] || ''))) return null;
+      if (!Array.isArray(color['palette']) || !Array.isArray(color['avoided']) || typeof color['analysis_id'] !== 'string' || typeof color['confirmed_at'] !== 'string') return null;
+      return color as unknown as ConfirmedPersonalColor;
+    } catch {
+      return null;
+    }
   }
 }

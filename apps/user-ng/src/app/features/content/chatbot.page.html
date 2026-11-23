@@ -167,9 +167,12 @@
                 @else if (message.sender === 'agent') { <span class="chatbot-message__sender">Chuyên viên CSKH</span> }
                 @else if (message.sender === 'bot') { <span class="chatbot-message__sender">AI Stylist</span> }
                 @if (message.metadata?.typing) {
-                  <div class="chatbot-message__text"><span class="typing-dots"><span>.</span><span>.</span><span>.</span></span></div>
+                  <div class="chatbot-message__text" role="status" aria-live="polite">
+                    <span class="typing-label">AI đang suy nghĩ</span>
+                    <span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>
+                  </div>
                 } @else {
-                  <div class="chatbot-message__text" [innerHTML]="formatBotText(message.moderation_status === 'pending' ? 'Tin nhắn đang được xử lý...' : message.text)"></div>
+                  <div class="chatbot-message__text" [innerHTML]="formatBotText(message.moderation_status === 'pending' && !message.metadata?.local_pending ? 'Tin nhắn đang được xử lý...' : message.text)"></div>
                 }
                 @if (message.moderation_status === 'visible' && message.metadata?.attachment?.data) {
                   <div class="chatbot-message__attachment u-inline-36ca0aff10">

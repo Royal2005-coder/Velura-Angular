@@ -942,6 +942,13 @@ body .chatbot-widget {
 .chatbot-message--typing .chatbot-message__text {
   color: var(--soft);
   font-style: italic;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.typing-label {
+  font-size: 0.875rem;
 }
 
 .typing-dots {

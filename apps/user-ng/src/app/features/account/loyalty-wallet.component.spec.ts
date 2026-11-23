@@ -1,13 +1,25 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, Subject } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { LoyaltyService, type LoyaltyWallet } from '../../core/services/loyalty.service';
 import { LoyaltyWalletComponent } from './loyalty-wallet.component';
 
 const wallet: LoyaltyWallet = { balance_points: 10.5, available_points: 10, amount_vnd: 10500, referral_code: 'VLR0123456789ABCDEF', policy: { spending_enabled: false, policy_approved_at: null, used_reward_reversal_policy: 'manual_review', used_reward_reversal_approved: true }, expiries: [], history: [], referrals: [], reward_vouchers: [] };
 describe('LoyaltyWalletComponent', () => {
+  it('does not render a fabricated zero wallet when the member profile is temporarily unavailable', () => {
+    const error = Object.assign(new Error('temporary'), { code: 'MEMBER_PROFILE_UNAVAILABLE' });
+    TestBed.configureTestingModule({ imports: [LoyaltyWalletComponent], providers: [provideRouter([]),
+      { provide: LoyaltyService, useValue: { wallet: () => throwError(() => error) } },
+      { provide: AuthService, useValue: { session: signal({ userId: 'member' }), isLoggedIn: () => true } }] });
+    const fixture = TestBed.createComponent(LoyaltyWalletComponent);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.wallet()).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('chưa đồng bộ được hồ sơ thành viên');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.loyalty__balance')).toBeNull();
+  });
   it('discards a wallet response after identity changes and keeps no previous referral link', () => {
     const session = signal({ userId: 'first' });
     const old = new Subject<{ success: boolean; wallet: LoyaltyWallet }>();

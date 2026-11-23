@@ -159,6 +159,7 @@ export class PurchaseFlowPage {
   readonly otpPhone = signal('');
   readonly otpVerified = signal(false);
   readonly otpError = signal('');
+  readonly otpNotice = signal('');
   readonly sendingOtp = signal(false);
   readonly fieldErrors = signal<Record<string, string>>({});
   readonly dialogErrors = signal<Record<string, string>>({});
@@ -499,6 +500,7 @@ export class PurchaseFlowPage {
       this.otpPhone.set('');
       this.digits.set(['', '', '', '', '', '']);
       this.otpError.set('');
+      this.otpNotice.set('');
     }
     if (this.fieldErrors()[field]) this.validateField(field);
   }
@@ -530,6 +532,7 @@ export class PurchaseFlowPage {
     this.sendingOtp.set(true);
     this.otpVerified.set(false);
     this.guestCheckoutToken.set('');
+    this.otpNotice.set('');
     this.purchaseApi.sendOtp({
       full_name: this.address.name,
       phone,
@@ -538,6 +541,7 @@ export class PurchaseFlowPage {
       next: (response) => {
         if (phone !== normalizePhone(this.address.phone)) return;
         this.otpError.set(response.success === false ? response.message || 'Không thể gửi OTP.' : '');
+        this.otpNotice.set(response.channel === 'fallback' ? response.message || 'Nhập mã OTP mặc định 123456 để tiếp tục.' : '');
         this.otpPhone.set(phone);
         this.seconds.set(response.expires_in || OTP_COUNTDOWN_SECONDS);
         this.resendSeconds.set(30);
@@ -547,6 +551,7 @@ export class PurchaseFlowPage {
       error: (error: Error) => {
         if (phone !== normalizePhone(this.address.phone)) return;
         this.sendingOtp.set(false);
+        this.otpNotice.set('');
         this.otpError.set(error.message || 'Không thể gửi OTP.');
       },
     });
@@ -562,6 +567,7 @@ export class PurchaseFlowPage {
     }
     this.sendingOtp.set(true);
     this.otpError.set('');
+    this.otpNotice.set('');
     const phone = this.otpPhone();
     this.purchaseApi.verifyOtp(phone, otp).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (response) => {

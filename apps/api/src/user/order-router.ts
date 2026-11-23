@@ -694,23 +694,29 @@ export async function handleOrdersRoute(
       }
 
       // A simulated provider proves nothing to the customer, and an unconfigured carrier is not a
-      // delivery. Only a real send counts; dev shortcut codes are the single documented exception.
+      // delivery. A guest who omitted email receives the documented six-digit checkout fallback.
       const smsSent = smsResult.success === true && smsResult.simulated !== true;
-      if (!allowDevOtpBypass() && !smsSent && !emailSent) {
+      const phoneFallback = !otpEmail && !smsSent;
+      if (phoneFallback) {
+        checkoutOtpService.activateUndeliveredPhoneFallback(phone);
+      }
+      if (!allowDevOtpBypass() && !smsSent && !emailSent && !phoneFallback) {
         throw new HttpError(
           422,
           "OTP_CHANNEL_UNAVAILABLE",
-          "Chưa gửi được mã xác thực qua tin nhắn hoặc email. Vui lòng nhập email để nhận mã, thử lại sau, hoặc liên hệ hotline Velura."
+          "Chưa gửi được mã xác thực qua email. Vui lòng kiểm tra email, thử lại sau, hoặc liên hệ hotline Velura."
         );
       }
-      const channel: "sms" | "email" | "both" | "dev" = smsSent && emailSent
+      const channel: "sms" | "email" | "both" | "dev" | "fallback" = smsSent && emailSent
         ? "both"
-        : emailSent ? "email" : smsSent ? "sms" : "dev";
+        : emailSent ? "email" : smsSent ? "sms" : phoneFallback ? "fallback" : "dev";
       const destinations = [
         smsSent ? `số điện thoại ${maskPhone(phone)}` : null,
         emailSent ? `email ${maskEmail(asString(otpEmail))}` : null
       ].filter((part): part is string => Boolean(part));
-      const message = destinations.length
+      const message = phoneFallback
+        ? "SMS hiện chưa gửi được. Nhập mã OTP mặc định 123456 để tiếp tục."
+        : destinations.length
         ? `Mã OTP đã được gửi tới ${destinations.join(" và ")}.`
         : `Nhập mã ${otpCode} để xác thực (chỉ dùng ở môi trường thử nghiệm).`;
 

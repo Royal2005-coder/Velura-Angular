@@ -475,6 +475,26 @@ test("malformed or unavailable classifiers have finite failure and then human es
   }
 });
 
+test("catalog classifier outages publish a safe fallback and never create a support ticket", async () => {
+  const f = fixture({ analyze: async () => { throw new Error("provider unavailable"); } });
+  const first = await f.send("Tìm váy dự tiệc");
+  const second = await f.send("Màu đen, ngân sách dưới một triệu");
+
+  assert.equal(session(first).handoff_status, "ai");
+  assert.equal(session(second).handoff_status, "ai");
+  assert.equal(f.state.tickets.size, 0);
+  assert.equal(f.state.handoffReasons.length, 0);
+  const messages = rows(second);
+  const customerMessages = messages.filter((message) => message.sender === "user");
+  const botMessages = messages.filter((message) => message.sender === "bot");
+  assert.equal(customerMessages.length, 2);
+  assert.ok(customerMessages.every((message) => message.moderation_status === "restricted"));
+  assert.ok(customerMessages.every((message) => asString(message.text).includes("bộ lọc AI tạm thời gián đoạn")));
+  assert.equal(botMessages.length, 2);
+  assert.ok(botMessages.every((message) => asJsonObject(message.metadata).approach === "clarify_catalog_preferences_after_temporary_failure"));
+  assert.ok(!JSON.stringify(second).includes("Màu đen, ngân sách dưới một triệu"));
+});
+
 test("malformed drafts and unavailable risk reviewers hand off without publishing a draft", async () => {
   for (const overrides of [{ draft: async () => parseChatDraft({ text: "Tôi sẽ hoàn tiền" }) }, { review: async () => { throw new Error("review unavailable"); } }]) {
     const f = fixture(overrides);

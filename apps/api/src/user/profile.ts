@@ -27,7 +27,11 @@ export async function handleProfileRoute(
     // GET /api/user/profile
     if (req.method === "GET") {
       const { password_hash, otp_code, otp_expires_at, ...cleanProfile } = profile;
-      return sendJson(res, 200, cleanProfile, corsHeaders);
+      return sendJson(res, 200, {
+        ...cleanProfile,
+        role: context.roleCode,
+        admin_role: context.isAdmin ? cleanProfile.admin_role : null
+      }, corsHeaders);
     }
 
     // PATCH /api/user/profile
@@ -62,7 +66,11 @@ export async function handleProfileRoute(
         throw new HttpError(404, "USER_NOT_FOUND", "Không tìm thấy người dùng");
       }
       const { password_hash, otp_code, otp_expires_at, ...cleanProfile } = updated;
-      return sendJson(res, 200, cleanProfile, corsHeaders);
+      return sendJson(res, 200, {
+        ...cleanProfile,
+        role: context.roleCode,
+        admin_role: context.isAdmin ? cleanProfile.admin_role : null
+      }, corsHeaders);
     }
   }
 

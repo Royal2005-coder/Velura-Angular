@@ -39,10 +39,10 @@ test("the OTP answer never hides behind a 5xx that the CDN rewrites", async () =
   assert.match(sms, /5 phut/);
 });
 
-test("loyalty accrual is limited to active members and keeps every other 087 rule", async () => {
-  const sql = await source("database/migrations/111_loyalty_members_only.sql");
+test("loyalty accrual accepts active storefront member personas and keeps every other 087 rule", async () => {
+  const sql = await source("database/migrations/137_storefront_member_persona.sql");
   assert.match(sql, /v_order\.is_guest is distinct from false/, "khách vãng lai chưa phải thành viên");
-  assert.match(sql, /role::text = 'member' and is_active/, "chỉ thành viên đã kích hoạt, không phải admin hay tài khoản chưa OTP");
+  assert.match(sql, /role::text in \('member','admin'\) and is_active/, "phiên storefront của tài khoản active được dùng member persona");
 
   // 087 là định nghĩa production đang chạy — giữ nguyên phần tiền.
   assert.match(sql, /v_earned := floor\(v_merchandise\*5\/100\);/);
@@ -56,7 +56,7 @@ test("loyalty accrual is limited to active members and keeps every other 087 rul
 
   const previous = await source("database/migrations/087_loyalty_spend.sql");
   const body = (text: string) => text.split("create or replace function public.velura_award_order_loyalty")[1];
-  assert.ok(body(sql).length > 500, "111 phải là bản thay thế đầy đủ, không phải bản cắt ngắn");
+  assert.ok(body(sql).length > 500, "137 phải là bản thay thế đầy đủ, không phải bản cắt ngắn");
   for (const line of ["v_merchandise := greatest(0,coalesce(v_order.subtotal,0)", "v_debt_paid := least(v_earned,greatest(0,v_account.debt_milli_points));"]) {
     assert.ok(body(sql).includes(line), `thiếu dòng tiền của 087: ${line}`);
     assert.ok(body(previous).includes(line));

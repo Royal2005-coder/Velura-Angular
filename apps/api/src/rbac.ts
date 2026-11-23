@@ -236,14 +236,14 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
     // chưa từng có `tv`) không còn là phiên hợp lệ — không cần bảng thu hồi theo từng token.
     if (Number(decoded.tv ?? 0) !== Number(profile.token_epoch ?? 0)) return buildGuestContext(ipAddress);
 
-    const roleCode = roleCodeOf(profile);
+    const roleCode = roleCodeForSession(profile, decoded);
     const access = accessForRole(roleCode);
     return {
       authUser: { id: profile.user_id, email: typeof profile.email === "string" ? profile.email : null },
       profile,
       roleCode,
       roleName: roleNames[roleCode] || "Member",
-      isAdmin: profile.role === "admin",
+      isAdmin: roleCode !== "member" && profile.role === "admin",
       allowedPages: access.allowedPages,
       allowedModules: access.allowedModules,
       capabilities: access.capabilities,
@@ -376,6 +376,17 @@ function roleCodeOf(profile: UserProfile): string {
     return profile.admin_role;
   }
   return typeof profile.role === "string" && profile.role ? profile.role : "member";
+}
+
+/**
+ * Chooses the effective persona carried by a server-signed session.
+ * Storefront sign-in deliberately drops admin capabilities while retaining the same account owner.
+ */
+export function roleCodeForSession(
+  profile: UserProfile,
+  claims: Record<string, unknown> | null
+): string {
+  return claims?.surface === "storefront" ? "member" : roleCodeOf(profile);
 }
 
 const roleNames: Record<string, string> = {

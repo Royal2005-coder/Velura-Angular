@@ -116,200 +116,16 @@
               </svg>
             </button>
           </label>
-          @if (searchOpen()) {
-            <!-- Top Luxury Search Header Bar -->
-            <div class="cm-search-topbar" (click)="$event.stopPropagation()">
-              <div class="cm-search-topbar__pill">
-                <button type="submit" class="site-header__search-icon-btn" aria-label="Tìm kiếm">
-                  <svg class="icon icon-search u-inline-8fa8881d63" aria-hidden="true"><use href="#icon-search"></use></svg>
-                </button>
-                <input
-                  #overlaySearchInput
-                  type="text"
-                  class="cm-search-topbar__input"
-                  [value]="searchQuery()"
-                  placeholder="Tìm kiếm sản phẩm, xu hướng thời trang..."
-                  aria-label="Tìm kiếm sản phẩm"
-                  (input)="onSearchInput($event)"
-                  (keydown)="onSearch($event)"
-                />
-                @if (searchQuery().trim()) {
-                  <button
-                    type="button"
-                    class="cm-search-topbar__clear-btn"
-                    (click)="searchQuery.set(''); overlaySearchInput.value = ''; overlaySearchInput.focus()"
-                    title="Xóa từ khóa"
-                    aria-label="Xóa từ khóa"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                  </button>
-                }
-                <button
-                  type="button"
-                  class="site-header__search-ai-btn"
-                  (click)="openVisualSearch($event)"
-                  title="Tìm kiếm bằng Google Lens AI"
-                  aria-label="Tìm kiếm bằng Google Lens AI"
-                >
-                  <svg class="icon icon-lens u-inline-fe1a6c008b" viewBox="0 0 24 24" fill="none">
-                    <path d="M3 7V5a2 2 0 0 1 2-2h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <path d="M17 3h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="2"/>
-                    <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
-                  </svg>
-                </button>
-              </div>
-              <button
-                type="button"
-                class="cm-search-topbar__close"
-                (click)="closeSearch(); $event.stopPropagation()"
-                title="Đóng tìm kiếm (Esc)"
-                aria-label="Đóng tìm kiếm"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              </button>
-            </div>
-
-            <!-- Dark Dimmed Page Backdrop below Top Bar -->
-            <div class="search-backdrop" (click)="closeSearch()"></div>
-
-            <!-- Centered Luxury Popover Card -->
-            <div class="site-header__search-dropdown" (click)="$event.stopPropagation()">
-              <!-- AI Visual Search Promotion Banner -->
-              <div class="search-dd__lens-banner" (click)="openVisualSearch($event)">
-                <div class="search-dd__lens-banner-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <path d="M3 7V5a2 2 0 0 1 2-2h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <path d="M17 3h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="2"/>
-                    <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
-                  </svg>
-                </div>
-                <div class="search-dd__lens-banner-text">
-                  <strong>Tìm kiếm bằng hình ảnh với AI Lens</strong>
-                  <span>Tải ảnh trang phục bạn yêu thích để Velura gợi ý thiết kế tương đồng nhất</span>
-                </div>
-                <span class="search-dd__lens-banner-btn">Thử ngay →</span>
-              </div>
-
-              <!-- Instant Suggestions when typing -->
-              @if (searchQuery().trim().length >= 2) {
-                <div class="search-dd__section">
-                  <div class="search-dd__section-title">
-                    <span class="search-dd__title-text">Kết quả gợi ý cho "{{ searchQuery() }}"</span>
-                    @if (instantSuggestions().length) {
-                      <span class="search-dd__count">{{ instantSuggestions().length }} sản phẩm</span>
-                    }
-                  </div>
-                  @if (aiTextSearchReady()) {
-                    <button type="button" class="search-dd__ai-btn" (click)="executeAiSearch(searchQuery())">
-                      <svg class="search-dd__ai-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                        <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" fill="currentColor"/>
-                      </svg>
-                      <span class="search-dd__ai-btn-text">Tìm bằng AI ngữ nghĩa cho "{{ searchQuery() }}"</span>
-                      <span class="search-dd__ai-btn-arrow" aria-hidden="true">→</span>
-                    </button>
-                  }
-                  @if (instantSuggestions().length) {
-                    <div class="search-dd__products">
-                      @for (p of instantSuggestions(); track p.product_id) {
-                        <div class="search-dd__product-item" (click)="selectProduct(p.slug || p.product_id)">
-                          <img [src]="(p.images && p.images[0]) || ''" [alt]="p.name" class="search-dd__product-img" />
-                          <div class="search-dd__product-info">
-                            <span class="search-dd__product-name">{{ p.name }}</span>
-                            <span class="search-dd__product-price">
-                              {{ (p.sale_price || p.base_price) | number:'1.0-0' }}đ
-                              @if (p.is_combo) {
-                                <span class="search-dd__combo-tag">Combo</span>
-                              }
-                            </span>
-                          </div>
-                          <span class="search-dd__product-arrow">→</span>
-                        </div>
-                      }
-                    </div>
-                    <button type="button" class="search-dd__view-all-btn" (click)="executeSearch(searchQuery())">
-                      Xem tất cả kết quả cho "{{ searchQuery() }}" →
-                    </button>
-                  } @else {
-                    <div class="search-dd__empty-box">
-                      <p>Không tìm thấy gợi ý nhanh cho <strong>"{{ searchQuery() }}"</strong></p>
-                      <button type="button" class="search-dd__view-all-btn" (click)="executeSearch(searchQuery())">
-                        Tìm kiếm trong toàn bộ cửa hàng →
-                      </button>
-                    </div>
-                  }
-                </div>
-              }
-
-              <!-- Trending Keywords (Từ khóa nổi bật ngày hôm nay) -->
-              <div class="search-dd__section">
-                <div class="search-dd__section-title">
-                  <span class="search-dd__title-text">
-                    <svg class="search-dd__flame-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                      <path d="M12 23c6.075 0 11-4.925 11-11 0-4.04-2.18-7.58-5.46-9.52.28 1.48-.05 3.01-.94 4.18-1.02 1.34-2.73 1.94-4.4 1.51.52 1.38.31 2.97-.6 4.17-1.12 1.47-3.04 2.05-4.82 1.45.65 1.5.39 3.28-.7 4.54-1.25 1.45-3.27 1.92-5 1.2 1.62 2.65 4.55 4.47 8.86 4.47z"/>
-                    </svg>
-                    TỪ KHÓA NỔI BẬT HÔM NAY
-                  </span>
-                  <span class="search-dd__trending-badge">Hot Search</span>
-                </div>
-                <div class="search-dd__trending-wrap">
-                  @for (kw of trendingKeywords; track kw; let idx = $index) {
-                    <button type="button" class="search-dd__trending-pill" (click)="selectKeyword(kw)">
-                      <span class="search-dd__trending-pill-idx">{{ idx + 1 }}</span>
-                      <span>{{ kw }}</span>
-                    </button>
-                  }
-                </div>
-              </div>
-
-              <!-- Quick Categories Section -->
-              <div class="search-dd__section">
-                <div class="search-dd__section-title">
-                  <span class="search-dd__title-text">DANH MỤC PHỔ BIẾN</span>
-                </div>
-                <div class="search-dd__cat-chips">
-                  @for (cat of quickCategories; track cat.slug) {
-                    <button type="button" class="search-dd__cat-chip" (click)="selectCategory(cat.slug)">
-                      <span>{{ cat.name }}</span>
-                    </button>
-                  }
-                </div>
-              </div>
-
-              <!-- Recently Viewed Products -->
-              @if (searchQuery().trim().length < 2 && recentlyViewed().length) {
-                <div class="search-dd__section">
-                  <div class="search-dd__section-title">
-                    <span class="search-dd__title-text">SẢN PHẨM ĐÃ XEM GẦN ĐÂY</span>
-                    <span class="search-dd__count">{{ recentlyViewed().length }} sản phẩm</span>
-                  </div>
-                  <div class="search-dd__recent-list">
-                    @for (item of recentlyViewed().slice(0, 4); track item.product_id) {
-                      <div class="search-dd__recent-item" (click)="selectProduct(item.slug || item.product_id)">
-                        <img [src]="(item.images && item.images[0]) || ''" [alt]="item.name" class="search-dd__recent-img" />
-                        <div class="search-dd__recent-info">
-                          <span class="search-dd__recent-name">{{ item.name }}</span>
-                          <span class="search-dd__recent-price">{{ (item.sale_price || item.base_price) | number:'1.0-0' }}đ</span>
-                        </div>
-                      </div>
-                    }
-                  </div>
-                </div>
-              }
-            </div>
-          }
         </form>
-        <app-visual-search-workbench #headerWorkbench [hideTrigger]="true" (matches)="onVisualSearchMatches($event)" (searchResult)="onVisualSearchResult($event)" />
       </div>
     </div>
 
     <div class="header-col header-col--right">
+      <button type="button" class="header-action-btn header-search-btn" aria-label="Tìm kiếm" (click)="onSearchFocus()">
+        <span class="btn-icon-wrapper">
+          <svg class="icon icon-search u-inline-327c178e39" aria-hidden="true"><use href="#icon-search"></use></svg>
+        </span>
+      </button>
       <a class="header-action-btn" routerLink="/wishlist" aria-label="Yêu thích">
         <span class="btn-icon-wrapper">
           <svg class="icon icon-heart u-inline-327c178e39" aria-hidden="true"><use href="#icon-heart"></use></svg>
@@ -455,6 +271,197 @@
       <a routerLink="/about" routerLinkActive="is-active" class="nav-link" (click)="onNavClick()">Về chúng tôi</a>
     </nav>
   </div>
+
+  @if (searchOpen()) {
+    <!-- Top Luxury Search Header Bar -->
+    <div class="cm-search-topbar" (click)="$event.stopPropagation()">
+      <div class="cm-search-topbar__pill">
+        <button type="button" class="site-header__search-icon-btn" aria-label="Tìm kiếm" (click)="onSearchSubmit($event)">
+          <svg class="icon icon-search u-inline-8fa8881d63" aria-hidden="true"><use href="#icon-search"></use></svg>
+        </button>
+        <input
+          #overlaySearchInput
+          type="text"
+          class="cm-search-topbar__input"
+          [value]="searchQuery()"
+          placeholder="Tìm kiếm sản phẩm, xu hướng thời trang..."
+          aria-label="Tìm kiếm sản phẩm"
+          (input)="onSearchInput($event)"
+          (keydown)="onSearch($event)"
+        />
+        @if (searchQuery().trim()) {
+          <button
+            type="button"
+            class="cm-search-topbar__clear-btn"
+            (click)="searchQuery.set(''); overlaySearchInput.value = ''; overlaySearchInput.focus()"
+            title="Xóa từ khóa"
+            aria-label="Xóa từ khóa"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        }
+        <button
+          type="button"
+          class="site-header__search-ai-btn"
+          (click)="openVisualSearch($event)"
+          title="Tìm kiếm bằng Google Lens AI"
+          aria-label="Tìm kiếm bằng Google Lens AI"
+        >
+          <svg class="icon icon-lens u-inline-fe1a6c008b" viewBox="0 0 24 24" fill="none">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M17 3h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M21 17v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M7 21H5a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="2"/>
+            <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+      <button
+        type="button"
+        class="cm-search-topbar__close"
+        (click)="closeSearch(); $event.stopPropagation()"
+        title="Đóng tìm kiếm (Esc)"
+        aria-label="Đóng tìm kiếm"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+
+    <!-- Dark Dimmed Page Backdrop below Top Bar -->
+    <div class="search-backdrop" (click)="closeSearch()"></div>
+
+    <!-- Centered Luxury Popover Card -->
+    <div class="site-header__search-dropdown" (click)="$event.stopPropagation()">
+      <!-- AI Visual Search Promotion Banner -->
+      <div class="search-dd__lens-banner" (click)="openVisualSearch($event)">
+        <div class="search-dd__lens-banner-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M17 3h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M21 17v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M7 21H5a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="2"/>
+            <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="search-dd__lens-banner-text">
+          <strong>Tìm kiếm bằng hình ảnh với AI Lens</strong>
+          <span>Tải ảnh trang phục bạn yêu thích để Velura gợi ý thiết kế tương đồng nhất</span>
+        </div>
+        <span class="search-dd__lens-banner-btn">Thử ngay →</span>
+      </div>
+
+      <!-- Instant Suggestions when typing -->
+      @if (searchQuery().trim().length >= 2) {
+        <div class="search-dd__section">
+          <div class="search-dd__section-title">
+            <span class="search-dd__title-text">Kết quả gợi ý cho "{{ searchQuery() }}"</span>
+            @if (instantSuggestions().length) {
+              <span class="search-dd__count">{{ instantSuggestions().length }} sản phẩm</span>
+            }
+          </div>
+          @if (aiTextSearchReady()) {
+            <button type="button" class="search-dd__ai-btn" (click)="executeAiSearch(searchQuery())">
+              <svg class="search-dd__ai-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" fill="currentColor"/>
+              </svg>
+              <span class="search-dd__ai-btn-text">Tìm bằng AI ngữ nghĩa cho "{{ searchQuery() }}"</span>
+              <span class="search-dd__ai-btn-arrow" aria-hidden="true">→</span>
+            </button>
+          }
+          @if (instantSuggestions().length) {
+            <div class="search-dd__products">
+              @for (p of instantSuggestions(); track p.product_id) {
+                <div class="search-dd__product-item" (click)="selectProduct(p.slug || p.product_id)">
+                  <img [src]="(p.images && p.images[0]) || ''" [alt]="p.name" class="search-dd__product-img" />
+                  <div class="search-dd__product-info">
+                    <span class="search-dd__product-name">{{ p.name }}</span>
+                    <span class="search-dd__product-price">
+                      {{ (p.sale_price || p.base_price) | number:'1.0-0' }}đ
+                      @if (p.is_combo) {
+                        <span class="search-dd__combo-tag">Combo</span>
+                      }
+                    </span>
+                  </div>
+                  <span class="search-dd__product-arrow">→</span>
+                </div>
+              }
+            </div>
+            <button type="button" class="search-dd__view-all-btn" (click)="executeSearch(searchQuery())">
+              Xem tất cả kết quả cho "{{ searchQuery() }}" →
+            </button>
+          } @else {
+            <div class="search-dd__empty-box">
+              <p>Không tìm thấy gợi ý nhanh cho <strong>"{{ searchQuery() }}"</strong></p>
+              <button type="button" class="search-dd__view-all-btn" (click)="executeSearch(searchQuery())">
+                Tìm kiếm trong toàn bộ cửa hàng →
+              </button>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Trending Keywords (Từ khóa nổi bật ngày hôm nay) -->
+      <div class="search-dd__section">
+        <div class="search-dd__section-title">
+          <span class="search-dd__title-text">
+            <svg class="search-dd__flame-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M12 23c6.075 0 11-4.925 11-11 0-4.04-2.18-7.58-5.46-9.52.28 1.48-.05 3.01-.94 4.18-1.02 1.34-2.73 1.94-4.4 1.51.52 1.38.31 2.97-.6 4.17-1.12 1.47-3.04 2.05-4.82 1.45.65 1.5.39 3.28-.7 4.54-1.25 1.45-3.27 1.92-5 1.2 1.62 2.65 4.55 4.47 8.86 4.47z"/>
+            </svg>
+            TỪ KHÓA NỔI BẬT HÔM NAY
+          </span>
+          <span class="search-dd__trending-badge">Hot Search</span>
+        </div>
+        <div class="search-dd__trending-wrap">
+          @for (kw of trendingKeywords; track kw; let idx = $index) {
+            <button type="button" class="search-dd__trending-pill" (click)="selectKeyword(kw)">
+              <span class="search-dd__trending-pill-idx">{{ idx + 1 }}</span>
+              <span>{{ kw }}</span>
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Quick Categories Section -->
+      <div class="search-dd__section">
+        <div class="search-dd__section-title">
+          <span class="search-dd__title-text">DANH MỤC PHỔ BIẾN</span>
+        </div>
+        <div class="search-dd__cat-chips">
+          @for (cat of quickCategories; track cat.slug) {
+            <button type="button" class="search-dd__cat-chip" (click)="selectCategory(cat.slug)">
+              <span>{{ cat.name }}</span>
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Recently Viewed Products -->
+      @if (searchQuery().trim().length < 2 && recentlyViewed().length) {
+        <div class="search-dd__section">
+          <div class="search-dd__section-title">
+            <span class="search-dd__title-text">SẢN PHẨM ĐÃ XEM GẦN ĐÂY</span>
+            <span class="search-dd__count">{{ recentlyViewed().length }} sản phẩm</span>
+          </div>
+          <div class="search-dd__recent-list">
+            @for (item of recentlyViewed().slice(0, 4); track item.product_id) {
+              <div class="search-dd__recent-item" (click)="selectProduct(item.slug || item.product_id)">
+                <img [src]="(item.images && item.images[0]) || ''" [alt]="item.name" class="search-dd__recent-img" />
+                <div class="search-dd__recent-info">
+                  <span class="search-dd__recent-name">{{ item.name }}</span>
+                  <span class="search-dd__recent-price">{{ (item.sale_price || item.base_price) | number:'1.0-0' }}đ</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <app-visual-search-workbench #headerWorkbench [hideTrigger]="true" (matches)="onVisualSearchMatches($event)" (searchResult)="onVisualSearchResult($event)" />
 </header>
 @if (logoutModalOpen()) {
   <div class="logout-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="logout-modal-title" (click)="closeLogoutModal()">

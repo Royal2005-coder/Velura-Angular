@@ -569,7 +569,7 @@ app-product-card .product-card:hover,
 .center-row--bottom { border-color: rgba(242, 194, 207, .55); }
 .header-info-item { color: var(--text-body); font-family: var(--velura-font-ui) !important; }
 .highlight-text { color: var(--velura-maroon); font-weight: 700; }
-.site-header__search { background: #fff; border-color: var(--velura-border); border-radius: 999px; padding: 8px 14px; }
+.site-header__search { background: #fff; border-color: var(--velura-border); border-radius: 999px; padding: 8px 16px; min-height: 42px; width: 100%; max-width: 100%; }
 .site-header__search.is-focused { border-color: var(--velura-rose); box-shadow: 0 0 0 3px rgba(201, 79, 112, .15), 0 12px 30px rgba(60,20,30,.12); }
 .site-header__search-ai-btn:hover, .site-header__search-ai-btn:focus-visible { color: var(--velura-maroon); background: var(--velura-blush); }
 .nav-link { color: var(--text-body); font-weight: 600; letter-spacing: .035em; transition: color .2s ease; }
@@ -581,9 +581,17 @@ app-product-card .product-card:hover,
 
 /* Matching shared footer based on the concept footer palette. */
 .site-footer { color: #fff; background: var(--velura-footer); border: 0; padding-top: 52px; font-family: var(--velura-font-ui); }
-.site-footer h3, .site-footer h4 { color: #fff; font-family: var(--velura-font-display); }
-.site-footer h3 { font-size: 2rem; }
-.site-footer h4 { font-size: 1rem; }
+.site-footer h3 { color: #fff; font-family: var(--velura-font-display); font-size: 2rem; }
+.site-footer h4 {
+  color: #ffffff !important;
+  font-family: var(--velura-font-ui, "Plus Jakarta Sans", "Inter", -apple-system, sans-serif) !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  line-height: 1.4 !important;
+  margin-bottom: 18px !important;
+}
 .site-footer h4::after { background: #E6AEBB; }
 .site-footer p, .site-footer ul a, .site-footer__contact li { color: #F9DDE4; }
 .site-footer ul a:hover { color: #fff; }
@@ -785,17 +793,87 @@ body.page-product-list {
   border: 2px solid #ffffff !important;
   box-shadow: 0 2px 6px rgba(122, 40, 60, 0.22);
 }
+.header-search-btn { order: 0; }
 .header-col--right > a[routerLink="/wishlist"] { order: 1; }
 .header-col--right > a[routerLink="/cart"] { order: 3; }
 .header-notification { order: 2; }
 .header-account-dropdown { order: 4; }
 .menu-toggle { order: 5; }
 .header-info-item--track { display: none !important; }
-.site-header__search-wrap { grid-column: 3; justify-self: stretch; max-width: 420px; margin-left: auto; }
-.site-header__search { min-height: 38px; }
+.site-header__search-wrap { grid-column: 3; justify-self: stretch; flex: 1 1 auto; max-width: 680px; min-width: 200px; width: 100%; margin-left: auto; }
+.site-header__search { min-height: 42px; }
 .site-header__nav { width: 100%; justify-content: flex-start; gap: clamp(18px, 2vw, 30px); }
 .site-header__nav .nav-link { padding-block: 7px; }
 .site-header__logo-group { transform: none; }
+
+/* Responsive adjustments for header actions on tablet & mobile */
+@media (max-width: 1024px) {
+  .header-action-btn {
+    width: 38px !important;
+    height: 38px !important;
+  }
+  .header-action-btn svg,
+  .header-action-btn .icon {
+    width: 18px !important;
+    height: 18px !important;
+  }
+  .header-col--right {
+    gap: 8px !important;
+    padding: 0 !important;
+    margin-top: 0 !important;
+  }
+  .menu-toggle {
+    width: 38px !important;
+    height: 38px !important;
+    margin-left: 2px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-action-btn {
+    width: 34px !important;
+    height: 34px !important;
+  }
+  .header-action-btn svg,
+  .header-action-btn .icon {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  .header-col--right {
+    gap: 5px !important;
+  }
+  .menu-toggle {
+    width: 34px !important;
+    height: 34px !important;
+    margin-left: 0 !important;
+  }
+  .wishlist-badge, .cart-badge {
+    min-width: 15px !important;
+    height: 15px !important;
+    font-size: 0.62rem !important;
+    top: -4px !important;
+    right: -4px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .header-action-btn {
+    width: 31px !important;
+    height: 31px !important;
+  }
+  .header-action-btn svg,
+  .header-action-btn .icon {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  .header-col--right {
+    gap: 3px !important;
+  }
+  .menu-toggle {
+    width: 31px !important;
+    height: 31px !important;
+  }
+}
 
 /* The shared footer follows the dark editorial footer in the reference. */
 .site-footer {
@@ -835,11 +913,35 @@ body.page-product-list {
   font-weight: 700;
   letter-spacing: .04em;
 }
-.site-footer h4 { margin-bottom: 14px; padding-bottom: 0; text-transform: uppercase; letter-spacing: .045em; }
+.site-footer h4 {
+  color: #ffffff !important;
+  font-family: var(--velura-font-ui, "Plus Jakarta Sans", "Inter", -apple-system, sans-serif) !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  margin-bottom: 18px !important;
+  padding-bottom: 0 !important;
+}
 .site-footer h4::after { display: none; }
-.site-footer p, .site-footer ul a, .site-footer__contact li { color: rgba(255, 238, 241, .78); }
-.site-footer ul a { font-size: .8rem; }
-.site-footer__contact li { align-items: flex-start; font-size: .8rem; }
+.site-footer p, .site-footer ul a, .site-footer__contact li {
+  color: rgba(255, 238, 241, .82);
+  font-family: var(--velura-font-ui, "Inter", sans-serif);
+}
+.site-footer ul a {
+  font-size: 0.85rem;
+  line-height: 1.85;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+.site-footer ul a:hover {
+  color: #ffffff;
+  transform: translateX(3px);
+}
+.site-footer__contact li {
+  align-items: flex-start;
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
 .site-footer__social { gap: 8px; }
 .site-footer__social a { width: 32px; height: 32px; color: #fff; background: rgba(255,255,255,.16); }
 .site-footer__social a:hover { color: var(--velura-footer); background: #fff; }

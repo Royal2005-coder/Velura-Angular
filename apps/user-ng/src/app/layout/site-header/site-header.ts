@@ -360,7 +360,7 @@ export class SiteHeader {
 
   loadRecentlyViewed(): void {
     try {
-      const raw = localStorage.getItem('velura_recently_viewed');
+      const raw = sessionStorage.getItem('velura_recently_viewed');
       if (raw) {
         this.recentlyViewed.set(JSON.parse(raw) as ProductSummary[]);
       } else {

@@ -143,7 +143,7 @@ describe('CheckoutShippingPage', () => {
     expect(page.voucherNotice()).toContain('GIAM50K');
     expect(page.voucherNotice()).toContain('GIAM20K');
     expect(page.selectedVoucherId()).toBe('vc-20');
-    expect(localStorage.getItem('checkout_voucher_id')).toBe('vc-20');
+    expect(sessionStorage.getItem('checkout_voucher_id')).toBe('vc-20');
   });
 
   it('cho phép tăng giảm số lượng sản phẩm trực tiếp và gọi tính lại báo giá', async () => {

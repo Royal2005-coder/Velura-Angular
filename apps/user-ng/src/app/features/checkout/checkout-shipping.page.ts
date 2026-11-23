@@ -112,11 +112,11 @@ export class CheckoutShippingPage {
 
   readonly voucherError = signal<string | null>(null);
   /** Mã ví đang áp. Ví là nơi chọn; trang chỉ ghi lại để báo giá và đặt đơn. */
-  readonly selectedVoucherId = signal<string | null>(localStorage.getItem('checkout_voucher_id'));
+  readonly selectedVoucherId = signal<string | null>(sessionStorage.getItem('checkout_voucher_id'));
   /** Mã đã chọn ở giỏ hàng, để ví ở trang này áp đúng mã đó thay vì tự chọn lại. */
-  readonly initialVoucherId = localStorage.getItem('checkout_voucher_id');
+  readonly initialVoucherId = sessionStorage.getItem('checkout_voucher_id');
   /** Khách chủ động bỏ mã. Khác với mã tự mất hiệu lực: bỏ mã thì không tự áp lại. */
-  readonly declinedVoucher = signal(localStorage.getItem('checkout_voucher_declined') === '1');
+  readonly declinedVoucher = signal(sessionStorage.getItem('checkout_voucher_declined') === '1');
   /** Đọc một lần: đã bỏ mã ở giỏ thì ví trang này không tự áp mã tốt nhất. */
   readonly autoApplyVoucher = !this.declinedVoucher();
   /** Báo giá của máy chủ, nguồn duy nhất cho mọi con số trên màn Tóm tắt đơn (U1-13). */
@@ -429,11 +429,11 @@ export class CheckoutShippingPage {
     this.voucherNotice.set(null);
     this.selectedVoucherId.set(voucher?.voucher_id ?? null);
     if (voucher) {
-      localStorage.setItem('checkout_voucher_id', voucher.voucher_id);
+      sessionStorage.setItem('checkout_voucher_id', voucher.voucher_id);
     } else {
-      localStorage.removeItem('checkout_voucher_id');
+      sessionStorage.removeItem('checkout_voucher_id');
     }
-    localStorage.removeItem('checkout_discount');
+    sessionStorage.removeItem('checkout_discount');
   }
 
   /** Select administrative units from one verified hierarchy. */
@@ -448,9 +448,9 @@ export class CheckoutShippingPage {
   onVoucherDeclined(declined: boolean): void {
     this.declinedVoucher.set(declined);
     if (declined) {
-      localStorage.setItem('checkout_voucher_declined', '1');
+      sessionStorage.setItem('checkout_voucher_declined', '1');
     } else {
-      localStorage.removeItem('checkout_voucher_declined');
+      sessionStorage.removeItem('checkout_voucher_declined');
     }
   }
 
@@ -982,9 +982,9 @@ export class CheckoutShippingPage {
     );
     this.selectedVoucherId.set(replacement?.voucher_id ?? null);
     if (replacement) {
-      localStorage.setItem('checkout_voucher_id', replacement.voucher_id);
+      sessionStorage.setItem('checkout_voucher_id', replacement.voucher_id);
     } else {
-      localStorage.removeItem('checkout_voucher_id');
+      sessionStorage.removeItem('checkout_voucher_id');
     }
     return true;
   }

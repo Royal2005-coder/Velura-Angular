@@ -117,8 +117,8 @@ describe('OffersPage', () => {
     expect(params['category']).toBe('ao');
 
     page.onUseVoucher(testVoucher);
-    expect(localStorage.getItem('checkout_voucher_code')).toBe('FALL10');
-    expect(localStorage.getItem('checkout_voucher_id')).toBe('v-fall10');
+    expect(sessionStorage.getItem('checkout_voucher_code')).toBe('FALL10');
+    expect(sessionStorage.getItem('checkout_voucher_id')).toBe('v-fall10');
   });
 
   it('auto-slides campaigns every 5s in a seamless infinite loop and pauses on hover', async () => {

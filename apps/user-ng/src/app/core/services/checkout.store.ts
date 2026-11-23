@@ -79,7 +79,7 @@ const CREATED_ORDER_KEY = 'created_order';
 const REORDER_KEY = 'velura_reorder_draft';
 
 /**
- * Checkout session matching vanilla localStorage / sessionStorage keys.
+ * Checkout session is tab-scoped so a later guest never inherits contact, order or payment data.
  */
 @Injectable({ providedIn: 'root' })
 export class CheckoutStore {
@@ -94,6 +94,10 @@ export class CheckoutStore {
   readonly subtotal = computed(() =>
     this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0),
   );
+
+  constructor() {
+    for (const key of [SHIPPING_KEY, METHODS_KEY, CREATED_ORDER_KEY]) localStorage.removeItem(key);
+  }
 
   /**
    * Sets the checkout items directly, updating both reactive signal and sessionStorage.
@@ -182,7 +186,7 @@ export class CheckoutStore {
    */
   saveShipping(shipping: CheckoutShipping): void {
     this.shipping.set(shipping);
-    localStorage.setItem(SHIPPING_KEY, JSON.stringify(shipping));
+    sessionStorage.setItem(SHIPPING_KEY, JSON.stringify(shipping));
   }
 
   /**
@@ -190,7 +194,7 @@ export class CheckoutStore {
    */
   saveMethods(methods: CheckoutMethods): void {
     this.methods.set(methods);
-    localStorage.setItem(METHODS_KEY, JSON.stringify(methods));
+    sessionStorage.setItem(METHODS_KEY, JSON.stringify(methods));
   }
 
   /**
@@ -235,7 +239,7 @@ export class CheckoutStore {
    */
   saveCreatedOrder(order: CreatedOrder): void {
     const { order_access_token, ...snapshot } = order;
-    localStorage.setItem(CREATED_ORDER_KEY, JSON.stringify(snapshot));
+    sessionStorage.setItem(CREATED_ORDER_KEY, JSON.stringify(snapshot));
     if (order_access_token) sessionStorage.setItem('guest_order_access', JSON.stringify({ order_id: order.order_id, token: order_access_token }));
   }
 
@@ -244,7 +248,7 @@ export class CheckoutStore {
    */
   readCreatedOrder(): CreatedOrder | null {
     try {
-      const raw = localStorage.getItem(CREATED_ORDER_KEY);
+      const raw = sessionStorage.getItem(CREATED_ORDER_KEY);
       if (!raw) return null;
       const order = JSON.parse(raw) as CreatedOrder;
       const access = JSON.parse(sessionStorage.getItem('guest_order_access') || 'null') as { order_id?: string; token?: string } | null;
@@ -284,12 +288,12 @@ export class CheckoutStore {
     sessionStorage.removeItem(GUEST_PAYLOAD_KEY);
     sessionStorage.removeItem('selected_cart_items');
     localStorage.removeItem('selected_cart_items');
-    localStorage.removeItem(SHIPPING_KEY);
-    localStorage.removeItem(METHODS_KEY);
-    localStorage.removeItem('checkout_discount');
-    localStorage.removeItem('checkout_voucher_id');
-    localStorage.removeItem('checkout_voucher_code');
-    localStorage.removeItem('checkout_voucher_declined');
+    sessionStorage.removeItem(SHIPPING_KEY);
+    sessionStorage.removeItem(METHODS_KEY);
+    sessionStorage.removeItem('checkout_discount');
+    sessionStorage.removeItem('checkout_voucher_id');
+    sessionStorage.removeItem('checkout_voucher_code');
+    sessionStorage.removeItem('checkout_voucher_declined');
   }
 
   private isLineMatch(a: CartLine, b: CartLine): boolean {
@@ -313,7 +317,7 @@ export class CheckoutStore {
 
   private readShipping(): CheckoutShipping {
     try {
-      const raw = JSON.parse(localStorage.getItem(SHIPPING_KEY) || '{}') as CheckoutShipping;
+      const raw = JSON.parse(sessionStorage.getItem(SHIPPING_KEY) || '{}') as CheckoutShipping;
       return {
         name: raw.name || '',
         phone: raw.phone || '',
@@ -344,7 +348,7 @@ export class CheckoutStore {
 
   private readMethods(): CheckoutMethods {
     try {
-      const raw = JSON.parse(localStorage.getItem(METHODS_KEY) || '{}') as CheckoutMethods;
+      const raw = JSON.parse(sessionStorage.getItem(METHODS_KEY) || '{}') as CheckoutMethods;
       return {
         shippingMethod: raw.shippingMethod || 'standard',
         shippingFee: Number(raw.shippingFee || 0),

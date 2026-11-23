@@ -414,11 +414,11 @@ describe('PurchaseFlowPage with mocked Model', () => {
   });
 
   it('preserves a voucher refusal saved by the cart instead of automatically reapplying a code', () => {
-    localStorage.setItem('checkout_voucher_declined', '1');
+    sessionStorage.setItem('checkout_voucher_declined', '1');
     const page = createCheckoutFixture().componentInstance;
     expect(page.voucherDeclined()).toBe(true);
     expect(quote).toHaveBeenLastCalledWith(expect.any(Array), 'standard', expect.objectContaining({ decline: true }));
-    localStorage.removeItem('checkout_voucher_declined');
+    sessionStorage.removeItem('checkout_voucher_declined');
   });
 
   it('requires alternate recipient contact and complete invoice information only when requested', () => {

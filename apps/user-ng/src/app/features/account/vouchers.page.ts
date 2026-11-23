@@ -53,8 +53,8 @@ export class AccountVouchersPage {
   );
 
   onUseVoucher(code: string): void {
-    localStorage.setItem('checkout_voucher_code', code);
-    localStorage.removeItem('checkout_voucher_declined');
+    sessionStorage.setItem('checkout_voucher_code', code);
+    sessionStorage.removeItem('checkout_voucher_declined');
     showToast(`Đã lưu mã ${code}! Hãy chọn sản phẩm thỏa điều kiện để áp dụng.`);
   }
   constructor() {

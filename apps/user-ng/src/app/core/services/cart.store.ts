@@ -325,7 +325,7 @@ export class CartStore {
   }
 
   /**
-   * Replaces the localStorage cart after checkout, matching vanilla remaining-cart sync.
+   * Replaces the current identity's cart after checkout.
    */
   replaceItems(cart: CartLine[]): void {
     this.persist(cart);

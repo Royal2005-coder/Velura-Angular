@@ -110,6 +110,11 @@ export class ChatbotService {
   readonly activeSession = signal('');
   private readonly auth = inject(AuthService);
   constructor() {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(GUEST_ID_KEY);
+      localStorage.removeItem(SESSION_ID_KEY);
+      localStorage.removeItem(SESSION_OWNER_KEY);
+    }
     let identity = this.auth.session();
     effect(() => {
       const session = this.auth.session();
@@ -220,34 +225,34 @@ export class ChatbotService {
   }
 
   /**
-   * Reuses the vanilla UUID guest-id localStorage key.
+   * Keeps the anonymous chat owner only for this browser tab.
    */
   guestId(): string {
-    const existing = localStorage.getItem(GUEST_ID_KEY);
+    const existing = sessionStorage.getItem(GUEST_ID_KEY);
     if (existing && UUID_RE.test(existing)) {
       return existing;
     }
     const created = crypto.randomUUID();
-    localStorage.setItem(GUEST_ID_KEY, created);
+    sessionStorage.setItem(GUEST_ID_KEY, created);
     return created;
   }
 
   /**
-   * Persists the active session id using the original chatbot key.
+   * Persists the active session id only inside the current tab.
    */
   saveSessionId(sessionId: string): void {
     if (sessionId) {
-      localStorage.setItem(SESSION_ID_KEY, sessionId);
-      localStorage.setItem(SESSION_OWNER_KEY, this.ownerKey());
+      sessionStorage.setItem(SESSION_ID_KEY, sessionId);
+      sessionStorage.setItem(SESSION_OWNER_KEY, this.ownerKey());
     } else {
-      localStorage.removeItem(SESSION_ID_KEY);
-      localStorage.removeItem(SESSION_OWNER_KEY);
+      sessionStorage.removeItem(SESSION_ID_KEY);
+      sessionStorage.removeItem(SESSION_OWNER_KEY);
     }
   }
 
   /** Resumes only the session saved by the current member or guest identity; API rechecks ownership. */
   savedSessionId(): string {
-    return localStorage.getItem(SESSION_OWNER_KEY) === this.ownerKey() ? localStorage.getItem(SESSION_ID_KEY) || '' : '';
+    return sessionStorage.getItem(SESSION_OWNER_KEY) === this.ownerKey() ? sessionStorage.getItem(SESSION_ID_KEY) || '' : '';
   }
 
   private ownerKey(): string {
@@ -258,7 +263,7 @@ export class ChatbotService {
    * Clears the current session so a new chat starts like vanilla `initChatbot`.
    */
   clearSessionId(): void {
-    localStorage.removeItem(SESSION_ID_KEY);
-    localStorage.removeItem(SESSION_OWNER_KEY);
+    sessionStorage.removeItem(SESSION_ID_KEY);
+    sessionStorage.removeItem(SESSION_OWNER_KEY);
   }
 }

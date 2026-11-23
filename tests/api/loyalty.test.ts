@@ -51,9 +51,15 @@ const guestContext: AuthContext = {
   accessToken: ""
 };
 
-test("loyaltyActor only recognizes active authenticated members", () => {
+test("loyaltyActor recognizes active storefront member personas but rejects admin-console sessions", () => {
   assert.equal(loyaltyActor(memberContext), "user-123");
   assert.equal(loyaltyActor(adminContext), null);
+  assert.equal(loyaltyActor({
+    ...adminContext,
+    roleCode: "member",
+    isAdmin: false,
+    profile: { ...memberProfile, user_id: "admin-1", role: "admin" }
+  }), "admin-1");
   assert.equal(loyaltyActor(guestContext), null);
   assert.equal(loyaltyActor({ ...memberContext, profile: { ...memberProfile, is_active: false } }), null);
 });

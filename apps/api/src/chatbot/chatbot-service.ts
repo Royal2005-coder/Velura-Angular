@@ -100,6 +100,79 @@ export function createChatbotService({ repository, model = createLLMService(), i
     return transcript(isJsonObject(result.session) ? result.session : { ...session, handoff_status: "requested", support_ticket_id: result.ticket_id });
   }
 
+  function canKeepCatalogFailureWithAi(analysis: ChatAnalysis): boolean {
+    return analysis.intent === "catalog" &&
+      analysis.level === "L1" &&
+      ["green", "yellow"].includes(analysis.risk) &&
+      analysis.moderation === "none" &&
+      !analysis.context.authorityExceeded &&
+      !analysis.context.compromiseFailed &&
+      !analysis.context.rejectedApproach;
+  }
+
+  async function commitCatalogFailureFallback(session: JsonObject, turn: JsonObject, userMessage: JsonObject, issueKey: string, analysis: ChatAnalysis, trace: unknown): Promise<unknown> {
+    const result = await repository.commitAiTurn(
+      asString(session.session_id),
+      asNumber(turn.epoch),
+      asNumber(userMessage.sequence),
+      {
+        text: "Mình đang gặp gián đoạn khi tạo gợi ý, nhưng cuộc trò chuyện vẫn ở AI Stylist. Bạn cho mình biết thêm kiểu dáng, màu sắc hoặc ngân sách mong muốn để mình thử lại nhé.",
+        product_ids: [],
+        metadata: {
+          speaker: "AI",
+          level: analysis.level,
+          issue_key: issueKey,
+          approach: "clarify_catalog_preferences_after_temporary_failure",
+          source_ids: [],
+          risk_check: "local_safe_fallback",
+          filter_verified: true,
+          model_failure: true,
+          trace,
+        },
+      },
+      [],
+    ).catch(() => null);
+    if (result && isJsonObject(result) && result.sent === true) {
+      return transcript(isJsonObject(result.session) ? result.session : session);
+    }
+    return transcript(session);
+  }
+
+  async function handleResponseFailure(
+    session: JsonObject,
+    actor: ChatActor,
+    turn: JsonObject,
+    userMessage: JsonObject,
+    issueKey: string,
+    analysis: ChatAnalysis,
+    history: JsonObject[],
+    reason: string,
+    verified: boolean,
+    trace: unknown[],
+  ): Promise<unknown> {
+    const failure = await repository.recordAnalysis(
+      asString(session.session_id),
+      asString(userMessage.message_id),
+      issueKey,
+      { failure_reason: reason, trace },
+      true,
+    );
+    const failedSession = asJsonObject(failure.session);
+    if (failedSession.handoff_status !== "ai") return transcript(failedSession);
+    if (canKeepCatalogFailureWithAi(analysis)) {
+      return commitCatalogFailureFallback(failedSession, turn, userMessage, issueKey, analysis, trace);
+    }
+    return escalate(
+      failedSession,
+      actor,
+      userMessage,
+      analysis,
+      history,
+      asNumber(failure.issue_failures) >= 2 ? "REPEATED_MODEL_FAILURE" : reason,
+      verified,
+    );
+  }
+
   return {
     async listSessions(context, searchParams) {
       const actor = resolveChatActor(context, { guestId: searchParams.get("guestId") });
@@ -223,25 +296,29 @@ export function createChatbotService({ repository, model = createLLMService(), i
         const draft = await model.draft(analysis.filtered.text, history, analysis, sources);
         analysis.trace = [...(analysis.trace || []), ...(draft.trace || [])];
         const deterministic = responseRiskCheck(analysis, draft, sources);
-        if (!deterministic.safe) return escalate(session, actor, userMessage, analysis, history, deterministic.reasons.join(","), Boolean(order));
+        if (!deterministic.safe) {
+          const reason = `RESPONSE_REJECTED:${deterministic.reasons.join(",")}`.slice(0, 1000);
+          return handleResponseFailure(session, actor, turn, userMessage, issueKey, analysis, history, reason, Boolean(order), analysis.trace || []);
+        }
         // Fresh catalog/policy reads precede the final review; SQL checks again at commit.
         const current = await refreshSources(repository, sources, sessionId, actor, listEligibleSupportOffers);
-        if (!current) return escalate(session, actor, userMessage, analysis, history, "SOURCE_STALE", Boolean(order));
+        if (!current) return handleResponseFailure(session, actor, turn, userMessage, issueKey, analysis, history, "SOURCE_STALE", Boolean(order), analysis.trace || []);
         const risk = await model.review(analysis.filtered.text, analysis, draft, current);
         analysis.trace.push(...(risk.trace || []));
-        if (!risk.safe) return escalate(session, actor, userMessage, analysis, history, `RISK_REJECTED:${risk.reasons.join(",")}`.slice(0, 1000), Boolean(order));
+        if (!risk.safe) {
+          const reason = `RISK_REJECTED:${risk.reasons.join(",")}`.slice(0, 1000);
+          return handleResponseFailure(session, actor, turn, userMessage, issueKey, analysis, history, reason, Boolean(order), analysis.trace);
+        }
         result = await repository.commitAiTurn(sessionId, asNumber(turn.epoch), asNumber(userMessage.sequence), {
           text: draft.text, product_ids: draft.productIds,
           metadata: { speaker: "AI", level: analysis.level, issue_key: issueKey, approach: draft.approach, source_ids: draft.claims.map((claim) => claim.sourceId), risk_check: "passed", filter_verified: true, trace: analysis.trace }
         }, current.map((source) => ({ kind: source.kind, id: source.recordId, version: source.version, approved: source.approved, snapshot: source.snapshot })));
       } catch (error: unknown) {
         const failureTrace = error instanceof Error && "trace" in error && Array.isArray(error.trace) ? error.trace : [];
-        const failure = await repository.recordAnalysis(sessionId, asString(userMessage.message_id), issueKey, { trace: [...(analysis.trace || []), ...failureTrace] }, true);
-        session = asJsonObject(failure.session);
-        if (session.handoff_status !== "ai") return transcript(session);
-        return escalate(session, actor, userMessage, analysis, history, asNumber(failure.issue_failures) >= 2 ? "REPEATED_MODEL_FAILURE" : "RESPONSE_CHECK_UNAVAILABLE", Boolean(order));
+        return handleResponseFailure(session, actor, turn, userMessage, issueKey, analysis, history, "RESPONSE_CHECK_UNAVAILABLE", Boolean(order), [...(analysis.trace || []), ...failureTrace]);
       }
-      if (["SOURCE_STALE", "L2_ATTEMPTS_EXHAUSTED"].includes(asString(result.reason))) return escalate(session, actor, userMessage, analysis, history, asString(result.reason), Boolean(order));
+      if (asString(result.reason) === "SOURCE_STALE") return handleResponseFailure(session, actor, turn, userMessage, issueKey, analysis, history, "SOURCE_STALE", Boolean(order), analysis.trace || []);
+      if (asString(result.reason) === "L2_ATTEMPTS_EXHAUSTED") return escalate(session, actor, userMessage, analysis, history, "L2_ATTEMPTS_EXHAUSTED", Boolean(order));
       if (result.sent === true && analysis.level === "L2") await enqueueChatReport(sessionId, "l2");
       return transcript(isJsonObject(result.session) ? result.session : await repository.getSession(sessionId) || session);
     },

@@ -19,11 +19,11 @@ export interface LoyaltyQuote {
   spending_enabled: boolean;
 }
 
-/** Requires the authenticated member, never a phone-matched guest or a caller-supplied owner. */
+/** Requires an active account in the member storefront persona, never an admin-console or guest session. */
 export function loyaltyActor(context: AuthContext): string | null {
   const profile = context.profile;
   if (!context.authUser || context.isAdmin || context.roleCode !== "member" || !profile) return null;
-  return profile.is_active !== false && profile.role === "member" ? profile.user_id : null;
+  return profile.is_active !== false ? profile.user_id : null;
 }
 
 /** Points redemption is an integer count; fractional balances remain in the durable ledger. */

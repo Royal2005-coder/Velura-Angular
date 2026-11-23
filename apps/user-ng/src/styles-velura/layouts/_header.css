@@ -143,14 +143,15 @@
   /* Để bình thường, không in đậm */
 }
 
-/* Search bar styling - Giới hạn kích thước tối đa để tránh ép Hotline */
+/* Search bar styling - Generous luxury width filling available header space */
 .site-header__search-wrap {
   position: relative;
   display: flex;
   align-items: center;
-  max-width: 420px;
+  flex: 1 1 auto;
+  max-width: 680px;
+  min-width: 200px;
   width: 100%;
-  flex-shrink: 1;
   margin-left: auto;
 }
 
@@ -161,13 +162,16 @@
 .site-header__search {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 10px;
+  padding: 8px 16px;
   background: #FFF6F8;
-  border-radius: 20px;
-  border: 1px solid transparent;
+  border-radius: 999px;
+  border: 1px solid rgba(114, 34, 51, 0.12);
   width: 100%;
-  transition: all 0.2s ease;
+  max-width: 100%;
+  min-height: 42px;
+  box-sizing: border-box;
+  transition: all 0.25s ease;
 }
 .site-header__search-icon-btn {
   background: none;
@@ -325,7 +329,7 @@ input::-webkit-search-results-decoration {
   align-items: center;
   gap: 12px;
   width: 100%;
-  max-width: 600px;
+  max-width: 680px;
   height: 48px;
   border: 1.5px solid #F0C6D2;
   border-radius: 999px;

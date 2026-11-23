@@ -13,7 +13,6 @@ import { useBodyClass } from '../../core/utils/body-class';
 import { showToast } from '../../core/utils/toast';
 import { AddressSelector } from '../../shared/address-selector/address-selector';
 import type { AddressGeographySelection } from '../../core/models/address-geography';
-import { PersonalColorComponent } from '../ai/personal-color.component';
 import { LoyaltyWalletComponent } from './loyalty-wallet.component';
 import { StyleProfileService } from '../../core/services/style-profile.service';
 interface MemberProfile {
@@ -80,7 +79,7 @@ interface MemberOrder {
 
 @Component({
   selector: 'app-account-profile-page',
-  imports: [RouterLink, DecimalPipe, AddressSelector, PersonalColorComponent, LoyaltyWalletComponent],
+  imports: [RouterLink, DecimalPipe, AddressSelector, LoyaltyWalletComponent],
   host: { class: 'page-profile' },
   templateUrl: './profile.page.html',
 })

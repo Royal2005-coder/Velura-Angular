@@ -174,16 +174,20 @@
                   </button>
 
                   <div class="ai-pagination__pages">
-                    @for (page of pageNumbers(); track page) {
-                      <button
-                        type="button"
-                        class="ai-pagination__btn ai-pagination__page"
-                        [class.is-active]="currentPage() === page"
-                        [attr.aria-current]="currentPage() === page ? 'page' : null"
-                        (click)="goToPage(page)"
-                      >
-                        {{ page }}
-                      </button>
+                    @for (item of pageItems(); track item.kind === 'page' ? item.value : ('dots-' + $index)) {
+                      @if (item.kind === 'dots') {
+                        <span class="ai-pagination__dots" aria-hidden="true">...</span>
+                      } @else {
+                        <button
+                          type="button"
+                          class="ai-pagination__btn ai-pagination__page"
+                          [class.is-active]="currentPage() === item.value"
+                          [attr.aria-current]="currentPage() === item.value ? 'page' : null"
+                          (click)="goToPage(item.value)"
+                        >
+                          {{ item.value }}
+                        </button>
+                      }
                     }
                   </div>
 

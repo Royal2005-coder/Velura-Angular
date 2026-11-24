@@ -19,7 +19,7 @@
       </div>
     </div>
 
-    <div class="wishlist-grid">
+    <div class="wishlist-content">
       @if (loading()) {
         <div class="u-inline-fbd682dd27 loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span class="visually-hidden">Đang tải danh sách yêu thích…</span></div>
       } @else if (products().length === 0) {
@@ -31,59 +31,105 @@
           <a routerLink="/collections" class="btn btn--primary btn--sm u-inline-fd729cc610">Khám phá ngay</a>
         </div>
       } @else {
-        @for (product of products(); track product.product_id) {
-          <div class="wishlist-card">
-            <div class="wishlist-card__image-wrapper">
-              <a [routerLink]="['/products', product.product_id]">
-                <img loading="lazy" decoding="async" class="wishlist-card__image" [src]="imageUrl(product)" [alt]="product.name" />
-              </a>
-              <button class="wishlist-card__heart-btn" type="button" aria-label="Bỏ yêu thích" (click)="remove(product.product_id)">
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M10 17.5l-5.83-5.83a4.17 4.17 0 115.83-5.83 4.17 4.17 0 115.83 5.83L10 17.5z" />
-                </svg>
-              </button>
+        <div class="wishlist-grid">
+          @for (product of pagedProducts(); track product.product_id) {
+            <div class="wishlist-card">
+              <div class="wishlist-card__image-wrapper">
+                <a [routerLink]="['/products', product.product_id]">
+                  <img loading="lazy" decoding="async" class="wishlist-card__image" [src]="imageUrl(product)" [alt]="product.name" />
+                </a>
+                <button class="wishlist-card__heart-btn" type="button" aria-label="Bỏ yêu thích" (click)="remove(product.product_id)" title="Bỏ yêu thích">
+                  <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 17.5l-5.83-5.83a4.17 4.17 0 115.83-5.83 4.17 4.17 0 115.83 5.83L10 17.5z" />
+                  </svg>
+                </button>
+              </div>
+              <div class="wishlist-card__info">
+                <h3 class="wishlist-card__name">
+                  <a [routerLink]="['/products', product.product_id]" class="u-inline-af3b97a004">{{ product.name }}</a>
+                </h3>
+                <div class="wishlist-card__price-block">
+                  <span class="wishlist-card__price">{{ priceLabel(product) }}</span>
+                  @if (oldPriceLabel(product)) {
+                    <span class="wishlist-card__old-price u-inline-320f6a566b">{{ oldPriceLabel(product) }}</span>
+                  }
+                </div>
+                <div class="wishlist-card__actions">
+                  <button
+                    type="button"
+                    class="btn-buy"
+                    [disabled]="isOutOfStock(product)"
+                    (click)="buyNow(product, $event)"
+                    [title]="isOutOfStock(product) ? 'Sản phẩm đã hết hàng' : 'Mua ngay'"
+                  >
+                    <svg class="icon u-inline-6ea3f910fa" width="16" height="16" viewBox="0 0 24 24">
+                      <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                      <line x1="3" y1="6" x2="21" y2="6"></line>
+                      <path d="M16 10a4 4 0 0 1-8 0"></path>
+                    </svg>
+                    <span>Mua ngay</span>
+                  </button>
+                  <button
+                    class="wishlist-card__action-btn"
+                    type="button"
+                    [disabled]="isOutOfStock(product)"
+                    [title]="isOutOfStock(product) ? 'Sản phẩm đã hết hàng' : 'Thêm vào giỏ hàng'"
+                    (click)="addToCart(product, $event)"
+                  >
+                    <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="9" cy="21" r="1"></circle>
+                      <circle cx="20" cy="21" r="1"></circle>
+                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
             </div>
-            <div class="wishlist-card__info">
-              <h3 class="wishlist-card__name">
-                <a [routerLink]="['/products', product.product_id]" class="u-inline-af3b97a004">{{ product.name }}</a>
-              </h3>
-              <div class="wishlist-card__price-block">
-                <span class="wishlist-card__price">{{ priceLabel(product) }}</span>
-                @if (oldPriceLabel(product)) {
-                  <span class="wishlist-card__old-price u-inline-320f6a566b">{{ oldPriceLabel(product) }}</span>
+          }
+        </div>
+
+        @if (totalPages() > 1) {
+          <nav class="wishlist-pagination" aria-label="Phân trang danh sách yêu thích">
+            <button
+              type="button"
+              class="wishlist-pagination__btn wishlist-pagination__btn--prev"
+              [disabled]="currentPage() === 1"
+              (click)="prevPage()"
+              aria-label="Trang trước"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              <span>Trước</span>
+            </button>
+
+            <div class="wishlist-pagination__pages">
+              @for (item of pageItems(); track item.kind === 'page' ? item.value : ('dots-' + $index)) {
+                @if (item.kind === 'dots') {
+                  <span class="wishlist-pagination__dots" aria-hidden="true">...</span>
+                } @else {
+                  <button
+                    type="button"
+                    class="wishlist-pagination__btn wishlist-pagination__page"
+                    [class.is-active]="currentPage() === item.value"
+                    [attr.aria-current]="currentPage() === item.value ? 'page' : null"
+                    (click)="goToPage(item.value)"
+                  >
+                    {{ item.value }}
+                  </button>
                 }
-              </div>
-              <div class="wishlist-card__actions">
-                <button
-                  type="button"
-                  class="btn-buy"
-                  [disabled]="isOutOfStock(product)"
-                  (click)="buyNow(product, $event)"
-                  [title]="isOutOfStock(product) ? 'Sản phẩm đã hết hàng' : 'Mua ngay'"
-                >
-                  <svg class="icon u-inline-6ea3f910fa" width="16" height="16" viewBox="0 0 24 24">
-                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                    <line x1="3" y1="6" x2="21" y2="6"></line>
-                    <path d="M16 10a4 4 0 0 1-8 0"></path>
-                  </svg>
-                  <span>Mua ngay</span>
-                </button>
-                <button
-                  class="wishlist-card__action-btn"
-                  type="button"
-                  [disabled]="isOutOfStock(product)"
-                  [title]="isOutOfStock(product) ? 'Sản phẩm đã hết hàng' : 'Thêm vào giỏ hàng'"
-                  (click)="addToCart(product, $event)"
-                >
-                  <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="9" cy="21" r="1"></circle>
-                    <circle cx="20" cy="21" r="1"></circle>
-                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-                  </svg>
-                </button>
-              </div>
+              }
             </div>
-          </div>
+
+            <button
+              type="button"
+              class="wishlist-pagination__btn wishlist-pagination__btn--next"
+              [disabled]="currentPage() === totalPages()"
+              (click)="nextPage()"
+              aria-label="Trang sau"
+            >
+              <span>Sau</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </nav>
         }
       }
     </div>

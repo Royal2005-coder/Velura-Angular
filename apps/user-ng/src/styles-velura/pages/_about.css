@@ -1250,11 +1250,33 @@
   transform: none;
 }
 
-/* Brand story styling follows the blush, rose and maroon storefront concept. */
-.page-about {
+/* Brand story styling: Organic Quiet Luxury - Pastel Blush Pink & Sage Green subtle blend */
+body.page-about,
+.page-about,
+.about-page {
   background:
-    radial-gradient(ellipse at 92% 8%, rgba(230, 236, 213, .18), transparent 34rem),
-    linear-gradient(180deg, #fff6f8 0%, #faf0f3 62%, #fff8f9 100%);
+    /* Delicate sage green ambient glows */
+    radial-gradient(ellipse 65% 45% at 92% 7%, rgba(212, 236, 220, 0.45), transparent 60%),
+    radial-gradient(ellipse 55% 40% at 8% 28%, rgba(216, 239, 224, 0.42), transparent 60%),
+    radial-gradient(ellipse 62% 45% at 94% 50%, rgba(212, 236, 220, 0.42), transparent 60%),
+    radial-gradient(ellipse 55% 40% at 8% 72%, rgba(218, 240, 225, 0.4), transparent 60%),
+    /* Soft pastel blush pink glows on alternating sides */
+    radial-gradient(ellipse 60% 45% at 10% 8%, rgba(255, 226, 234, 0.58), transparent 60%),
+    radial-gradient(ellipse 60% 45% at 90% 30%, rgba(255, 224, 232, 0.52), transparent 60%),
+    radial-gradient(ellipse 60% 45% at 12% 52%, rgba(255, 226, 234, 0.5), transparent 60%),
+    radial-gradient(ellipse 60% 45% at 88% 74%, rgba(255, 224, 233, 0.52), transparent 60%),
+    /* Seamless vertical pastel flow blending pink blush and sage green */
+    linear-gradient(
+      180deg,
+      #FFF0F4 0%,
+      #F3F8F4 16%,
+      #FDF0F3 34%,
+      #EFF6F1 52%,
+      #FDF1F4 70%,
+      #F1F7F3 86%,
+      #FCF0F3 100%
+    ) !important;
+  background-attachment: scroll !important;
 }
 
 .page-about .about-badge,
@@ -1266,6 +1288,10 @@
 .page-about .about-team__desc,
 .page-about .about-stats__subtitle,
 .page-about .about-cta__desc { color: var(--text-secondary); }
+
+.page-about .about-hero {
+  margin-bottom: clamp(24px, 3vw, 36px) !important;
+}
 
 .page-about .about-hero__content {
   background: transparent !important;
@@ -1285,51 +1311,137 @@
 .page-about .about-cta__btn:focus-visible { outline-color: var(--velura-rose); box-shadow: 0 0 0 5px rgba(201, 79, 112, .25); }
 
 .page-about .about-story__image img,
-.page-about .about-atelier__video { box-shadow: 0 20px 54px rgba(122, 40, 60, .12); }
+.page-about .about-atelier__video { box-shadow: 0 16px 42px rgba(122, 40, 60, .1); }
+
+/* Remove excessive whitespace: compact, cohesive section rhythms */
+.page-about .about-section,
+.page-about .about-story,
 .page-about .about-values,
 .page-about .about-atelier,
 .page-about .about-team,
 .page-about .about-stats,
-.page-about .about-press,
-.page-about .about-cta {
-  padding: clamp(40px, 5vw, 64px) 0 !important;
-  margin-bottom: 0 !important;
+.page-about .about-press {
+  padding: clamp(20px, 2.5vw, 32px) 0 !important;
+  margin: 0 !important;
   background: transparent !important;
   border-top: none !important;
   border-bottom: none !important;
 }
 
+.page-about .about-atelier {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.page-about .about-atelier__content {
+  padding-top: 0 !important;
+}
+
+.page-about .about-title {
+  margin-bottom: 12px !important;
+}
+
+.page-about .about-desc {
+  margin-bottom: 10px !important;
+}
+
+.page-about .about-values__header,
 .page-about .about-stats__header,
 .page-about .about-press__header,
 .page-about .about-team__header {
-  margin-bottom: clamp(28px, 3.5vw, 42px);
+  margin-bottom: clamp(16px, 2vw, 24px) !important;
 }
 
+.page-about .about-team__desc,
+.page-about .about-stats__subtitle {
+  margin-top: 4px !important;
+}
+
+/* Glassmorphism cards letting soft pink & sage blend shine through */
 .page-about .value-card,
 .page-about .team-card,
 .page-about .stat-card,
 .page-about .press-logo {
-  border-color: rgba(242, 194, 207, .72);
+  border: 1px solid rgba(242, 194, 207, 0.65) !important;
+  border-radius: 14px !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  box-shadow: 0 4px 18px rgba(122, 40, 60, 0.035) !important;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease, box-shadow 0.3s ease !important;
 }
 
-.page-about .value-card { background-color: #fff9fa; }
-.page-about .value-card:hover,
-.page-about .team-card:hover,
-.page-about .stat-card:hover,
-.page-about .press-logo:hover { border-color: rgba(201, 79, 112, .48); }
-.page-about .value-card__icon-wrapper { color: var(--velura-maroon); }
+.page-about .value-card {
+  min-height: auto !important;
+  padding: 24px 22px !important;
+}
+
+.page-about .value-card__icon-wrapper {
+  margin: 0 0 14px 0 !important;
+  background: #FFF0F3 !important;
+  border: 1px solid rgba(242, 194, 207, 0.8) !important;
+  color: var(--velura-maroon);
+}
+
 .page-about .value-card__title { color: var(--velura-maroon); }
 .page-about .value-card__desc,
 .page-about .stat-card__label { color: var(--text-secondary); }
+
+.page-about .stat-card {
+  padding: 22px 16px !important;
+}
+
+.page-about .stat-card__number {
+  font-size: 2.2rem !important;
+  margin-bottom: 4px !important;
+  color: var(--velura-rose);
+}
+
+.page-about .press-logo {
+  height: 76px !important;
+  font-size: 0.95rem !important;
+}
+
+.page-about .team-card__image {
+  border-radius: 14px 14px 0 0 !important;
+}
+
+.page-about .team-card__info {
+  padding: 14px 12px !important;
+}
+
 .page-about .team-card__role,
 .page-about .stat-card__icon,
-.page-about .stat-card__number,
 .page-about .press-logo:hover { color: var(--velura-rose); }
 
+.page-about .value-card:hover,
+.page-about .team-card:hover,
+.page-about .stat-card:hover,
+.page-about .press-logo:hover {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-color: rgba(201, 79, 112, 0.5) !important;
+  box-shadow: 0 12px 28px rgba(122, 40, 60, 0.08) !important;
+  transform: translateY(-4px) !important;
+}
+
 .page-about .about-cta {
-  background: var(--velura-blush);
+  padding: clamp(36px, 4vw, 48px) 24px !important;
+  margin: 20px auto 0 !important;
+  max-width: 1240px !important;
+  border-radius: 20px !important;
+  background: linear-gradient(135deg, rgba(255, 240, 244, 0.92) 0%, rgba(235, 246, 238, 0.92) 100%) !important;
+  border: 1px solid rgba(242, 194, 207, 0.6) !important;
+  box-shadow: 0 8px 24px rgba(122, 40, 60, 0.04) !important;
 }
 
 .page-about .about-cta::after {
-  background: linear-gradient(90deg, rgba(255, 246, 248, .94), rgba(253, 242, 244, .78) 50%, rgba(255, 246, 248, .94));
+  background: transparent !important;
+}
+
+.page-about .about-cta__title {
+  margin: 0 0 10px 0 !important;
+}
+
+.page-about .about-cta__desc {
+  margin: 0 0 20px 0 !important;
 }

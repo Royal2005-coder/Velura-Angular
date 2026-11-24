@@ -4,5 +4,5 @@ metadata:
   name: velura-api-config
   namespace: velura
 data:
-  RELEASE_REVISION: fad4a6f705edff8be580e2f9ea865422bfee7b0b
-  RELEASE_BUILD_ID: fad4a6f705edff8be580e2f9ea865422bfee7b0b-45252069035-1
+  RELEASE_REVISION: 564d770cd78cb959da34d2842ef7a365557d45d0
+  RELEASE_BUILD_ID: 564d770cd78cb959da34d2842ef7a365557d45d0-45300086815-1

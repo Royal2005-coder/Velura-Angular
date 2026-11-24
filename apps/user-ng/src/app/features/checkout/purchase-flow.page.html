@@ -104,6 +104,8 @@
                       @if (!member()) {
                         <button
                           type="button"
+                          class="otp-send-btn"
+                          [class.is-verified]="otpVerified()"
                           (click)="sendOtp()"
                           [disabled]="
                             sendingOtp() || otpVerified() || (!!otpPhone() && resendSeconds() > 0)
@@ -120,7 +122,7 @@
                         @if (otpVerified()) {
                           <button
                             type="button"
-                            class="text-button u-inline-6e86a8afc4"
+                            class="text-button u-inline-6e86a8afc4 reverify-btn"
                             (click)="reverifyPhone()"
                            
                           >
@@ -134,32 +136,37 @@
                   @if (!member()) {
                     @if (otpPhone() && !sendingOtp()) {
                       @if (!otpVerified()) {
-                        <div class="otp" (paste)="paste($event)">
-                          @for (value of digits(); track $index) {
-                            <input
-                              type="text"
-                              inputmode="numeric"
-                              maxlength="1"
-                              [attr.aria-label]="'Chữ số OTP ' + ($index + 1)"
-                              [value]="value"
-                              (input)="digit($index, $event)"
-                              (keydown.backspace)="backspace($index, $event)"
-                              autocomplete="one-time-code"
-                            />
-                          }
-                        </div>
-                        <div class="otp-footer">
-                          <small
-                            >{{ clockLabel() }} ·
-                            {{ seconds() ? 'Mã còn hiệu lực' : 'Mã đã hết hạn' }}</small
-                          ><button
-                            class="text-button"
-                            type="button"
-                            (click)="sendOtp()"
-                            [disabled]="resendSeconds() > 0"
-                          >
-                            Gửi lại mã {{ resendSeconds() > 0 ? '(' + resendSeconds() + 's)' : '' }}
-                          </button>
+                        <div class="otp-verification-box">
+                          <p class="otp-box-hint">
+                            Mã xác thực 6 chữ số đã được gửi đến số <strong>{{ otpPhone() }}</strong>:
+                          </p>
+                          <div class="otp" (paste)="paste($event)">
+                            @for (value of digits(); track $index) {
+                              <input
+                                type="text"
+                                inputmode="numeric"
+                                maxlength="1"
+                                [attr.aria-label]="'Chữ số OTP ' + ($index + 1)"
+                                [value]="value"
+                                (input)="digit($index, $event)"
+                                (keydown.backspace)="backspace($index, $event)"
+                                autocomplete="one-time-code"
+                              />
+                            }
+                          </div>
+                          <div class="otp-footer">
+                            <small
+                              >{{ clockLabel() }} ·
+                              {{ seconds() ? 'Mã còn hiệu lực' : 'Mã đã hết hạn' }}</small
+                            ><button
+                              class="text-button"
+                              type="button"
+                              (click)="sendOtp()"
+                              [disabled]="resendSeconds() > 0"
+                            >
+                              Gửi lại mã {{ resendSeconds() > 0 ? '(' + resendSeconds() + 's)' : '' }}
+                            </button>
+                          </div>
                         </div>
                       }
                     }

@@ -24,6 +24,65 @@ export class WishlistPage {
 
   readonly loading = signal(true);
   readonly products = signal<ProductSummary[]>([]);
+  /** Current page index (1-based) for wishlist pagination. */
+  readonly currentPage = signal(1);
+  /** Maximum number of wishlist items displayed per page. */
+  readonly pageSize = signal(6);
+
+  /** Total number of pages based on products length and page size. */
+  readonly totalPages = computed(() => {
+    const total = this.products().length;
+    return Math.max(1, Math.ceil(total / this.pageSize()));
+  });
+
+  /** Products slice for current active page. */
+  readonly pagedProducts = computed(() => {
+    const list = this.products();
+    const page = Math.min(this.currentPage(), this.totalPages());
+    const size = this.pageSize();
+    const start = (page - 1) * size;
+    return list.slice(start, start + size);
+  });
+
+  /** Formatted pagination buttons and ellipsis items. */
+  readonly pageItems = computed<Array<{ kind: 'page' | 'dots'; value: number }>>(() => {
+    const total = this.totalPages();
+    const current = Math.min(Math.max(1, this.currentPage()), total);
+    const items: Array<{ kind: 'page' | 'dots'; value: number }> = [];
+
+    if (total <= 7) {
+      for (let p = 1; p <= total; p++) {
+        items.push({ kind: 'page', value: p });
+      }
+      return items;
+    }
+
+    if (current <= 4) {
+      for (let p = 1; p <= 5; p++) {
+        items.push({ kind: 'page', value: p });
+      }
+      items.push({ kind: 'dots', value: -1 });
+      items.push({ kind: 'page', value: total });
+    } else if (current >= total - 3) {
+      items.push({ kind: 'page', value: 1 });
+      items.push({ kind: 'dots', value: -1 });
+      for (let p = total - 4; p <= total; p++) {
+        items.push({ kind: 'page', value: p });
+      }
+    } else {
+      items.push({ kind: 'page', value: 1 });
+      items.push({ kind: 'dots', value: -1 });
+      items.push({ kind: 'page', value: current - 1 });
+      items.push({ kind: 'page', value: current });
+      items.push({ kind: 'page', value: current + 1 });
+      items.push({ kind: 'dots', value: -2 });
+      items.push({ kind: 'page', value: total });
+    }
+
+    return items;
+  });
+
+  /** Localized item counter label for header. */
   readonly countLabel = computed(() => `Bạn đã lưu ${this.products().length} sản phẩm`);
 
   constructor() {
@@ -73,8 +132,41 @@ export class WishlistPage {
   remove(productId: string): void {
     this.wishlist.remove(productId);
     this.products.update((rows) => rows.filter((row) => row.product_id !== productId));
+    if (this.currentPage() > this.totalPages()) {
+      this.currentPage.set(this.totalPages());
+    }
   }
 
+  /**
+   * Navigates to a specific page number in the wishlist grid.
+   */
+  goToPage(page: number): void {
+    const total = this.totalPages();
+    const next = Math.min(Math.max(1, page), total);
+    if (next === this.currentPage()) {
+      return;
+    }
+    this.currentPage.set(next);
+    document.querySelector('.wishlist-page')?.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  /**
+   * Navigates to the previous page.
+   */
+  prevPage(): void {
+    this.goToPage(this.currentPage() - 1);
+  }
+
+  /**
+   * Navigates to the next page.
+   */
+  nextPage(): void {
+    this.goToPage(this.currentPage() + 1);
+  }
+
+  /**
+   * Checks whether a product or all of its variants are currently out of stock.
+   */
   isOutOfStock(product: ProductSummary): boolean {
     if (product.status === 'out_of_stock') return true;
     const variants = product.variants || [];

@@ -73,6 +73,45 @@ export class AiSuggestionsPage {
     const total = this.totalPages();
     return Array.from({ length: total }, (_, i) => i + 1);
   });
+  /**
+   * Compact pagination items with ellipsis for AI suggestions.
+   */
+  readonly pageItems = computed<Array<{ kind: 'page' | 'dots'; value: number }>>(() => {
+    const total = this.totalPages();
+    const current = Math.min(Math.max(1, this.currentPage()), total);
+    const items: Array<{ kind: 'page' | 'dots'; value: number }> = [];
+
+    if (total <= 7) {
+      for (let p = 1; p <= total; p++) {
+        items.push({ kind: 'page', value: p });
+      }
+      return items;
+    }
+
+    if (current <= 4) {
+      for (let p = 1; p <= 5; p++) {
+        items.push({ kind: 'page', value: p });
+      }
+      items.push({ kind: 'dots', value: -1 });
+      items.push({ kind: 'page', value: total });
+    } else if (current >= total - 3) {
+      items.push({ kind: 'page', value: 1 });
+      items.push({ kind: 'dots', value: -1 });
+      for (let p = total - 4; p <= total; p++) {
+        items.push({ kind: 'page', value: p });
+      }
+    } else {
+      items.push({ kind: 'page', value: 1 });
+      items.push({ kind: 'dots', value: -1 });
+      items.push({ kind: 'page', value: current - 1 });
+      items.push({ kind: 'page', value: current });
+      items.push({ kind: 'page', value: current + 1 });
+      items.push({ kind: 'dots', value: -2 });
+      items.push({ kind: 'page', value: total });
+    }
+
+    return items;
+  });
   readonly displayName = computed(() => {
     if (this.auth.isLoggedIn()) {
       return this.auth.session()?.fullName || 'Thành viên Velura';

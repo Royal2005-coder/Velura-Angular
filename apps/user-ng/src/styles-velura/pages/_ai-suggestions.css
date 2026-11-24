@@ -357,10 +357,10 @@
 .ai-products-grid .product-card__img-wrapper {
   position: relative !important;
   width: 100% !important;
-  aspect-ratio: 4 / 5 !important;
+  aspect-ratio: 1 / 1 !important;
   height: auto !important;
-  background: #FFFFFF !important;
-  border-bottom: 1px solid rgba(242, 194, 207, 0.4) !important;
+  background: #FFF6F8 !important;
+  border-bottom: 1px solid rgba(242, 194, 207, 0.45) !important;
   display: block !important;
   overflow: hidden !important;
 }
@@ -373,7 +373,7 @@
   justify-content: center !important;
   width: 100% !important;
   height: 100% !important;
-  background: #FFFFFF !important;
+  background: #FFF6F8 !important;
   text-decoration: none !important;
   z-index: 1 !important;
 }
@@ -386,9 +386,9 @@
   height: 100% !important;
   max-width: 100% !important;
   max-height: 100% !important;
-  object-fit: contain !important;
-  padding: 10px !important;
-  background: #FFFFFF !important;
+  object-fit: cover !important;
+  padding: 0 !important;
+  background: transparent !important;
   transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
 }
 
@@ -509,6 +509,19 @@
   box-shadow: 0 2px 8px rgba(122, 40, 60, 0.25) !important;
 }
 
+.ai-pagination__dots {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 32px !important;
+  height: 38px !important;
+  color: #7A5A62 !important;
+  font-weight: 700 !important;
+  font-size: 1rem !important;
+  letter-spacing: 2px !important;
+  user-select: none !important;
+}
+
 @media (max-width: 1200px) {
   .ai-products-grid {
     grid-template-columns: repeat(3, 1fr) !important;
@@ -523,9 +536,16 @@
   }
   .ai-products-grid .product-card__img-wrapper {
     height: auto !important;
+    aspect-ratio: 1 / 1 !important;
   }
   .ai-products-grid .product-card__img {
-    padding: 6px !important;
+    padding: 0 !important;
+    object-fit: cover !important;
+  }
+  .ai-pagination__dots {
+    min-width: 24px !important;
+    height: 34px !important;
+    font-size: 0.875rem !important;
   }
 }
 

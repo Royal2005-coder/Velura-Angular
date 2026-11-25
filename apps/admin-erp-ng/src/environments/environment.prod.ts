@@ -3,7 +3,7 @@ export const environment = {
   apiUrl: '',
   /** Origin of the customer storefront; CMS `/assets/...` paths resolve against it, not the admin origin. */
   storefrontUrl: 'https://velura.royalai.dev',
-  supabaseUrl: 'https://unzffihtqdqgqbgnwokj.supabase.co',
+  supabaseUrl: 'https://wdbfxxjdhldesmfmfjet.supabase.co',
   supabaseAuthUrl: '/supabase',
-  supabaseAnonKey: 'sb_publishable_upIRuwn0FmpzkHX3YQ5ncg_jeLlpyIr',
+  supabaseAnonKey: 'sb_publishable__o9ZZHKeStAUJDVgFZjavw_F15nHUhv',
 };

@@ -36,10 +36,47 @@ let circuitState: "CLOSED" | "OPEN" = "CLOSED";
 let failureCount = 0;
 let fallbackUntil = 0;
 const FALLBACK_COOLDOWN_MS = 60_000;
+const CIRCUIT_OPEN_THRESHOLD = 3;
+const PRIMARY_READ_RETRY_DELAYS_MS = [200, 500];
+
+/** Reset the in-memory circuit breaker state. Intended for isolated unit tests. */
+export function resetSupabaseCircuitForTest(): void {
+  circuitState = "CLOSED";
+  failureCount = 0;
+  fallbackUntil = 0;
+}
+
+/** Extract low-level network error code/message (e.g. ECONNREFUSED, ENOTFOUND) for diagnostics. */
+function describeNetworkError(error: unknown): { message: string; code?: string } {
+  if (!(error instanceof Error)) {
+    return { message: String(error) };
+  }
+  const cause = (error as Error & { cause?: unknown }).cause;
+  const causeCode =
+    cause && typeof cause === "object" && "code" in cause && typeof (cause as { code?: unknown }).code === "string"
+      ? (cause as { code: string }).code
+      : undefined;
+  const causeMsg =
+    cause instanceof Error && cause.message && cause.message !== error.message ? cause.message : undefined;
+  return {
+    message: causeMsg ? `${error.message} (${causeMsg})` : error.message,
+    ...(causeCode ? { code: causeCode } : {})
+  };
+}
+
+/** Close an open fallback circuit so the next request immediately probes Cloud Supabase primary. */
+function closeFallbackCircuit(reason: string): void {
+  if (circuitState === "OPEN" || fallbackUntil > 0 || failureCount > 0) {
+    console.warn(`[CIRCUIT_BREAKER] Closing fallback circuit (${reason}) -> returning traffic to primary.`);
+  }
+  circuitState = "CLOSED";
+  fallbackUntil = 0;
+  failureCount = 0;
+}
 
 /** Resolve the active PostgREST/Auth base URL and its matching credential pair. */
-export function getActiveSupabaseEndpoint(useAnonKey?: boolean) {
-  const isFallback = (circuitState === "OPEN" && Date.now() < fallbackUntil) || !config.supabaseUrl;
+export function getActiveSupabaseEndpoint(useAnonKey?: boolean, forcePrimary = false) {
+  const isFallback = !forcePrimary && ((circuitState === "OPEN" && Date.now() < fallbackUntil) || !config.supabaseUrl);
 
   if (isFallback && config.supabaseFallbackUrl) {
     return {
@@ -56,20 +93,45 @@ export function getActiveSupabaseEndpoint(useAnonKey?: boolean) {
   };
 }
 
+interface InternalSupabaseOptions extends SupabaseRequestOptions {
+  /** Force a single attempt against the fallback stack without re-entering failover. */
+  _target?: "primary" | "fallback";
+}
+
 /**
- * Call Supabase Auth or PostgREST. Maps network failures to HttpError with automatic in-cluster fallback.
+ * Call Supabase Auth or PostgREST.
+ *
+ * - Retries transient DNS/network/502+ blips on idempotent reads (GET/HEAD) before counting
+ *   them as an outage (prevents single CoreDNS drops from tripping failover during Promise.all).
+ * - Only latches the fallback circuit OPEN when the in-cluster standby actually responds healthy;
+ *   never locks traffic onto an unreachable fallback for 60s.
  */
 export async function supabaseRequest(
   path: string,
   options: SupabaseRequestOptions = {}
 ): Promise<SupabaseResponse> {
-  const endpoint = getActiveSupabaseEndpoint(options.useAnonKey);
+  return executeSupabaseRequest(path, options);
+}
+
+async function executeSupabaseRequest(
+  path: string,
+  options: InternalSupabaseOptions = {}
+): Promise<SupabaseResponse> {
+  const method = (options.method || "GET").toUpperCase();
+  const isIdempotentRead = method === "GET" || method === "HEAD";
+  const endpoint =
+    options._target === "fallback" && config.supabaseFallbackUrl
+      ? {
+          url: config.supabaseFallbackUrl,
+          key: options.useAnonKey ? config.supabaseFallbackAnonKey : config.supabaseFallbackServiceRoleKey,
+          isFallback: true
+        }
+      : getActiveSupabaseEndpoint(options.useAnonKey, options._target === "primary");
+
   let resolvedPath = path;
   if (endpoint.url.includes("postgrest") && endpoint.url.includes(".svc") && resolvedPath.startsWith("/rest/v1")) {
     resolvedPath = resolvedPath.replace(/^\/rest\/v1/, "") || "/";
   }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
   const url = new URL(resolvedPath, endpoint.url);
 
   Object.entries(options.query || {}).forEach(([key, value]) => {
@@ -101,71 +163,135 @@ export async function supabaseRequest(
     body = JSON.stringify(options.body);
   }
 
-  try {
-    const response = await fetch(url, {
-      method: options.method || "GET",
-      headers,
-      body,
-      signal: controller.signal
-    });
+  const maxPrimaryAttempts = !endpoint.isFallback && isIdempotentRead ? PRIMARY_READ_RETRY_DELAYS_MS.length + 1 : 1;
 
-    const text = await response.text();
-    const data = text ? parseJson(text) : null;
+  for (let attempt = 1; attempt <= maxPrimaryAttempts; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        body,
+        signal: controller.signal
+      });
 
-    if (!response.ok) {
-      // 402 is a hard quota lockout, not a transient blip: retry on standby immediately.
-      if ((response.status === 402 || response.status >= 502) && !endpoint.isFallback && config.supabaseFallbackUrl) {
-        failureCount = response.status === 402 ? 2 : failureCount + 1;
-        if (failureCount >= 2) {
-          circuitState = "OPEN";
-          fallbackUntil = Date.now() + FALLBACK_COOLDOWN_MS;
-          console.warn(`[CIRCUIT_BREAKER] Cloud Supabase returned ${response.status}. Latching circuit OPEN -> Falling back to in-cluster stack (${config.supabaseFallbackUrl})`);
-          return supabaseRequest(path, { ...options, silentError: true });
+      const text = await response.text();
+      const data = text ? parseJson(text) : null;
+
+      if (!response.ok) {
+        const isTransientGateway = response.status >= 502 && response.status <= 504;
+        if (!endpoint.isFallback && isTransientGateway && attempt < maxPrimaryAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, PRIMARY_READ_RETRY_DELAYS_MS[attempt - 1]));
+          continue;
+        }
+
+        // If an active fallback returns 502+, do not keep trapping requests on a broken standby.
+        if (endpoint.isFallback && response.status >= 502 && config.supabaseUrl && options._target !== "fallback") {
+          closeFallbackCircuit(`fallback returned HTTP ${response.status}`);
+          return executeSupabaseRequest(path, { ...options, _target: "primary" });
+        }
+
+        // 402 is a hard quota lockout, not a transient blip: try standby immediately.
+        if ((response.status === 402 || response.status >= 502) && !endpoint.isFallback && config.supabaseFallbackUrl) {
+          failureCount = response.status === 402 ? CIRCUIT_OPEN_THRESHOLD : failureCount + 1;
+          if (failureCount >= CIRCUIT_OPEN_THRESHOLD) {
+            return tryFallbackAndLatch(path, options, `Cloud Supabase returned ${response.status}`);
+          }
+        }
+        if (!options.silentError) {
+          console.error("[SUPABASE_ERROR_LOG]", response.status, url.toString(), "Response data:", data);
+        }
+        throw new HttpError(
+          response.status,
+          "SUPABASE_ERROR",
+          `${supabaseErrorMessage(data)} [status:${response.status}]`,
+          data
+        );
+      }
+
+      // Request succeeded on primary
+      if (!endpoint.isFallback) {
+        failureCount = 0;
+        circuitState = "CLOSED";
+      }
+
+      return {
+        data,
+        count: parseCount(response.headers.get("content-range")),
+        status: response.status
+      };
+    } catch (error) {
+      // An answered HTTP denial (4xx/RPC error) is not an outage: retrying it on the
+      // fallback would replay a rejected RPC, and counting it would open the circuit.
+      if (error instanceof HttpError) throw error;
+
+      if (!endpoint.isFallback && attempt < maxPrimaryAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, PRIMARY_READ_RETRY_DELAYS_MS[attempt - 1]));
+        continue;
+      }
+
+      // If an active fallback itself fails at network level, immediately close the circuit
+      // and retry primary once instead of trapping every caller on a dead standby for 60s.
+      if (endpoint.isFallback && config.supabaseUrl && options._target !== "fallback") {
+        const net = describeNetworkError(error);
+        closeFallbackCircuit(`fallback network error: ${net.code || net.message}`);
+        return executeSupabaseRequest(path, { ...options, _target: "primary" });
+      }
+
+      if (!endpoint.isFallback && config.supabaseFallbackUrl) {
+        failureCount++;
+        if (failureCount >= CIRCUIT_OPEN_THRESHOLD) {
+          const net = describeNetworkError(error);
+          return tryFallbackAndLatch(
+            path,
+            options,
+            `Network error connecting to Cloud Supabase (${net.code || net.message})`
+          );
         }
       }
-      if (!options.silentError) {
-        console.error("[SUPABASE_ERROR_LOG]", response.status, url.toString(), "Response data:", data);
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new HttpError(504, "SUPABASE_TIMEOUT", "Supabase request timed out");
       }
-      throw new HttpError(
-        response.status,
-        "SUPABASE_ERROR",
-        `${supabaseErrorMessage(data)} [status:${response.status}]`,
-        data
-      );
+      throw new HttpError(502, "SUPABASE_NETWORK_ERROR", "Cannot reach Supabase", describeNetworkError(error));
+    } finally {
+      clearTimeout(timeout);
     }
+  }
 
-    // Request succeeded on primary
-    if (!endpoint.isFallback) {
-      failureCount = 0;
-      circuitState = "CLOSED";
-    }
+  throw new HttpError(502, "SUPABASE_NETWORK_ERROR", "Cannot reach Supabase");
+}
 
-    return {
-      data,
-      count: parseCount(response.headers.get("content-range")),
-      status: response.status
-    };
-  } catch (error) {
-    // An answered HTTP denial (4xx/RPC error) is not an outage: retrying it on the
-    // fallback would replay a rejected RPC, and counting it would open the circuit.
-    if (error instanceof HttpError) throw error;
-    if (!endpoint.isFallback && config.supabaseFallbackUrl) {
-      failureCount++;
-      if (failureCount >= 2) {
-        circuitState = "OPEN";
-        fallbackUntil = Date.now() + FALLBACK_COOLDOWN_MS;
-        console.warn(`[CIRCUIT_BREAKER] Network error connecting to Cloud Supabase. Falling back to in-cluster stack (${config.supabaseFallbackUrl})`);
-        return supabaseRequest(path, { ...options, silentError: true });
-      }
-    }
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new HttpError(504, "SUPABASE_TIMEOUT", "Supabase request timed out");
-    }
-    throw new HttpError(502, "SUPABASE_NETWORK_ERROR", "Cannot reach Supabase", {
-      message: error instanceof Error ? error.message : String(error)
+/**
+ * Probe the in-cluster standby once before latching the circuit OPEN.
+ * If the standby is also unreachable (e.g. blocked by NetworkPolicy or restarting),
+ * keep the circuit CLOSED so subsequent requests continue hitting Cloud Supabase.
+ */
+async function tryFallbackAndLatch(
+  path: string,
+  options: InternalSupabaseOptions,
+  reason: string
+): Promise<SupabaseResponse> {
+  try {
+    const fallbackResult = await executeSupabaseRequest(path, {
+      ...options,
+      silentError: true,
+      _target: "fallback"
     });
-  } finally {
-    clearTimeout(timeout);
+    circuitState = "OPEN";
+    fallbackUntil = Date.now() + FALLBACK_COOLDOWN_MS;
+    console.warn(
+      `[CIRCUIT_BREAKER] ${reason}. Standby responded OK -> latching circuit OPEN for ${FALLBACK_COOLDOWN_MS / 1000}s (${config.supabaseFallbackUrl})`
+    );
+    return fallbackResult;
+  } catch (fallbackError) {
+    // Only a 4xx business error proves standby is reachable; 502+ / network errors mean standby is dead.
+    const isStandbyHealthyRejection =
+      fallbackError instanceof HttpError && fallbackError.status >= 400 && fallbackError.status < 500;
+    if (!isStandbyHealthyRejection) {
+      closeFallbackCircuit(`${reason}; fallback ${config.supabaseFallbackUrl} also unreachable`);
+    }
+    throw fallbackError;
   }
 }
 

@@ -1,5 +1,5 @@
 import { HttpError, readJson, sendJson } from "../http.js";
-import { updateRows } from "../supabase.js";
+import { selectOne, updateRows } from "../supabase.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import {
   asJsonObject,
@@ -37,7 +37,7 @@ export async function handleProfileRoute(
     // PATCH /api/user/profile
     if (req.method === "PATCH") {
       const body = await readJson(req);
-      const { full_name, date_of_birth, gender, avatar } = body;
+      const { full_name, phone, date_of_birth, gender, avatar } = body;
 
       const updates: JsonObject = {};
       if (full_name !== undefined) {
@@ -46,6 +46,19 @@ export async function handleProfileRoute(
           throw new HttpError(422, "INVALID_FULL_NAME", "Họ và tên phải có từ 2 đến 120 ký tự");
         }
         updates.full_name = normalizedName;
+      }
+      if (phone !== undefined && phone !== null && phone !== "") {
+        const normalizedPhone = String(phone).trim();
+        if (!validatePhone(normalizedPhone)) {
+          throw new HttpError(422, "INVALID_PHONE", "Số điện thoại không đúng định dạng (10 số, bắt đầu bằng 0)");
+        }
+        if (normalizedPhone !== profile.phone) {
+          const existing = await selectOne("users", { phone: `eq.${normalizedPhone}` });
+          if (existing && existing.user_id !== profile.user_id) {
+            throw new HttpError(409, "PHONE_TAKEN", "Số điện thoại đã được dùng cho tài khoản khác");
+          }
+        }
+        updates.phone = normalizedPhone;
       }
       if (date_of_birth !== undefined && date_of_birth !== null && date_of_birth !== "") {
         updates.date_of_birth = validateDateOfBirth(date_of_birth);

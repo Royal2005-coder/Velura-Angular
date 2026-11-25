@@ -574,14 +574,15 @@ export class CartPage {
     this.checkoutStore.setCheckoutItems(expanded, 'cart');
     sessionStorage.setItem(CHECKOUT_ITEMS_KEY, JSON.stringify(expanded));
     sessionStorage.removeItem('checkout_discount');
-    sessionStorage.removeItem('checkout_voucher_code');
     // Mang lựa chọn mã sang trang thanh toán. Trước đây bước này xoá mã đi, nên mã khách
     // chọn ở giỏ bị ví ở trang thanh toán thay bằng mã tốt nhất mà không nói gì.
     const voucher = this.appliedVoucher();
     if (voucher) {
       sessionStorage.setItem(VOUCHER_ID_KEY, voucher.voucher_id);
+      sessionStorage.setItem('checkout_voucher_code', voucher.code);
     } else {
       sessionStorage.removeItem(VOUCHER_ID_KEY);
+      sessionStorage.removeItem('checkout_voucher_code');
     }
     if (this.voucherDeclined()) {
       sessionStorage.setItem(VOUCHER_DECLINED_KEY, 'true');

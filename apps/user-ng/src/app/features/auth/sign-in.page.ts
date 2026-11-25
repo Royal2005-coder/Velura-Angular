@@ -45,9 +45,21 @@ export class SignInPage {
   });
 
   constructor() {
+    const lockNotice = this.auth.consumeLockNotice();
+    if (lockNotice) {
+      this.errorMessage.set(lockNotice);
+    }
     this.route.queryParamMap
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((params) => this.safeReturnUrl.set(sanitizeReturnUrl(params.get('returnUrl'))));
+      .subscribe((params) => {
+        this.safeReturnUrl.set(sanitizeReturnUrl(params.get('returnUrl')));
+        if (params.get('locked') === '1') {
+          const nextNotice = this.auth.consumeLockNotice();
+          if (nextNotice) {
+            this.errorMessage.set(nextNotice);
+          }
+        }
+      });
   }
 
   /**

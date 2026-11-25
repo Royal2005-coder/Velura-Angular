@@ -101,13 +101,23 @@ export function assertNotLocked(user: LoginLockUser, now = new Date()): void {
  * Admin locks use `lock_type`, not only `locked_until`. A locked account must not re-activate
  * itself through OTP verification or password reset; only an admin unlock clears the lock.
  */
-export function assertAccountNotLocked(user: { lock_type?: unknown }): void {
+export function assertAccountNotLocked(user: {
+  lock_type?: unknown;
+  lock_reason?: unknown;
+  locked_until?: unknown;
+}): void {
   const lockType = user.lock_type === null || user.lock_type === undefined ? "" : String(user.lock_type).trim();
   if (!lockType) return;
-  const message = lockType === "permanent"
+  const lockReason = typeof user.lock_reason === "string" ? user.lock_reason.trim() : "";
+  const baseMessage = lockType === "permanent"
     ? "Tài khoản đã bị quản trị viên khóa vĩnh viễn. Vui lòng liên hệ CSKH để được hỗ trợ."
     : "Tài khoản đã bị quản trị viên tạm khóa. Vui lòng liên hệ CSKH để được hỗ trợ.";
-  throw new HttpError(423, "ACCOUNT_LOCKED", message);
+  const message = lockReason ? `${baseMessage} Lý do: ${lockReason}` : baseMessage;
+  throw new HttpError(423, "ACCOUNT_LOCKED", message, {
+    lock_type: lockType,
+    lock_reason: lockReason || null,
+    locked_until: user.locked_until ? String(user.locked_until) : null
+  });
 }
 
 /**

@@ -1,5 +1,5 @@
 import { AiImageWorkbench } from '../../shared/ai-image-workbench/ai-image-workbench';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EMPTY, catchError, map, of, switchMap } from 'rxjs';
@@ -16,6 +16,7 @@ import { CartStore } from '../../core/services/cart.store';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { CatalogService } from '../../core/services/catalog.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
+import { sanitizeReturnUrl } from '../../core/utils/auth-return-url';
 import { useBodyClass } from '../../core/utils/body-class';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
@@ -88,11 +89,37 @@ export class ProductDetailPage {
     if (color && !this.sizes().length) {
       return variants.find((v) => v.color === color)?.variant_id || '';
     }
+    if (size && !this.colors().length) {
+      return variants.find((v) => v.size === size)?.variant_id || '';
+    }
+    if (!color && !size && !this.colors().length && !this.sizes().length && variants.length === 1) {
+      return variants[0]?.variant_id || '';
+    }
     return '';
   });
   /** Virtual try-on covers single garments only; combo sets are never offered, so only the product's own SKU is passed. */
   readonly aiWorkbenchProductId = computed(() => (this.isCombo() ? '' : this.product()?.product_id || ''));
   readonly aiWorkbenchVariantId = computed(() => (this.isCombo() ? '' : this.aiVariantId()));
+  private readonly aiWorkbench = viewChild(AiImageWorkbench);
+  private readonly currentRouteId = signal('');
+  private readonly pendingVariantParam = signal<string | null>(null);
+  private readonly pendingAutoOpenVto = signal(false);
+  private lastAppliedVariantParam: string | null = null;
+  /** Encoded product URL (`variant` + `vto=1`) passed through auth links when a guest opens VTO. */
+  readonly vtoReturnUrl = computed(() => {
+    const p = this.product();
+    if (!p || this.isCombo()) return null;
+    const routeId = this.currentRouteId() || p.slug || p.product_id;
+    if (!routeId) return null;
+    const variantId = this.aiWorkbenchVariantId();
+    const tree = this.router.createUrlTree(['/products', routeId], {
+      queryParams: {
+        ...(variantId ? { variant: variantId } : {}),
+        vto: '1',
+      },
+    });
+    return sanitizeReturnUrl(this.router.serializeUrl(tree));
+  });
   readonly quantity = signal(1);
   readonly activeImage = signal(0);
   readonly selectedColor = signal<string | null>(null);
@@ -446,6 +473,58 @@ export class ProductDetailPage {
 
   constructor() {
     useBodyClass('page-product-detail');
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed())
+      .subscribe((queryParams) => {
+        const variantParam = queryParams.get('variant')?.trim() || null;
+        this.pendingVariantParam.set(variantParam);
+        if (queryParams.get('vto') === '1') {
+          this.pendingAutoOpenVto.set(true);
+        }
+        const currentProduct = this.product();
+        if (currentProduct && !this.loading() && variantParam !== this.lastAppliedVariantParam) {
+          this.applyVariantParam(currentProduct, variantParam);
+        }
+      });
+
+    effect(() => {
+      const autoOpen = this.pendingAutoOpenVto();
+      const loading = this.loading();
+      const currentProduct = this.product();
+      const combo = this.isCombo();
+      const loggedIn = this.auth.isLoggedIn();
+      const wb = this.aiWorkbench();
+      const offerStatus = wb?.offerStatus() ?? 'idle';
+      const offered = wb?.offered() ?? false;
+      const expectedVariant = this.pendingVariantParam();
+      const currentVariant = this.aiWorkbenchVariantId();
+      if (!autoOpen || loading || !currentProduct) return;
+
+      untracked(() => {
+        if (!loggedIn || combo) {
+          this.pendingAutoOpenVto.set(false);
+          this.stripVtoQueryParam();
+          return;
+        }
+        if (
+          expectedVariant &&
+          (currentProduct.variants || []).some((v) => v.variant_id === expectedVariant) &&
+          currentVariant !== expectedVariant
+        ) {
+          return;
+        }
+        if (!wb || offerStatus === 'idle' || offerStatus === 'loading') return;
+
+        this.pendingAutoOpenVto.set(false);
+        this.stripVtoQueryParam();
+        if (offerStatus === 'ready' && offered) {
+          void wb.open();
+        } else {
+          showToast('Phòng thử đồ AI chưa hỗ trợ phiên bản sản phẩm này.');
+        }
+      });
+    });
+
     // The route is the only source of truth: a newer product id cancels the previous product and
     // related-product requests, so a late response can never repaint the page with an older product.
     this.route.paramMap
@@ -453,7 +532,7 @@ export class ProductDetailPage {
         takeUntilDestroyed(),
         switchMap((params) => {
           const id = params.get('id');
-          this.resetForRoute();
+          this.resetForRoute(id || '');
           if (!id) return EMPTY;
           return this.catalog.getProduct(id).pipe(
             switchMap((row) => {
@@ -465,6 +544,7 @@ export class ProductDetailPage {
               );
             }),
             catchError((error: Error) => {
+              this.pendingAutoOpenVto.set(false);
               this.loadError.set(error.message);
               this.loading.set(false);
               return EMPTY;
@@ -476,7 +556,9 @@ export class ProductDetailPage {
   }
 
   /** Clears the previous route's product, enrichment and selection before the next fetch starts. */
-  private resetForRoute(): void {
+  private resetForRoute(routeId = ''): void {
+    this.currentRouteId.set(routeId);
+    this.lastAppliedVariantParam = null;
     this.product.set(null);
     this.related.set([]);
     this.loadError.set(null);
@@ -509,6 +591,25 @@ export class ProductDetailPage {
     this.quantity.set(1);
     this.comboExpanded.set(null);
     this.comboPicks.set(this.buildComboPicks(row));
+    this.applyVariantParam(row, this.pendingVariantParam());
+    this.loading.set(false);
+  }
+
+  private applyVariantParam(row: ProductSummary, variantParam: string | null): void {
+    this.lastAppliedVariantParam = variantParam;
+    const matched = variantParam
+      ? (row.variants || []).find((variant) => variant.variant_id === variantParam) || null
+      : null;
+    if (matched) {
+      const targetColor = matched.color || null;
+      const targetSize = matched.size || null;
+      this.selectedColor.set(targetColor);
+      this.selectedSize.set(targetSize);
+      const imageIndex = targetColor ? this.imageIndexForColor(targetColor) : 0;
+      this.activeImage.set(imageIndex >= 0 ? imageIndex : 0);
+      this.clampQuantity();
+      return;
+    }
     const primaryColor = row.image_colors?.[this.gallery()[0]];
     const initialColor = (primaryColor
       ? this.colors().find((option) => option.name.trim().toLowerCase() === primaryColor.trim().toLowerCase())?.name
@@ -517,7 +618,17 @@ export class ProductDetailPage {
     this.selectedColor.set(initialColor);
     this.selectedSize.set(this.sizes()[0] || null);
     this.activeImage.set(0);
-    this.loading.set(false);
+  }
+
+  private stripVtoQueryParam(): void {
+    void this.router
+      .navigate([], {
+        relativeTo: this.route,
+        queryParams: { vto: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      })
+      .catch(() => undefined);
   }
 
   /** Fills the related-product rail for the product that is currently on screen. */

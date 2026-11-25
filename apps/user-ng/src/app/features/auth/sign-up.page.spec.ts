@@ -1,5 +1,8 @@
-import { createStorefrontPage } from '../../../testing/storefront-testing';
-import { of } from 'rxjs';
+import { TestBed } from '@angular/core/testing';
+import { Router, convertToParamMap } from '@angular/router';
+import { of, throwError } from 'rxjs';
+import { StyleProfileService } from '../../core/services/style-profile.service';
+import { createStorefrontPage, lastStorefrontFixture } from '../../../testing/storefront-testing';
 import { SignUpPage } from './sign-up.page';
 
 describe('SignUpPage', () => {
@@ -69,5 +72,24 @@ describe('SignUpPage', () => {
     expect(page.otpIdentity()).toBe('0855808333');
     expect(page.otpDevelopmentCode()).toBe('123456');
     expect(page.otpOpen()).toBe(true);
+  });
+
+  it('redirects back to sanitized returnUrl after signup and keeps priority over /ai/style-quiz if claimGuestDraft fails', async () => {
+    const routes = [{ path: 'products/:id', component: class {} }, { path: 'auth/signin', component: class {} }];
+    const returnUrl = '/products/ao-so-mi?variant=v1&vto=1';
+    const page = await createStorefrontPage(
+      SignUpPage,
+      { post: () => of({ token: 'jwt-new', user: { user_id: 'u2' } }) },
+      { routes, queryParamMap: of(convertToParamMap({ returnUrl })), queryParams: { returnUrl } },
+    );
+    const navSpy = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const styleProfile = TestBed.inject(StyleProfileService);
+    vi.spyOn(styleProfile, 'claimGuestDraft').mockReturnValueOnce(throwError(() => new Error('network')));
+
+    page.onOtpVerified({ token: 'jwt-new', user: { user_id: 'u2' }, otpCode: '123456' });
+    expect(navSpy).toHaveBeenCalledWith(returnUrl);
+
+    const signinLink = lastStorefrontFixture().nativeElement.querySelector('a[href*="/auth/signin"]') as HTMLAnchorElement | null;
+    expect(signinLink?.getAttribute('href')).toContain(encodeURIComponent(returnUrl));
   });
 });

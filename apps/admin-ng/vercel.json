@@ -10,7 +10,7 @@
     },
     {
       "source": "/supabase/:path*",
-      "destination": "https://unzffihtqdqgqbgnwokj.supabase.co/:path*"
+      "destination": "https://wdbfxxjdhldesmfmfjet.supabase.co/:path*"
     },
     {
       "source": "/(.*)",

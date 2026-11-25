@@ -150,9 +150,18 @@ describe('OrderFlowPage with mocked Model', () => {
     expect(fixture.componentInstance.view()).toBe('detail');
     expect(fixture.componentInstance.order()?.id).toBe(order.id);
   });
-  it('starts the guest orders entry at both lookup choices even with a previous OTP session', () => {
+  it('keeps a previous OTP session authorized on the guest orders entry without a specific id', () => {
     routeOrderId = null;
     model.verifiedPhone.set('0901234567');
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.view()).toBe('list');
+    expect(fixture.componentInstance.verified()).toBe(true);
+  });
+  it('still starts fresh at both lookup choices without any previous OTP session', () => {
+    routeOrderId = null;
+    model.verifiedPhone.set('');
     const fixture = TestBed.createComponent(OrderFlowPage);
     fixture.detectChanges();
 

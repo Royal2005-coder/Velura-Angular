@@ -245,10 +245,14 @@ export class OrderFlowPage {
       this.verified.set(true);
       this.view.set(this.returnsEntry ? 'requests' : 'list');
       if (id) this.open(id);
-    } else if (this.model.verifiedPhone() && id) {
+    } else if (this.model.verifiedPhone()) {
+      // The store's guest proof outlives one page view (15-minute session), so switching
+      // tabs ("Danh sách đơn" / "Yêu cầu đổi trả" / ...) without a specific order id must
+      // not re-ask for OTP as long as that proof is still valid.
       this.verified.set(true);
       this.view.set(this.returnsEntry ? 'requests' : 'list');
-      this.open(id);
+      if (this.cancelledEntry) this.view.set('cancelled');
+      if (id) this.open(id);
     } else if (id) {
       this.mode = 'code';
       this.query = id;

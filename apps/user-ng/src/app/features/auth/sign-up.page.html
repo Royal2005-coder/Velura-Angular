@@ -93,7 +93,7 @@
       <button type="submit" class="btn-login" [disabled]="submitting() || checkingIdentity() || duplicateEmail() || duplicatePhone()">
         {{ checkingIdentity() ? 'Đang kiểm tra...' : 'Đăng ký' }}
       </button>
-      <p class="footer">Đã có tài khoản? <a routerLink="/auth/signin">Đăng nhập</a></p>
+      <p class="footer">Đã có tài khoản? <a routerLink="/auth/signin" [queryParams]="safeReturnUrl() ? { returnUrl: safeReturnUrl() } : null">Đăng nhập</a></p>
     </form>
   </div>
 </main>

@@ -21,6 +21,7 @@ import { ApiRequestError } from '../../core/models/api-request-error';
 import { orderAccountErrorMessage } from '../../core/services/order-account-api.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { formatSizeDisplay } from '../../core/utils/size';
+import { formatVietnamDateTime, formatVietnamDeadline, parseApiDate } from '../../core/utils/date';
 import { isGuestPreview, isPreviewMode } from '../../core/utils/preview-mode';
 import { DeliverySimulation } from '../../shared/delivery-simulation/delivery-simulation';
 import { CheckoutStore } from '../../core/services/checkout.store';
@@ -111,8 +112,17 @@ export class OrderFlowPage {
   readonly labels = ORDER_LABELS;
   readonly money = formatVnd;
   readonly image = (url: string) => toPublicAsset(url, '/assets/images/placeholder.jpg');
+  readonly nowMs = signal(Date.now());
+  readonly isExchangeOrder = (order: DemoOrder | null | undefined) =>
+    Boolean(order && (order.isExchangeReplacement || order.orderKind === 'exchange' || order.id.startsWith('EXC')));
   readonly canCancel = (order: DemoOrder) => order.can_cancel ?? canCancel(order);
-  readonly withinWindow = (order: DemoOrder) => order.can_request_return ?? withinReturnWindow(order);
+  readonly withinWindow = (order: DemoOrder) => {
+    if (order.status !== 'delivered' || this.isExchangeOrder(order)) return false;
+    const now = this.nowMs();
+    const endsAt = parseApiDate(order.return_window_ends_at);
+    if (endsAt && now > endsAt.getTime()) return false;
+    return order.return_window_open ?? (order.deliveredAt ? withinReturnWindow(order, now) : (order.can_request_return ?? false));
+  };
   /** CSKH/system refusals read "Bị từ chối"; a customer's own cancellation keeps "Đã hủy yêu cầu". */
   readonly requestLabel = (request: DemoReturn) => request.rejectedAt
     ? 'Bị từ chối'
@@ -256,6 +266,7 @@ export class OrderFlowPage {
     const timer = setInterval(() => {
       this.seconds.update((value) => Math.max(0, value - 1));
       this.cooldown.update((value) => Math.max(0, value - 1));
+      this.nowMs.set(Date.now());
     }, 1000);
     this.destroyRef.onDestroy(() => {
       this.saveReturnDraft();
@@ -488,7 +499,20 @@ export class OrderFlowPage {
     if (order.status !== 'cancelled' || !order.items.length) return;
     this.checkout.prepareReorder({
       orderId: order.orderId || order.id,
-      items: order.items.map(({ returnCount: _returnCount, availableQuantity: _availableQuantity, itemId: _itemId, isInProgress: _isInProgress, inProgressCode: _inProgressCode, inProgressStatus: _inProgressStatus, ...line }) => line),
+      items: order.items.map(({
+        returnCount: _returnCount,
+        availableQuantity: _availableQuantity,
+        heldQuantity: _heldQuantity,
+        refundedQuantity: _refundedQuantity,
+        exhaustedQuantity: _exhaustedQuantity,
+        exchangedOnceQuantity: _exchangedOnceQuantity,
+        itemId: _itemId,
+        isInProgress: _isInProgress,
+        inProgressCode: _inProgressCode,
+        inProgressStatus: _inProgressStatus,
+        availableRefundUnitAmounts: _availableRefundUnitAmounts,
+        ...line
+      }) => line),
       address: { ...order.address, address: order.address.detail },
       paymentMethod: order.payment,
     });
@@ -512,22 +536,48 @@ export class OrderFlowPage {
     );
   }
 
-  /** True when the order has already used up the 2-successful-return cap in 7 days. */
+  /** True when the order has been retired by one or more completed refunds with no remaining non-refund quota lock. */
+  isOrderRefundRetired(order: DemoOrder | null | undefined): boolean {
+    if (!order || order.status !== 'delivered' || this.isExchangeOrder(order)) return false;
+    if (this.canStartReturn(order) || this.orderActiveReturn(order)) return false;
+    const items = order.items || [];
+    if (!items.length || items.some((l) => l.isInProgress || (l.heldQuantity ?? 0) > 0)) return false;
+    if (items.some((l) => (l.refundedQuantity ?? 0) > 0)) return true;
+    const totalUnits = items.reduce((sum, l) => sum + Math.max(0, Number(l.quantity) || 0), 0);
+    const completed = this.completedReturnsForOrder(order);
+    return totalUnits === 1 && completed.length === 1 && completed.some((r) => r.kind === 'refund' || r.status === 'REFUNDED');
+  }
+
+  /** True when all remaining units have exhausted the 2-successful-return cap in 7 days (non-refund). */
   isReturnQuotaExhausted(order: DemoOrder | null | undefined): boolean {
     if (!order) return false;
     const items = order.items || [];
     if (!items.length) return false;
-    if (items.every((l) => (l.availableQuantity ?? 0) < 1 && (l.returnCount ?? 0) >= 2)) return true;
+    const anyRefunded = items.some((l) => (l.refundedQuantity ?? 0) > 0);
+    if (
+      !anyRefunded &&
+      items.every(
+        (l) =>
+          (l.availableQuantity ?? 0) < 1 &&
+          !l.isInProgress &&
+          (l.heldQuantity ?? 0) === 0 &&
+          ((l.exhaustedQuantity ?? 0) >= l.quantity || (l.exhaustedQuantity === undefined && (l.returnCount ?? 0) >= 2)),
+      )
+    ) {
+      return true;
+    }
     const totalUnits = items.reduce((sum, l) => sum + Math.max(0, Number(l.quantity) || 0), 0);
     const completed = this.completedReturnsForOrder(order);
-    if (totalUnits === 1 && completed.length >= 2) return true;
+    if (!anyRefunded && totalUnits === 1 && completed.length >= 2) {
+      return true;
+    }
     return false;
   }
 
   /** Returns whether an order has at least one item eligible for a new return request. */
   canStartReturn(order: DemoOrder | null | undefined): boolean {
     if (!order || !this.withinWindow(order)) return false;
-    if (order.id.startsWith('EXC')) return false;
+    if (this.isExchangeOrder(order)) return false;
     const items = order.items || [];
     if (!items.length) return false;
     if (this.isReturnQuotaExhausted(order)) return false;
@@ -538,16 +588,20 @@ export class OrderFlowPage {
     return items.some((line) => line.availableQuantity > 0);
   }
 
-  /** Friendly remaining quota note shown on order detail when 1 of 2 successful returns has been used. */
+  /** Friendly remaining quota note shown on multi-line order detail when 1 of 2 exchange attempts has been used. */
   remainingReturnQuotaLabel(order: DemoOrder | null | undefined): string | null {
     if (!order || !this.canStartReturn(order)) return null;
     const items = order.items || [];
+    if (items.length <= 1 && items.some((line) => this.lineQuotaBanner(line)?.kind === 'done')) {
+      return null;
+    }
+    const hasSingleExchangeUsed = items.some((l) => {
+      if (l.exchangedOnceQuantity !== undefined) return l.exchangedOnceQuantity > 0 && l.availableQuantity > 0;
+      return (l.returnCount ?? 0) === 1 && l.availableQuantity > 0 && (l.refundedQuantity ?? 0) === 0;
+    });
     const totalUnits = items.reduce((sum, l) => sum + Math.max(0, Number(l.quantity) || 0), 0);
-    const used = Math.max(
-      items.reduce((max, l) => Math.max(max, Number(l.returnCount) || 0), 0),
-      totalUnits === 1 ? this.completedReturnsForOrder(order).length : 0,
-    );
-    if (used === 1) {
+    const singleUnitCompletedExchange = totalUnits === 1 && this.completedReturnsForOrder(order).filter((r) => r.kind !== 'refund' && r.status !== 'REFUNDED').length === 1;
+    if (hasSingleExchangeUsed || singleUnitCompletedExchange) {
       return 'Đã sử dụng 1/2 lượt đổi/trả thành công · Còn tối đa 1 lượt trong 7 ngày.';
     }
     return null;
@@ -575,7 +629,7 @@ export class OrderFlowPage {
   orderReturnStatusBadge(order: DemoOrder | null | undefined): { kind: 'in_progress' | 'completed' | 'partial' | 'rejected'; label: string; code?: string } | null {
     if (!order || order.status !== 'delivered') return null;
     const items = order.items || [];
-    const inProgLine = items.find((l) => l.isInProgress);
+    const inProgLine = items.find((l) => l.isInProgress || (l.heldQuantity ?? 0) > 0);
     const activeReq = this.orderActiveReturn(order);
     if (inProgLine || activeReq) {
       const statusKey = activeReq?.status || (inProgLine?.inProgressStatus as keyof typeof RETURN_WORKFLOW_LABELS | undefined);
@@ -591,16 +645,80 @@ export class OrderFlowPage {
         code,
       };
     }
+    if (items.length > 0 && items.every((l) => l.quantity > 0 && (l.refundedQuantity ?? 0) >= l.quantity)) {
+      return { kind: 'completed', label: 'Đã hoàn tiền' };
+    }
     if (items.length > 0 && items.every((l) => (l.availableQuantity ?? 1) === 0 && (l.returnCount ?? 0) > 0)) {
       return { kind: 'completed', label: 'Đã hoàn tất đổi/trả' };
     }
     const latest = this.model.requests().find((r) => r.orderId === order.id || r.orderId === order.orderId);
     if (latest?.rejectedAt) return { kind: 'rejected', label: 'Yêu cầu đổi/trả bị từ chối', code: latest.id };
-    if (items.some((l) => (l.returnCount ?? 0) > 0)) {
-      const count = items.filter((l) => (l.returnCount ?? 0) > 0).length;
+    if (items.some((l) => (l.returnCount ?? 0) > 0 || (l.refundedQuantity ?? 0) > 0)) {
+      const count = items.filter((l) => (l.returnCount ?? 0) > 0 || (l.refundedQuantity ?? 0) > 0).length;
       return { kind: 'partial', label: `Đã đổi/trả ${count}/${items.length} SP` };
     }
     return null;
+  }
+
+  /** Formats the live 7-day return window status & deadline in Vietnam time for delivered sale orders. */
+  returnWindowSummary(order: DemoOrder | null | undefined): { open: boolean; text: string } | null {
+    if (!order || order.status !== 'delivered' || this.isExchangeOrder(order)) return null;
+    const endsAtDate = parseApiDate(order.return_window_ends_at) ?? (() => {
+      const deliveredDate = parseApiDate(order.deliveredAt);
+      return deliveredDate ? new Date(deliveredDate.getTime() + 7 * 86_400_000) : null;
+    })();
+    const deadlineMs = endsAtDate?.getTime() ?? null;
+    const deadlineText = endsAtDate ? formatVietnamDeadline(endsAtDate) : null;
+    if (this.withinWindow(order)) {
+      if (!deadlineMs || !deadlineText) {
+        return { open: true, text: 'Thời hạn đổi/trả 7 ngày kể từ khi nhận hàng.' };
+      }
+      const remainingMs = Math.max(0, deadlineMs - this.nowMs());
+      let countdown: string;
+      if (remainingMs >= 86_400_000) {
+        const days = Math.floor(remainingMs / 86_400_000);
+        const hours = Math.floor((remainingMs % 86_400_000) / 3_600_000);
+        countdown = `(còn ${days} ngày ${hours} giờ)`;
+      } else if (remainingMs >= 60_000) {
+        const hours = Math.floor(remainingMs / 3_600_000);
+        const minutes = Math.floor((remainingMs % 3_600_000) / 60_000);
+        countdown = `(còn ${hours} giờ ${minutes} phút)`;
+      } else {
+        countdown = '(còn dưới 1 phút)';
+      }
+      return { open: true, text: `Thời hạn đổi/trả 7 ngày: đến ${deadlineText} ${countdown}` };
+    }
+    return {
+      open: false,
+      text: deadlineText
+        ? `Đã hết thời hạn đổi/trả (hết hạn lúc ${deadlineText} · đã quá 7 ngày từ khi nhận hàng).`
+        : 'Đã hết thời hạn đổi/trả.',
+    };
+  }
+
+  /** Explains exchange replacement lineage so shoppers know Attempt #2 belongs on the original order. */
+  exchangeOrderNotice(order: DemoOrder | null | undefined): string | null {
+    if (!this.isExchangeOrder(order)) return null;
+    const code = order?.sourceOrderCode;
+    return code
+      ? `Đây là đơn giao hàng đổi mới từ đơn gốc #${code}. Nếu cần đổi/trả lần tiếp theo (tối đa 2 lần trong 7 ngày từ khi nhận đơn gốc), vui lòng thao tác tại đơn gốc.`
+      : 'Đây là đơn giao hàng đổi mới từ đơn hàng gốc. Nếu cần đổi/trả lần tiếp theo (tối đa 2 lần trong 7 ngày từ khi nhận đơn gốc), vui lòng thao tác tại đơn gốc.';
+  }
+
+  /** Heading for the locked-return notice inside an open 7-day window. */
+  orderBlockedTitle(order: DemoOrder | null | undefined): string {
+    if (!order) return '🔒 Đã khóa tạo thêm yêu cầu đổi/trả';
+    const items = order.items || [];
+    if (this.orderActiveReturn(order) || items.some((l) => l.isInProgress || (l.heldQuantity ?? 0) > 0)) {
+      return '🔒 Đang có yêu cầu đổi/trả chưa hoàn tất';
+    }
+    if (this.isOrderRefundRetired(order)) {
+      return '✓ Đã hoàn tất hoàn tiền sản phẩm';
+    }
+    if (this.isReturnQuotaExhausted(order)) {
+      return '🔒 Đã đạt giới hạn đổi / trả (2/2 lần trong 7 ngày)';
+    }
+    return '🔒 Đã khóa tạo thêm yêu cầu đổi/trả';
   }
 
   /** Explains why starting a new return request is blocked on a delivered order. */
@@ -608,10 +726,10 @@ export class OrderFlowPage {
     if (!order || !this.withinWindow(order)) return null;
     const items = order.items || [];
     if (!items.length || this.canStartReturn(order)) return null;
-    if (order.id.startsWith('EXC')) {
-      return 'Đơn hàng đổi mới không áp dụng tạo thêm yêu cầu đổi/trả. Vui lòng theo dõi trực tiếp trên đơn hàng gốc.';
+    if (this.isExchangeOrder(order)) {
+      return this.exchangeOrderNotice(order);
     }
-    const inProg = items.find((l) => l.isInProgress);
+    const inProg = items.find((l) => l.isInProgress || (l.heldQuantity ?? 0) > 0);
     const activeReq = this.orderActiveReturn(order);
     if (inProg || activeReq) {
       const code = activeReq?.id || inProg?.inProgressCode || '';
@@ -626,10 +744,80 @@ export class OrderFlowPage {
       }
       return `Tất cả sản phẩm trong đơn đang trong tiến trình đổi/trả (${statusText}).`;
     }
+    if (this.isOrderRefundRetired(order)) {
+      const mixedOrExhausted = items.some((l) => (l.exhaustedQuantity ?? 0) > 0 || (l.returnCount ?? 0) >= 2);
+      return mixedOrExhausted
+        ? 'Sản phẩm đã được hoàn tiền (và đã sử dụng đủ 2/2 lượt đổi/trả) nên không thể tạo thêm yêu cầu trong đơn này. Bạn vẫn có thể xem lại chi tiết xử lý ở phần Đổi/trả & Theo dõi hoàn tiền.'
+        : 'Sản phẩm đã được hoàn tiền nên không thể tạo thêm yêu cầu đổi/trả trong đơn này. Bạn vẫn có thể xem lại chi tiết xử lý ở phần Đổi/trả & Theo dõi hoàn tiền.';
+    }
     if (this.isReturnQuotaExhausted(order)) {
       return 'Đơn hàng đã sử dụng tối đa 2/2 lần đổi/trả thành công trong 7 ngày theo chính sách của Velura. Bạn vẫn có thể theo dõi lịch sử các phiếu đổi/trả bên dưới.';
     }
     return 'Tất cả sản phẩm trong đơn đã được hoàn tiền hoặc đổi trả xong, không còn số lượng khả dụng.';
+  }
+
+  /** Unified partition-aware quota banner used on both order detail and return builder lines. */
+  lineQuotaBanner(line: DemoOrderLine): { kind: 'progress' | 'exhausted' | 'done'; text: string } | null {
+    const qty = Math.max(0, Number(line.quantity) || 0);
+    const avail = Math.max(0, Number(line.availableQuantity) || 0);
+    const held = Math.max(0, Number(line.heldQuantity) || 0);
+    const refunded = Math.max(0, Number(line.refundedQuantity) || 0);
+    const exhausted = line.exhaustedQuantity !== undefined ? Math.max(0, line.exhaustedQuantity) : 0;
+    const exchangedOnce = line.exchangedOnceQuantity;
+
+    if (line.isInProgress || held > 0) {
+      return {
+        kind: 'progress',
+        text: avail > 0
+          ? `Đang xử lý một phần (${this.lineInProgressLabel(line)}). Còn ${avail} sản phẩm khả dụng vẫn có thể yêu cầu riêng.`
+          : `Đang xử lý yêu cầu đổi/trả (${this.lineInProgressLabel(line)}). Hiện không còn số lượng khả dụng để tạo thêm yêu cầu.`,
+      };
+    }
+    if (refunded >= qty && qty > 0) {
+      return {
+        kind: 'done',
+        text: `✓ Sản phẩm đã hoàn tiền toàn bộ (${refunded}/${qty}) — sản phẩm đã hoàn tiền không thể đổi/trả tiếp.`,
+      };
+    }
+    if (refunded > 0 && exhausted > 0 && avail === 0) {
+      return {
+        kind: 'done',
+        text: `✓ Đã hoàn tiền ${refunded}/${qty} sản phẩm và dùng hết 2/2 lượt đổi/trả cho số lượng còn lại.`,
+      };
+    }
+    if (refunded > 0 && avail > 0) {
+      return {
+        kind: 'progress',
+        text: `ℹ Đã hoàn tiền ${refunded}/${qty} sản phẩm · Còn ${avail} sản phẩm khả dụng trong hạn 7 ngày.`,
+      };
+    }
+    if (avail < 1 && (exhausted >= qty || (line.exhaustedQuantity === undefined && line.returnCount >= 2))) {
+      return {
+        kind: 'exhausted',
+        text: '🔒 Sản phẩm đã sử dụng hết tối đa 2/2 lượt đổi/trả theo chính sách.',
+      };
+    }
+    if (avail === 0) {
+      return {
+        kind: 'done',
+        text: '✓ Sản phẩm đã hoàn tất đổi/trả toàn bộ số lượng mua.',
+      };
+    }
+    if ((exchangedOnce !== undefined ? exchangedOnce > 0 : line.returnCount === 1 && refunded === 0) && avail > 0) {
+      return {
+        kind: 'done',
+        text: 'ℹ Đã đổi hàng thành công 1/2 lần · Còn tối đa 1 lần trong hạn 7 ngày.',
+      };
+    }
+    return null;
+  }
+
+  /** Opens the original order detail view from an exchange replacement order when `sourceOrderId` is known. */
+  openSourceOrder(order: DemoOrder | null | undefined): void {
+    const targetId = order?.sourceOrderCode || order?.sourceOrderId;
+    if (targetId) {
+      this.open(targetId);
+    }
   }
 
   /** Returns human-readable status for an item's in-progress return. */
@@ -1046,7 +1234,7 @@ export class OrderFlowPage {
   }
   /** Human-readable local dates retain their source timestamp in the Model. */
   date(value?: string): string {
-    return value ? new Date(value).toLocaleString('vi-VN') : 'Chưa có';
+    return formatVietnamDateTime(value, 'Chưa có');
   }
   private authorized(order: DemoOrder): boolean {
     return this.model.canAccess(order) && (this.model.member() || this.verified());

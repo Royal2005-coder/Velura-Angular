@@ -542,4 +542,107 @@ describe('OrderFlowPage with mocked Model', () => {
     expect(buttons.some((b) => b.textContent?.includes('Yêu cầu Đổi / Trả'))).toBe(false);
     expect(fixture.nativeElement.textContent).toContain('Đã đạt giới hạn đổi / trả (2/2 lần trong 7 ngày)');
   });
+
+  it('shows open 7-day countdown and refund retirement on Day 0 refunded orders instead of false expiry (#VLR481C2978B regression)', () => {
+    const nowIso = new Date().toISOString();
+    const endsAtIso = new Date(Date.now() + 6 * 86_400_000 + 12 * 3_600_000).toISOString();
+    const refundedOrder: DemoOrder = {
+      ...order,
+      id: 'VLR481C2978B',
+      status: 'delivered',
+      deliveredAt: nowIso.replace('Z', ''),
+      return_window_open: true,
+      return_window_ends_at: endsAtIso,
+      can_request_return: false,
+      items: [{
+        ...order.items[0],
+        quantity: 1,
+        availableQuantity: 0,
+        refundedQuantity: 1,
+        exhaustedQuantity: 0,
+        exchangedOnceQuantity: 0,
+        returnCount: 1,
+      }],
+    };
+    model.orders.set([refundedOrder]);
+    model.requests.set([]);
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    const page = fixture.componentInstance;
+    page.verified.set(true);
+    page.open(refundedOrder.id);
+    fixture.detectChanges();
+
+    expect(page.withinWindow(refundedOrder)).toBe(true);
+    expect(page.isOrderRefundRetired(refundedOrder)).toBe(true);
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).not.toContain('Đã hết thời hạn đổi/trả');
+    expect(text).toContain('Thời hạn đổi/trả 7 ngày');
+    expect(text).toContain('✓ Đã hoàn tất hoàn tiền sản phẩm');
+    expect(text).toContain('✓ Sản phẩm đã hoàn tiền toàn bộ (1/1)');
+  });
+
+  it('keeps multi-unit partial refund accurate without falsely showing 1/2 exchanged', () => {
+    const partialOrder: DemoOrder = {
+      ...order,
+      id: 'VLR-MULTI-REFUND',
+      status: 'delivered',
+      deliveredAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      return_window_open: true,
+      can_request_return: true,
+      items: [{
+        ...order.items[0],
+        quantity: 2,
+        availableQuantity: 1,
+        refundedQuantity: 1,
+        exchangedOnceQuantity: 0,
+        exhaustedQuantity: 0,
+        returnCount: 1,
+      }],
+    };
+    model.orders.set([partialOrder]);
+    model.requests.set([]);
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    const page = fixture.componentInstance;
+    page.verified.set(true);
+    page.open(partialOrder.id);
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(page.canStartReturn(partialOrder)).toBe(true);
+    expect(text).toContain('ℹ Đã hoàn tiền 1/2 sản phẩm · Còn 1 sản phẩm khả dụng trong hạn 7 ngày.');
+    expect(text).not.toContain('Đã đổi hàng thành công 1/2 lần');
+  });
+
+  it('renders original-order lineage on exchange replacement orders (EXC) without expired error or quota chips', () => {
+    const excOrder: DemoOrder = {
+      ...order,
+      id: 'EXC999001',
+      status: 'delivered',
+      orderKind: 'exchange',
+      isExchangeReplacement: true,
+      sourceOrderId: 'orig-uuid-1',
+      sourceOrderCode: 'VLR481C2978B',
+      deliveredAt: new Date().toISOString(),
+      return_window_open: false,
+      can_request_return: false,
+      items: [{ ...order.items[0], quantity: 1, availableQuantity: 1, returnCount: 0 }],
+    };
+    model.orders.set([excOrder]);
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    const page = fixture.componentInstance;
+    page.verified.set(true);
+    page.open(excOrder.id);
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(page.withinWindow(excOrder)).toBe(false);
+    expect(text).toContain('Đây là đơn giao hàng đổi mới từ đơn gốc #VLR481C2978B');
+    expect(text).not.toContain('Đã hết thời hạn đổi/trả');
+    expect(text).not.toContain('SL khả dụng:');
+  });
+
+  it('formats naive Postgres UTC timestamps in Vietnam timezone (GMT+7) rather than shifting by -7h', () => {
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    expect(fixture.componentInstance.date('2026-11-25T15:44:28.318743')).toBe('22:44:28 25/11/2026');
+  });
 });

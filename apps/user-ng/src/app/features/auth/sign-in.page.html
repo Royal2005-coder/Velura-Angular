@@ -124,7 +124,7 @@
         Tiếp tục mua sắm mà không cần đăng nhập
       </a>
 
-      <p class="footer signup">Chưa có tài khoản? <a routerLink="/auth/signup">Đăng ký ngay</a></p>
+      <p class="footer signup">Chưa có tài khoản? <a routerLink="/auth/signup" [queryParams]="safeReturnUrl() ? { returnUrl: safeReturnUrl() } : null">Đăng ký ngay</a></p>
     </form>
   </div>
 </main>

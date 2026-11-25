@@ -25,7 +25,7 @@ import { createStripePaymentIntent, STRIPE_CHECKOUT_TTL_SECONDS, stripeConfigure
 import { refundOrderPayment } from "../payments/local-gateway-refund.js";
 import { assertLocalGatewayReady, openLocalGateway, type HostedPayment } from "../payments/local-gateways.js";
 import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
-import { returnWindowOpen } from "./return-window.js";
+import { parseUtcDateOrNull, returnWindowDeadline, returnWindowOpen, toUtcIsoString } from "./return-window.js";
 import { cancelOrderForCustomer, createCustomerOrderCancelRepository } from "./order-cancel-service.js";
 import { createUserReturnsRepository, type UserReturnsRepository } from "./returns-repository.js";
 import {
@@ -80,15 +80,11 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 /**
- * Parse a Postgres timestamp as UTC, defaulting to now when empty.
+ * Parse a Postgres timestamp as UTC, defaulting to `now` when empty for legacy order-creation
+ * age calculations. Prefer `parseUtcDateOrNull` anywhere missing timestamps must fail closed.
  */
 export function parseUtcDate(dateStr: unknown): Date {
-  if (!dateStr) return new Date();
-  const cleanStr = String(dateStr).replace(" ", "T");
-  if (!cleanStr.endsWith("Z") && !/[+-]\d{2}(:\d{2})?$/.test(cleanStr)) {
-    return new Date(cleanStr + "Z");
-  }
-  return new Date(cleanStr);
+  return parseUtcDateOrNull(dateStr) ?? new Date();
 }
 
 /**
@@ -112,8 +108,10 @@ const PAY_AGAIN_WINDOW_MS = 24 * 60 * 60 * 1000;
  * `pending` cũ hơn thế là phiên đã chết mà webhook hết hạn chưa về, không chặn.
  */
 export function hasOpenStripeSession(pendingPayments: JsonObject[], now = Date.now()): boolean {
-  return pendingPayments.some((payment) =>
-    now - parseUtcDate(payment.created_at).getTime() < STRIPE_CHECKOUT_TTL_SECONDS * 1000);
+  return pendingPayments.some((payment) => {
+    const createdMs = parseUtcDateOrNull(payment.created_at)?.getTime() ?? now;
+    return now - createdMs < STRIPE_CHECKOUT_TTL_SECONDS * 1000;
+  });
 }
 
 /**
@@ -134,35 +132,72 @@ export function generateOrderCode(): string {
  */
 const CUSTOMER_ORDER_FIELDS = [
   "order_id", "order_code", "order_date", "created_at", "updated_at", "delivered_at", "status",
+  "order_kind", "source_return_id", "parent_order_id",
   "shipping_name", "shipping_phone", "shipping_address", "shipping_fee", "subtotal", "discount_amount",
   "points_discount_amount:points_discount", "total_amount", "payment_method", "voucher_id", "cancelled_reason", "tracking_code", "carrier", "tracking_url",
   "version"
 ] as const;
 
-export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], history: JsonObject[], payments: JsonObject[] = []): JsonObject {
+const CUSTOMER_ORDER_TIMESTAMP_FIELDS = new Set(["order_date", "created_at", "updated_at", "delivered_at"]);
+
+/** Resolved lineage for exchange replacement orders so customers can navigate back to the original order. */
+export interface CustomerExchangeLineage {
+  isExchangeReplacement?: boolean;
+  sourceReturnId?: string | null;
+  sourceOrderId?: string | null;
+  sourceOrderCode?: string | null;
+}
+
+export function presentOrderForCustomer(
+  order: JsonObject,
+  items: JsonObject[],
+  history: JsonObject[],
+  payments: JsonObject[] = [],
+  lineage?: CustomerExchangeLineage
+): JsonObject {
   const facts = orderFacts({ ...order, payments });
-  const createdAt = parseUtcDate(order.created_at).getTime();
+  const now = new Date();
+  const createdAt = parseUtcDateOrNull(order.created_at)?.getTime() ?? now.getTime();
   const timeline = [...history]
-    .sort((a, b) => String(a.changed_at || "").localeCompare(String(b.changed_at || "")))
+    .sort((a, b) => (parseUtcDateOrNull(a.changed_at)?.getTime() ?? 0) - (parseUtcDateOrNull(b.changed_at)?.getTime() ?? 0))
     .map((row) => ({
       status: row.new_status,
       label: orderStatusLabel(row.new_status),
-      at: row.changed_at
+      at: toUtcIsoString(row.changed_at) ?? row.changed_at
     }));
   const visible: JsonObject = {};
   for (const field of CUSTOMER_ORDER_FIELDS) {
-    if (field in order) visible[field] = order[field];
+    if (field in order) {
+      visible[field] = CUSTOMER_ORDER_TIMESTAMP_FIELDS.has(field) && order[field] != null
+        ? (toUtcIsoString(order[field]) ?? order[field])
+        : order[field];
+    }
   }
   // Mã vận đơn chỉ có nghĩa khi vận đơn còn hiệu lực (FR-09: hiện khi có mã).
   if (order.shipment_voided_at) {
     visible.tracking_code = null;
     visible.tracking_url = null;
   }
-  let canRequestReturn = false;
-  if (order.status === "delivered" && order.delivered_at && order.order_kind !== "exchange") {
-    const hasEligibleItem = items.length === 0 || items.some((item) => Number(item.available_quantity ?? item.quantity ?? 0) > 0);
-    canRequestReturn = returnWindowOpen(parseUtcDate(order.delivered_at), new Date()) && hasEligibleItem;
-  }
+  const rawKind = asString(order.order_kind).trim().toLowerCase();
+  const orderCodeUpper = asString(order.order_code).trim().toUpperCase();
+  const sourceReturnId = lineage?.sourceReturnId || asString(order.source_return_id) || null;
+  const sourceOrderId = lineage?.sourceOrderId || asString(order.parent_order_id) || null;
+  const sourceOrderCode = lineage?.sourceOrderCode || asString(order.source_order_code) || null;
+  const isExchangeReplacement = Boolean(
+    lineage?.isExchangeReplacement ||
+    rawKind === "exchange" ||
+    sourceReturnId ||
+    sourceOrderId ||
+    orderCodeUpper.startsWith("EXC")
+  );
+  const orderKind = isExchangeReplacement ? "exchange" : (rawKind || "sale");
+  const deliveredAtDate = parseUtcDateOrNull(order.delivered_at);
+  const returnWindowIsOpen = order.status === "delivered" && !isExchangeReplacement && returnWindowOpen(deliveredAtDate, now);
+  const windowEndsAt = order.status === "delivered" && !isExchangeReplacement
+    ? (returnWindowDeadline(deliveredAtDate)?.toISOString() ?? null)
+    : null;
+  const hasEligibleItem = items.length === 0 || items.some((item) => Number(item.available_quantity ?? item.quantity ?? 0) > 0);
+  const canRequestReturn = returnWindowIsOpen && hasEligibleItem;
   return {
     ...visible,
     ...customerPaymentFacts(payments),
@@ -170,6 +205,13 @@ export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], 
     status_label: orderStatusLabel(order.status),
     timeline,
     steps: customerOrderSteps(String(order.status || ""), String(order.payment_method || ""), timeline),
+    order_kind: orderKind,
+    source_return_id: sourceReturnId,
+    source_order_id: sourceOrderId,
+    source_order_code: sourceOrderCode,
+    is_exchange_replacement: isExchangeReplacement,
+    return_window_open: returnWindowIsOpen,
+    return_window_ends_at: windowEndsAt,
     can_cancel: customerCanCancel(facts),
     can_pay_again: order.status === "waiting_payment"
       && order.payment_method === "ONLINE_PAYMENT"
@@ -232,7 +274,157 @@ async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
 
 const userReturnsRepository = createUserReturnsRepository();
 
-/** Projects the authoritative per-original-unit quota without blocking disjoint quantities. */
+/** Marks items as temporarily unreturnable if unit availability lookup fails (fail closed). */
+export function failClosedReturnItems(items: JsonObject[]): JsonObject[] {
+  return items.map((item) => ({
+    ...item,
+    return_count: Number(item.return_count) || 0,
+    available_quantity: 0,
+    available_refund_unit_amounts: [],
+    held_quantity: Number(item.held_quantity) || 0,
+    refunded_quantity: Number(item.refunded_quantity) || 0,
+    exhausted_quantity: Number(item.exhausted_quantity) || 0,
+    exchanged_once_quantity: 0,
+    is_in_progress: Boolean(item.is_in_progress),
+    in_progress_return_code: item.in_progress_return_code ?? null,
+    in_progress_status: item.in_progress_status ?? null,
+    eligibility_unavailable: true
+  }));
+}
+
+/**
+ * Resolves original-order lineage (`sourceReturnId`, `sourceOrderId`, `sourceOrderCode`) for exchange
+ * replacement orders (`EXC...`) across customer read endpoints without extra lookups on normal sale orders.
+ */
+async function resolveCustomerExchangeLineages(
+  orders: JsonObject[],
+  repository: UserReturnsRepository
+): Promise<Map<string, CustomerExchangeLineage>> {
+  const result = new Map<string, CustomerExchangeLineage>();
+  const orderIds = orders.map((o) => asString(o.order_id)).filter(Boolean);
+  if (!orderIds.length) return result;
+
+  const ordersById = new Map(orders.map((o) => [asString(o.order_id), o]));
+  const exchangeRowsByExchangeOrderId = new Map<string, JsonObject>();
+
+  if (orderIds.length === 1 && repository.findReturnByExchangeOrderId) {
+    const found = await repository.findReturnByExchangeOrderId(orderIds[0]).catch(() => null);
+    if (found) exchangeRowsByExchangeOrderId.set(orderIds[0], found);
+  } else {
+    const { rows } = await selectRows("return_exchange", {
+      select: "return_id,order_id,exchange_order_id",
+      exchange_order_id: `in.(${orderIds.join(",")})`
+    }).catch(() => ({ rows: [] as JsonObject[] }));
+    for (const row of rows) {
+      const exId = asString(row.exchange_order_id);
+      if (exId) exchangeRowsByExchangeOrderId.set(exId, row);
+    }
+  }
+
+  const candidateSplitOrderIds = orders
+    .filter((order) => {
+      const oid = asString(order.order_id);
+      if (exchangeRowsByExchangeOrderId.has(oid)) return false;
+      const rawKind = asString(order.order_kind).trim().toLowerCase();
+      const codeUpper = asString(order.order_code).trim().toUpperCase();
+      return rawKind === "exchange" || codeUpper.startsWith("EXC") || Boolean(order.source_return_id) || Boolean(order.parent_order_id);
+    })
+    .map((o) => asString(o.order_id))
+    .filter(Boolean);
+
+  const splitReturnIdByExchangeOrderId = new Map<string, string>();
+  if (candidateSplitOrderIds.length) {
+    const { rows: itemRows } = await selectRows("return_item", {
+      select: "return_id,exchange_order_id",
+      exchange_order_id: `in.(${candidateSplitOrderIds.join(",")})`
+    }).catch(() => ({ rows: [] as JsonObject[] }));
+    for (const row of itemRows) {
+      const exId = asString(row.exchange_order_id);
+      const retId = asString(row.return_id);
+      if (exId && retId && !splitReturnIdByExchangeOrderId.has(exId)) {
+        splitReturnIdByExchangeOrderId.set(exId, retId);
+      }
+    }
+  }
+
+  const returnIdsToFetch = new Set<string>();
+  for (const order of orders) {
+    const oid = asString(order.order_id);
+    const viaExchange = exchangeRowsByExchangeOrderId.get(oid);
+    const sourceReturnId = asString(viaExchange?.return_id) || splitReturnIdByExchangeOrderId.get(oid) || asString(order.source_return_id);
+    const sourceOrderId = asString(viaExchange?.order_id) || asString(order.parent_order_id);
+    if (sourceReturnId && !sourceOrderId) {
+      returnIdsToFetch.add(sourceReturnId);
+    }
+  }
+
+  const returnOrderByReturnId = new Map<string, string>();
+  if (returnIdsToFetch.size) {
+    const { rows: retRows } = await selectRows("return_exchange", {
+      select: "return_id,order_id",
+      return_id: `in.(${Array.from(returnIdsToFetch).join(",")})`
+    }).catch(() => ({ rows: [] as JsonObject[] }));
+    for (const row of retRows) {
+      const rId = asString(row.return_id);
+      const oId = asString(row.order_id);
+      if (rId && oId) returnOrderByReturnId.set(rId, oId);
+    }
+  }
+
+  const missingSourceOrderIds = new Set<string>();
+  for (const order of orders) {
+    const oid = asString(order.order_id);
+    const viaExchange = exchangeRowsByExchangeOrderId.get(oid);
+    const sourceReturnId = asString(viaExchange?.return_id) || splitReturnIdByExchangeOrderId.get(oid) || asString(order.source_return_id) || null;
+    const sourceOrderId = asString(viaExchange?.order_id)
+      || asString(order.parent_order_id)
+      || (sourceReturnId ? returnOrderByReturnId.get(sourceReturnId) || null : null);
+    if (sourceOrderId && !ordersById.has(sourceOrderId)) {
+      missingSourceOrderIds.add(sourceOrderId);
+    }
+  }
+
+  const fetchedSourceCodeByOrderId = new Map<string, string>();
+  if (missingSourceOrderIds.size) {
+    const { rows: srcOrders } = await selectRows("orders", {
+      select: "order_id,order_code",
+      order_id: `in.(${Array.from(missingSourceOrderIds).join(",")})`
+    }).catch(() => ({ rows: [] as JsonObject[] }));
+    for (const row of srcOrders) {
+      const oId = asString(row.order_id);
+      const code = asString(row.order_code);
+      if (oId && code) fetchedSourceCodeByOrderId.set(oId, code);
+    }
+  }
+
+  for (const order of orders) {
+    const oid = asString(order.order_id);
+    const viaExchange = exchangeRowsByExchangeOrderId.get(oid);
+    const sourceReturnId = asString(viaExchange?.return_id) || splitReturnIdByExchangeOrderId.get(oid) || asString(order.source_return_id) || null;
+    const sourceOrderId = asString(viaExchange?.order_id)
+      || asString(order.parent_order_id)
+      || (sourceReturnId ? returnOrderByReturnId.get(sourceReturnId) || null : null);
+    const rawKind = asString(order.order_kind).trim().toLowerCase();
+    const codeUpper = asString(order.order_code).trim().toUpperCase();
+    const isExchangeReplacement = Boolean(
+      viaExchange || splitReturnIdByExchangeOrderId.has(oid) || rawKind === "exchange" || sourceReturnId || sourceOrderId || codeUpper.startsWith("EXC")
+    );
+    if (isExchangeReplacement) {
+      const sourceOrderCode = sourceOrderId
+        ? (asString(ordersById.get(sourceOrderId)?.order_code) || fetchedSourceCodeByOrderId.get(sourceOrderId) || null)
+        : null;
+      result.set(oid, {
+        isExchangeReplacement: true,
+        sourceReturnId,
+        sourceOrderId,
+        sourceOrderCode
+      });
+    }
+  }
+  return result;
+}
+
+/** Projects the authoritative per-original-unit quota partition without blocking disjoint quantities. */
 export async function attachReturnEligibility(
   repository: UserReturnsRepository,
   _orderId: unknown,
@@ -240,21 +432,41 @@ export async function attachReturnEligibility(
 ): Promise<JsonObject[]> {
   return Promise.all(items.map(async (item) => {
     const units = await repository.listReturnUnits(item.item_id);
-    const held = units.filter((unit) => !!unit.active_return_item_id);
-    const available = units.length
-      ? units.filter((unit) => !unit.refunded && !unit.active_return_item_id && Number(unit.success_count) < 2).length
-      : Math.max(0, Number(item.quantity) || 0);
+    const quantity = Math.max(0, Number(item.quantity) || 0);
+    if (!units.length) {
+      return {
+        ...item,
+        return_count: 0,
+        available_quantity: quantity,
+        available_refund_unit_amounts: [],
+        held_quantity: 0,
+        refunded_quantity: 0,
+        exhausted_quantity: 0,
+        exchanged_once_quantity: 0,
+        is_in_progress: false,
+        in_progress_return_code: null,
+        in_progress_status: null
+      };
+    }
+    const refundedUnits = units.filter((unit) => Boolean(unit.refunded));
+    const heldUnits = units.filter((unit) => !unit.refunded && Boolean(unit.active_return_item_id));
+    const exhaustedUnits = units.filter((unit) => !unit.refunded && !unit.active_return_item_id && Number(unit.success_count) >= 2);
+    const availableUnits = units.filter((unit) => !unit.refunded && !unit.active_return_item_id && Number(unit.success_count) < 2);
+    const exchangedOnceUnits = availableUnits.filter((unit) => Number(unit.success_count) === 1);
     return {
       ...item,
-      return_count: units.length ? Math.max(...units.map((unit) => Number(unit.success_count) || 0)) : 0,
-      available_quantity: available,
-      available_refund_unit_amounts: units.filter((unit) => !unit.refunded && !unit.active_return_item_id && Number(unit.success_count) < 2)
-        .sort((a, b) => Number(a.unit_number) - Number(b.unit_number)).map((unit) => Number(unit.refundable_amount) || 0),
-      held_quantity: held.length,
-      refunded_quantity: units.filter((unit) => unit.refunded).length,
-      is_in_progress: held.length > 0,
+      return_count: Math.max(...units.map((unit) => Number(unit.success_count) || 0)),
+      available_quantity: availableUnits.length,
+      available_refund_unit_amounts: [...availableUnits]
+        .sort((a, b) => Number(a.unit_number) - Number(b.unit_number))
+        .map((unit) => Number(unit.refundable_amount) || 0),
+      held_quantity: heldUnits.length,
+      refunded_quantity: refundedUnits.length,
+      exhausted_quantity: exhaustedUnits.length,
+      exchanged_once_quantity: exchangedOnceUnits.length,
+      is_in_progress: heldUnits.length > 0,
       in_progress_return_code: null,
-      in_progress_status: held.length ? "IN_PROGRESS" : null
+      in_progress_status: heldUnits.length > 0 ? "IN_PROGRESS" : null
     };
   }));
 }
@@ -360,15 +572,18 @@ export async function handleOrdersRoute(
         list.push(p);
         paymentsByOrder.set(oid, list);
       }
+      const lineages = await resolveCustomerExchangeLineages(rows, userReturnsRepository);
       const orders = await Promise.all(rows.map(async (order) => {
         const oid = String(order.order_id);
         let itemsWithProduct = itemsByOrder.get(oid) || [];
         if (["delivered", "completed", "refunded"].includes(String(order.status || "")) && itemsWithProduct.length > 0) {
           try {
             itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
-          } catch {}
+          } catch {
+            itemsWithProduct = failClosedReturnItems(itemsWithProduct);
+          }
         }
-        return presentOrderForCustomer(order, itemsWithProduct, historyByOrder.get(oid) || [], paymentsByOrder.get(oid) || []);
+        return presentOrderForCustomer(order, itemsWithProduct, historyByOrder.get(oid) || [], paymentsByOrder.get(oid) || [], lineages.get(oid));
       }));
       return sendJson(res, 200, { success: true, orders, guest_access_token: token }, corsHeaders);
     }
@@ -403,16 +618,18 @@ export async function handleOrdersRoute(
         const accessToken = url.searchParams.get("guest_access_token") || url.searchParams.get("order_access_token") || "";
         requireCustomerOrderAccess(order, context, {guest_access_token: accessToken});
 
-        const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
+        const [{ rows: items }, { rows: history }, { rows: payments }, lineages] = await Promise.all([
           selectRows("order_item", { order_id: `eq.${order.order_id}` }),
           selectRows("order_status_history", { order_id: `eq.${order.order_id}`, select: "new_status,changed_at" }),
-          selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,payment_provider,gateway_response_code,created_at,refund_amount,refunded_amount" })
+          selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,payment_provider,gateway_response_code,created_at,refund_amount,refunded_amount" }),
+          resolveCustomerExchangeLineages([order], userReturnsRepository)
         ]);
         let itemsWithProduct = await attachProductMeta(items);
         if (["delivered", "completed", "refunded"].includes(String(order.status || ""))) {
           itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
         }
-        return sendJson(res, 200, { success: true, order_access_token: accessToken, order: presentOrderForCustomer(order, itemsWithProduct, history, payments) }, corsHeaders);
+        const oid = asString(order.order_id);
+        return sendJson(res, 200, { success: true, order_access_token: accessToken, order: presentOrderForCustomer(order, itemsWithProduct, history, payments, lineages.get(oid)) }, corsHeaders);
       }
 
       // GET /api/user/orders/:id (Action contains the ID if present)
@@ -430,16 +647,18 @@ export async function handleOrdersRoute(
         }
 
         assertOrderVisibleTo(order, profile);
-        const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
+        const [{ rows: items }, { rows: history }, { rows: payments }, lineages] = await Promise.all([
           selectRows("order_item", { order_id: `eq.${order.order_id}` }),
           selectRows("order_status_history", { order_id: `eq.${order.order_id}`, select: "new_status,changed_at" }),
-          selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,payment_provider,gateway_response_code,created_at,refund_amount,refunded_amount" })
+          selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,payment_provider,gateway_response_code,created_at,refund_amount,refunded_amount" }),
+          resolveCustomerExchangeLineages([order], userReturnsRepository)
         ]);
         let itemsWithProduct = await attachProductMeta(items);
         if (["delivered", "completed", "refunded"].includes(String(order.status || ""))) {
           itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
         }
-        return sendJson(res, 200, presentOrderForCustomer(order, itemsWithProduct, history, payments), corsHeaders);
+        const oid = asString(order.order_id);
+        return sendJson(res, 200, presentOrderForCustomer(order, itemsWithProduct, history, payments, lineages.get(oid)), corsHeaders);
       }
 
       // GET /api/user/orders (Fetch all orders for user)
@@ -448,14 +667,15 @@ export async function handleOrdersRoute(
           throw new HttpError(401, "UNAUTHORIZED", "Đăng nhập là bắt buộc");
         }
         const { rows: orders } = await selectRows("orders", { user_id: `eq.${profile.user_id}` });
-        orders.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
+        orders.sort((a, b) => (parseUtcDateOrNull(b.created_at)?.getTime() ?? 0) - (parseUtcDateOrNull(a.created_at)?.getTime() ?? 0));
         if (!orders.length) {
           return sendJson(res, 200, { success: true, orders: [] }, corsHeaders);
         }
         const orderIds = orders.map(o => String(o.order_id)).filter(Boolean);
-        const [allItemsRes, allPaymentsRes] = await Promise.all([
+        const [allItemsRes, allPaymentsRes, lineages] = await Promise.all([
           selectRows("order_item", { order_id: `in.(${orderIds.join(",")})` }),
           selectRows("payment", { order_id: `in.(${orderIds.join(",")})`, select: "order_id,payment_status,payment_provider,gateway_response_code,created_at,refund_amount,refunded_amount" }),
+          resolveCustomerExchangeLineages(orders, userReturnsRepository)
         ]);
         const itemsWithProduct = await attachProductMeta(allItemsRes.rows);
         const itemsByOrder = new Map<string, JsonObject[]>();
@@ -478,27 +698,24 @@ export async function handleOrdersRoute(
           if (["delivered", "completed", "refunded"].includes(String(order.status || ""))) {
             try {
               items = await attachReturnEligibility(userReturnsRepository, order.order_id, items);
-            } catch {}
+            } catch {
+              items = failClosedReturnItems(items);
+            }
           }
           const payments = paymentsByOrder.get(oid) || [];
-          const [returnRequests, replacementSource] = await Promise.all([
-            userReturnsRepository.listReturnsForOrder(order.order_id).catch(() => []),
-            userReturnsRepository.findReturnByExchangeOrderId?.(order.order_id).catch(() => null) ?? Promise.resolve(null)
-          ]);
+          const returnRequests = await userReturnsRepository.listReturnsForOrder(order.order_id).catch(() => []);
           return {
-            ...presentOrderForCustomer(order, items, [], payments),
+            ...presentOrderForCustomer(order, items, [], payments, lineages.get(oid)),
             return_requests: returnRequests
               .filter(ret => !["CANCELLED", "REJECTED", "rejected"].includes(asString(ret.status)))
-              .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+              .sort((a, b) => (parseUtcDateOrNull(b.created_at)?.getTime() ?? 0) - (parseUtcDateOrNull(a.created_at)?.getTime() ?? 0))
               .map(ret => ({
                 return_id: ret.return_id,
                 tracking_return_code: ret.tracking_return_code,
                 return_type: ret.return_type,
                 status: ret.status,
-                created_at: ret.created_at
-              })),
-            is_exchange_replacement: Boolean(replacementSource),
-            source_return_id: replacementSource?.return_id || null
+                created_at: toUtcIsoString(ret.created_at) ?? ret.created_at
+              }))
           };
         }));
         return sendJson(res, 200, { success: true, orders: ordersWithItems }, corsHeaders);

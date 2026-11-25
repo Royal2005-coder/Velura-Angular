@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { toDataURL } from 'qrcode';
+import { formatVietnamDateTime } from '../../core/utils/date';
 import { ORDER_ACCOUNT_MODEL, type ReturnTrackingDetail, type ReturnTrackingEvidence } from '../../core/services/order-account.model';
 
 const MAX_PHOTOS = 8;
@@ -309,9 +310,7 @@ export class ReturnTrackingComponent {
   }
 
   date(value: string | null | undefined): string {
-    if (!value) return '—';
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('vi-VN');
+    return formatVietnamDateTime(value, '—');
   }
 
   shipmentStatusLabel(status: string | null | undefined): string {

@@ -3,7 +3,7 @@ import { classifyReturnPayment, customerRefundReceiver, refundFlowFor, validateR
 import { listReturnEvidence, resolveEvidenceRef, storeReturnEvidence, type ReturnEvidenceKind } from "../returns/return-evidence.js";
 import { guestSessionPhone, hasGuestOrderAccess } from "./order-access.js";
 import { HttpError } from "../http.js";
-import { returnWindowOpen } from "./return-window.js";
+import { parseUtcDateOrNull, returnWindowOpen, toUtcIsoString } from "./return-window.js";
 import { asJsonObject, asNumber, asString, type HttpRequest, type JsonObject, type UserProfile } from "../types.js";
 import { selectOne } from "../supabase.js";
 import type { UserReturnsRepository } from "./returns-repository.js";
@@ -24,6 +24,32 @@ const RETURN_INSTRUCTIONS: readonly string[] = [
   "Nếu có sai lệch, Velura mở hồ sơ CSKH kèm toàn bộ bằng chứng hai chiều."
 ];
 
+
+const RETURN_TIMESTAMP_FIELDS = [
+  "created_at", "updated_at", "approved_at", "rejected_at", "received_at", "completed_at", "cancelled_at", "pickup_scheduled_at"
+] as const;
+
+function normalizeTimestampFields<T extends JsonObject>(row: T, fields: readonly string[]): T {
+  const copy: JsonObject = { ...row };
+  for (const field of fields) {
+    if (copy[field] != null) {
+      copy[field] = toUtcIsoString(copy[field]) ?? copy[field];
+    }
+  }
+  return copy as T;
+}
+
+function normalizeContactHistory(history: unknown): unknown[] {
+  if (!Array.isArray(history)) return [];
+  return history.map((entry) => {
+    if (!entry || typeof entry !== "object") return entry;
+    const obj = entry as JsonObject;
+    return {
+      ...obj,
+      ...(obj.contacted_at ? { contacted_at: toUtcIsoString(obj.contacted_at) ?? obj.contacted_at } : {})
+    };
+  });
+}
 
 /**
  * Customer-facing shape of one return request: the persisted row without CSKH-internal fields, plus what the
@@ -53,8 +79,9 @@ async function customerReturnView(
   const receiverRequired = flow === "cod_manual";
   const receiver = receiverRequired ? await repository.getRefundReceiver(ret.return_id) : null;
   const status = asString(ret.status);
+  const rawPickupSlot = earliestPickupSlot(items);
   return {
-    ...visible,
+    ...normalizeTimestampFields(visible as JsonObject, RETURN_TIMESTAMP_FIELDS),
     status_label: RETURN_STATUS_LABELS_VI[status] || status,
     type_label: ret.return_type === "exchange" ? "Đổi hàng" : "Hoàn tiền",
     order_code: order ? order.order_code : null,
@@ -64,13 +91,13 @@ async function customerReturnView(
     customer_address: order ? order.shipping_address || null : null,
     refund_flow: flow,
     /** Giờ hẹn ĐVVC lấy hàng sớm nhất trong các phần hàng đã duyệt (migration 128). */
-    pickup_scheduled_at: earliestPickupSlot(items),
+    pickup_scheduled_at: rawPickupSlot ? (toUtcIsoString(rawPickupSlot) ?? rawPickupSlot) : null,
     refund_receiver: customerRefundReceiver(receiverRequired, receiver),
     can_cancel: CUSTOMER_CANCELLABLE_STATUSES.includes(status),
     can_upload_packing: items.length ? items.some((part) => CUSTOMER_PACKING_STATUSES.includes(asString(part.item_status))) : CUSTOMER_PACKING_STATUSES.includes(status),
-    items,
+    items: items.map((part) => normalizeTimestampFields(part, RETURN_TIMESTAMP_FIELDS)),
     response_options: returnCustomerResponseOptionsFor(status, items.map((part) => asString(part.item_status))),
-    contact_history: Array.isArray(ret.contact_history) ? ret.contact_history : [],
+    contact_history: normalizeContactHistory(ret.contact_history),
   };
 }
 
@@ -113,7 +140,7 @@ function customerTimeline(events: JsonObject[]): JsonObject[] {
       event_type: type,
       status: newStatus,
       label,
-      at: event.created_at,
+      at: toUtcIsoString(event.created_at) ?? event.created_at,
       direction: direction || null,
       carrier: payload.carrier || null,
       tracking_code: payload.tracking_code || null,
@@ -138,8 +165,8 @@ async function customerShipmentView(shipment: JsonObject): Promise<JsonObject> {
     label_url: shipment.label_url || null,
     handover_code: shipment.handover_code || null,
     status: shipment.status || null,
-    picked_up_at: shipment.picked_up_at || null,
-    delivered_at: shipment.delivered_at || null,
+    picked_up_at: toUtcIsoString(shipment.picked_up_at) ?? (shipment.picked_up_at || null),
+    delivered_at: toUtcIsoString(shipment.delivered_at) ?? (shipment.delivered_at || null),
     pickup_photo_urls: resolvedPhotos.filter(Boolean),
     package_video_url: video || null
   };
@@ -176,6 +203,7 @@ async function customerReturnDetail(
       tracking_code: exchangeOrder.tracking_code || null,
       tracking_url: exchangeOrder.tracking_url || null,
       order_kind: exchangeOrder.order_kind || "exchange",
+      created_at: toUtcIsoString(exchangeOrder.created_at) ?? (exchangeOrder.created_at || null),
       shipping_name: exchangeOrder.shipping_name || null,
       shipping_phone: exchangeOrder.shipping_phone || null,
       shipping_address: exchangeOrder.shipping_address || null,
@@ -247,12 +275,12 @@ async function hydratedReturnItems(repository: UserReturnsRepository, returnId: 
         tracking_code: exchange.tracking_code || null,
         tracking_url: exchange.tracking_url || null
       } : null,
-      updated_at: ri.updated_at,
-      approved_at: ri.approved_at,
-      rejected_at: ri.rejected_at,
-      received_at: ri.received_at,
-      completed_at: ri.completed_at,
-      pickup_scheduled_at: ri.pickup_scheduled_at || null,
+      updated_at: toUtcIsoString(ri.updated_at) ?? ri.updated_at,
+      approved_at: toUtcIsoString(ri.approved_at) ?? ri.approved_at,
+      rejected_at: toUtcIsoString(ri.rejected_at) ?? ri.rejected_at,
+      received_at: toUtcIsoString(ri.received_at) ?? ri.received_at,
+      completed_at: toUtcIsoString(ri.completed_at) ?? ri.completed_at,
+      pickup_scheduled_at: ri.pickup_scheduled_at ? (toUtcIsoString(ri.pickup_scheduled_at) ?? ri.pickup_scheduled_at) : null,
       version: ri.version,
       return_item_id: ri.return_item_id,
       order_item_id: ri.order_item_id,
@@ -304,7 +332,7 @@ function requireDeliveredWithinWindow(order: JsonObject): void {
   if (asString(order.status) !== "delivered") {
     throw new HttpError(400, "BAD_REQUEST", "Đơn hàng phải hoàn thành (giao thành công) mới được yêu cầu đổi trả");
   }
-  const deliveryDate = new Date(asString(order.delivered_at));
+  const deliveryDate = parseUtcDateOrNull(order.delivered_at);
   if (!returnWindowOpen(deliveryDate, new Date())) {
     throw new HttpError(400, "RETURN_WINDOW_CLOSED", "Quá thời hạn đổi/trả (7 ngày kể từ khi giao hàng)");
   }
@@ -509,7 +537,7 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       const populated = await Promise.all(rows.map(async (ret) =>
         customerReturnView(repository, ret, orderById.get(String(ret.order_id)) || null, await hydratedReturnItems(repository, ret.return_id))
       ));
-      populated.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
+      populated.sort((a, b) => (parseUtcDateOrNull(b.created_at)?.getTime() ?? 0) - (parseUtcDateOrNull(a.created_at)?.getTime() ?? 0));
       return populated;
     },
     /** Cancels only a request bound to the verified order and its current version. */
@@ -574,7 +602,7 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
           await hydratedReturnItems(repository, ret.return_id)
         ));
       }
-      populated.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
+      populated.sort((a, b) => (parseUtcDateOrNull(b.created_at)?.getTime() ?? 0) - (parseUtcDateOrNull(a.created_at)?.getTime() ?? 0));
       return populated;
     },
 

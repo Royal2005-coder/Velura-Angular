@@ -597,4 +597,39 @@ describe('AiImageWorkbench', () => {
     });
   });
 
+  describe('guest gate auth returnUrl & offerStatus', () => {
+    it('passes authReturnUrl queryParam to login/signup gate links and omits query when unset', () => {
+      localStorage.clear();
+      sessionStorage.clear();
+      TestBed.inject(AuthService).refresh();
+      const fixture = pageFixture();
+      fixture.componentRef.setInput('authReturnUrl', '/products/ao-so-mi?variant=variant&vto=1');
+      fixture.detectChanges();
+      const links = Array.from(fixture.nativeElement.querySelectorAll('.member-gate__actions a')) as HTMLAnchorElement[];
+      expect(links.length).toBe(2);
+      expect(links[0].getAttribute('href')).toContain('/auth/signin');
+      expect(links[0].getAttribute('href')).toContain(encodeURIComponent('/products/ao-so-mi?variant=variant&vto=1'));
+      expect(links[1].getAttribute('href')).toContain('/auth/signup');
+      expect(links[1].getAttribute('href')).toContain(encodeURIComponent('/products/ao-so-mi?variant=variant&vto=1'));
+
+      fixture.componentRef.setInput('authReturnUrl', null);
+      fixture.detectChanges();
+      const cleanLinks = Array.from(fixture.nativeElement.querySelectorAll('.member-gate__actions a')) as HTMLAnchorElement[];
+      expect(cleanLinks[0].getAttribute('href')).toBe('/auth/signin');
+      expect(cleanLinks[1].getAttribute('href')).toBe('/auth/signup');
+    });
+
+    it('tracks offerStatus ready/error while leaving capabilities() null until open()', async () => {
+      localStorage.setItem('velura_token', 't');
+      localStorage.setItem('velura_user', JSON.stringify({ user_id: 'u1', role: 'member' }));
+      TestBed.inject(AuthService).refresh();
+      model.capabilities.mockReturnValueOnce(of({ enabled: true, product_supported: true, variant_supported: true, tasks: [] }));
+      const p = page();
+      await firstValueFrom(timer(20));
+      expect(p.offerStatus()).toBe('ready');
+      expect(p.offered()).toBe(true);
+      expect(p.capabilities()).toBeNull();
+    });
+  });
+
 });

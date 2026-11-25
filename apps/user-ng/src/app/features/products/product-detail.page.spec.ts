@@ -579,4 +579,61 @@ describe('ProductDetailPage', () => {
     page.selectedSize.set('XL');
     expect(page.aiVariantId()).toBe('');
   });
+
+  it('restores selected variant from queryParamMap and exposes authReturnUrl with vto=1 for guest try-on', async () => {
+    const product: ProductSummary = {
+      product_id: 'prod-vto',
+      slug: 'ao-so-mi-lua',
+      name: 'Áo Sơ Mi Lụa',
+      status: 'on_sale',
+      images: ['/images/chung.jpg', '/images/beige.jpg'],
+      image_colors: { '/images/beige.jpg': 'Soft Beige' },
+      variants: [
+        { variant_id: 'v-default', color: 'Trắng', size: 'S', stock_quantity: 5 },
+        { variant_id: 'v-beige-xs', color: 'Soft Beige', size: 'XS', stock_quantity: 3 },
+      ],
+    };
+    const page = await createStorefrontPage(
+      ProductDetailPage,
+      {},
+      {
+        paramMap: of(convertToParamMap({ id: 'prod-vto' })),
+        queryParamMap: of(convertToParamMap({ variant: 'v-beige-xs', vto: '1' })),
+        queryParams: { variant: 'v-beige-xs', vto: '1' },
+        catalog: {
+          getProduct: () => of(product),
+          getProducts: () => of([]),
+        },
+        aiEngine: {
+          capabilities: () =>
+            of({
+              enabled: true,
+              local_only: true,
+              tasks: [{ task: 'virtual_try_on', enabled: true }],
+              product_supported: true,
+              variant_supported: true,
+              max_upload_bytes: 5242880,
+              private_ttl_seconds: 900,
+            }),
+        },
+      },
+    );
+
+    expect(page.selectedColor()).toBe('Soft Beige');
+    expect(page.selectedSize()).toBe('XS');
+    expect(page.aiVariantId()).toBe('v-beige-xs');
+    expect(page.vtoReturnUrl()).toBe('/products/prod-vto?variant=v-beige-xs&vto=1');
+  });
+
+  it('keeps aiVariantId valid on size-only and single-attribute-less variants', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    page.product.set({
+      product_id: 'p-size-only',
+      name: 'Váy Trơn',
+      variants: [{ variant_id: 'v-only-m', size: 'M', stock_quantity: 2 }],
+    } as unknown as ProductSummary);
+    page.selectedColor.set(null);
+    page.selectedSize.set('M');
+    expect(page.aiVariantId()).toBe('v-only-m');
+  });
 });

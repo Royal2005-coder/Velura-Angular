@@ -383,8 +383,10 @@
                           <span class="order-card__item-name">{{ line.product_name }}</span>
                           <span class="order-card__item-meta">{{ displaySize(line.size) }} / {{ line.color }} · x{{ line.quantity }}</span>
                         </div>
-                        @if (line.isInProgress) {
+                        @if (line.isInProgress || (line.heldQuantity ?? 0) > 0) {
                           <span class="order-card__item-tag is-progress">⏳ Đang đổi/trả</span>
+                        } @else if (line.quantity > 0 && (line.refundedQuantity ?? 0) >= line.quantity) {
+                          <span class="order-card__item-tag is-done">✓ Đã hoàn tiền</span>
                         } @else if (line.availableQuantity === 0 && line.returnCount > 0) {
                           <span class="order-card__item-tag is-done">✓ Đã đổi/trả</span>
                         }
@@ -530,7 +532,7 @@
                     </h3>
                     <p class="muted">{{ displaySize(line.size) }} / {{ line.color }} · SL {{ line.quantity }}</p>
                     <strong>{{ money(line.quantity * line.unit_price) }}</strong>
-                    @if (item.status === 'delivered') {
+                    @if (item.status === 'delivered' && !isExchangeOrder(item)) {
                       <div class="line-return-quota-row">
                         <span class="line-quota-chip">
                           Chính sách 7 ngày · Tối đa 2 lần thành công cho mỗi đơn vị sản phẩm
@@ -539,19 +541,13 @@
                           SL khả dụng: <strong>{{ line.availableQuantity }}/{{ line.quantity }}</strong>
                         </span>
                       </div>
-                      @if (line.isInProgress) {
-                        <div class="line-return-banner line-return-banner--progress">
-                          Đang xử lý một phần ({{ lineInProgressLabel(line) }}). Số lượng còn khả dụng vẫn có thể yêu cầu riêng.
-                        </div>
-                      } @else if (line.availableQuantity < 1 && line.returnCount >= 2) {
-                        <div class="line-return-banner line-return-banner--exhausted">
-                          🔒 Sản phẩm đã sử dụng hết tối đa 2/2 lượt đổi/trả theo chính sách.
-                        </div>
-                      } @else if (line.availableQuantity === 0) {
-                        <div class="line-return-banner line-return-banner--done">
-                          ✓ Sản phẩm đã hoàn tất đổi/trả toàn bộ số lượng mua.
+                      @if (lineQuotaBanner(line); as banner) {
+                        <div class="line-return-banner" [class.line-return-banner--progress]="banner.kind === 'progress'" [class.line-return-banner--exhausted]="banner.kind === 'exhausted'" [class.line-return-banner--done]="banner.kind === 'done'">
+                          {{ banner.text }}
                         </div>
                       }
+                    }
+                    @if (item.status === 'delivered') {
                       <div class="u-inline-36ca0aff10">
                         <a
                           class="action secondary u-inline-e8fa2edd39"
@@ -608,15 +604,25 @@
               }
               @if (item.status === 'delivered') {
                 <p class="muted">Ngày nhận: {{ date(item.deliveredAt) }}</p>
-                @if (!withinWindow(item)) {
-                  <p class="error">Đã hết thời hạn đổi/trả.</p>
+                @if (exchangeOrderNotice(item); as exchangeMsg) {
+                  <div class="order-return-locked-notice" role="status">
+                    <div class="order-return-locked-notice__info">
+                      <strong>ℹ Đơn hàng giao đổi mới</strong>
+                      <p>{{ exchangeMsg }}</p>
+                    </div>
+                    @if (item.sourceOrderId || item.sourceOrderCode) {
+                      <button type="button" class="secondary btn-compact" (click)="openSourceOrder(item)">Xem đơn hàng gốc →</button>
+                    }
+                  </div>
+                } @else if (returnWindowSummary(item); as win) {
+                  <p [class]="win.open ? 'muted' : 'error'">{{ win.text }}</p>
                 }
               }
               @if (withinWindow(item) && !canStartReturn(item)) {
                 @if (returnBlockedReason(item); as blockedMsg) {
                   <div class="order-return-locked-notice" role="status">
                     <div class="order-return-locked-notice__info">
-                      <strong>{{ isReturnQuotaExhausted(item) ? '🔒 Đã đạt giới hạn đổi / trả (2/2 lần trong 7 ngày)' : '🔒 Đã khóa tạo thêm yêu cầu đổi/trả' }}</strong>
+                      <strong>{{ orderBlockedTitle(item) }}</strong>
                       <p>{{ blockedMsg }}</p>
                     </div>
                     @if (orderActiveReturn(item); as activeReq) {
@@ -783,17 +789,9 @@
                       <span class="line-quota-chip">Khả dụng đổi/trả: <strong>{{ line.availableQuantity }}</strong></span>
                       <span class="line-quota-chip">Chính sách 7 ngày · Tối đa 2 lần thành công/đơn vị</span>
                     </div>
-                    @if (line.isInProgress) {
-                      <div class="line-return-banner line-return-banner--progress">
-                        Đang xử lý một phần ({{ lineInProgressLabel(line) }}). Còn {{ line.availableQuantity }} đơn vị có thể chọn riêng.
-                      </div>
-                    } @else if (line.availableQuantity < 1 && line.returnCount >= 2) {
-                      <div class="line-return-banner line-return-banner--exhausted">
-                        Đã sử dụng đủ 2 lần thành công cho các đơn vị sản phẩm trong 7 ngày.
-                      </div>
-                    } @else if (line.availableQuantity === 0) {
-                      <div class="line-return-banner line-return-banner--done">
-                        ✓ Sản phẩm đã được hoàn trả hoặc đổi mới toàn bộ số lượng mua.
+                    @if (lineQuotaBanner(line); as banner) {
+                      <div class="line-return-banner" [class.line-return-banner--progress]="banner.kind === 'progress'" [class.line-return-banner--exhausted]="banner.kind === 'exhausted'" [class.line-return-banner--done]="banner.kind === 'done'">
+                        {{ banner.text }}
                       </div>
                     }
                     @if (line.is_combo) {

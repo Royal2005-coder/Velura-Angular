@@ -114,19 +114,25 @@ export function stubChatbotService(): Pick<
   };
 }
 
-export function stubActivatedRoute(params: Record<string, string> = { id: 'p1', slug: 'heritage' }, paramMap?: Observable<ParamMap>): ActivatedRoute {
+export function stubActivatedRoute(
+  params: Record<string, string> = { id: 'p1', slug: 'heritage' },
+  paramMap?: Observable<ParamMap>,
+  queryParamMap?: Observable<ParamMap>,
+  queryParams: Record<string, string> = {},
+): ActivatedRoute {
   const map = convertToParamMap(params);
+  const qMap = convertToParamMap(queryParams);
   return {
     snapshot: {
       paramMap: map,
-      queryParamMap: convertToParamMap({}),
-      queryParams: {},
+      queryParamMap: qMap,
+      queryParams,
       fragment: null,
       data: { title: 'Velura', subtitle: 'test' },
     },
     paramMap: paramMap ?? of(map),
-    queryParamMap: of(convertToParamMap({})),
-    queryParams: of({}),
+    queryParamMap: queryParamMap ?? of(qMap),
+    queryParams: of(queryParams),
     fragment: of(null),
     data: of({ title: 'Velura', subtitle: 'test' }),
   } as unknown as ActivatedRoute;
@@ -186,6 +192,11 @@ class TestRouteTarget {}
 export interface StorefrontPageOptions {
   routes?: Routes;
   paramMap?: Observable<ParamMap>;
+  queryParamMap?: Observable<ParamMap>;
+  queryParams?: Record<string, string>;
+  localStorageSeed?: Record<string, string>;
+  catalog?: Partial<CatalogService>;
+  aiEngine?: Partial<AiEngineService>;
 }
 
 /**
@@ -201,11 +212,22 @@ export async function createStorefrontPage<T>(
   lastFixture = undefined;
   try { sessionStorage?.clear(); } catch {}
   try { localStorage?.clear(); } catch {}
+  if (options.localStorageSeed && typeof localStorage !== 'undefined') {
+    for (const [k, v] of Object.entries(options.localStorageSeed)) {
+      localStorage.setItem(k, v);
+    }
+  }
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [page],
     providers: [
-      { provide: AiEngineService, useValue: { capabilities: () => of({enabled:false,local_only:true,tasks:[],max_upload_bytes:5242880,private_ttl_seconds:900}) } },
+      {
+        provide: AiEngineService,
+        useValue: {
+          capabilities: () => of({ enabled: false, local_only: true, tasks: [], max_upload_bytes: 5242880, private_ttl_seconds: 900 }),
+          ...options.aiEngine,
+        },
+      },
       { provide: VisualSearchModel, useValue: stubVisualSearchModel() },
       { provide: AddressGeographyService, useValue: stubAddressGeographyService() },
       { provide: StyleProfileService, useValue: {
@@ -216,9 +238,9 @@ export async function createStorefrontPage<T>(
       } },
       provideRouter(options.routes ?? []),
       { provide: ApiService, useValue: { ...stubApiService(), ...apiOverrides } },
-      { provide: CatalogService, useValue: stubCatalogService() },
+      { provide: CatalogService, useValue: { ...stubCatalogService(), ...options.catalog } },
       { provide: ChatbotService, useValue: stubChatbotService() },
-      { provide: ActivatedRoute, useValue: stubActivatedRoute(undefined, options.paramMap) },
+      { provide: ActivatedRoute, useValue: stubActivatedRoute(undefined, options.paramMap, options.queryParamMap, options.queryParams) },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(page);

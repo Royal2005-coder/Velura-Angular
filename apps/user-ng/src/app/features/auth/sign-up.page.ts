@@ -7,6 +7,7 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
 import { StyleProfileService } from '../../core/services/style-profile.service';
+import { clearOAuthReturnUrl, sanitizeReturnUrl } from '../../core/utils/auth-return-url';
 import { showToast } from '../../core/utils/toast';
 import { AuthOtpModal, AuthOtpResult } from '../../shared/auth-otp-modal/auth-otp-modal';
 import { PASSWORD_POLICY_MESSAGE, PASSWORD_POLICY_PATTERN } from '../../core/utils/password-policy';
@@ -27,6 +28,7 @@ export class SignUpPage {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
 
+  readonly safeReturnUrl = signal<string | null>(sanitizeReturnUrl(this.route.snapshot.queryParamMap.get('returnUrl')));
   readonly errorMessage = signal<string | null>(null);
   readonly showPassword = signal(false);
   readonly showConfirm = signal(false);
@@ -48,6 +50,9 @@ export class SignUpPage {
   });
 
   constructor() {
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((params) => this.safeReturnUrl.set(sanitizeReturnUrl(params.get('returnUrl'))));
     combineLatest([
       this.form.controls.email.valueChanges.pipe(startWith(this.form.controls.email.value)),
       this.form.controls.phone.valueChanges.pipe(startWith(this.form.controls.phone.value)),
@@ -146,10 +151,19 @@ export class SignUpPage {
   private finishAuth(response: { token?: string; user?: Record<string, unknown> }): void {
     this.auth.applySession(response.token, response.user);
     this.wishlist.refresh();
+    clearOAuthReturnUrl();
     showToast('Đăng ký tài khoản thành công! Chào mừng bạn đến với Velura 🎉');
+    const target = this.safeReturnUrl();
     this.styleProfile.claimGuestDraft().subscribe({
-      next: () => void this.router.navigateByUrl('/'),
-      error: () => void this.router.navigateByUrl('/ai/style-quiz'),
+      next: () => void this.router.navigateByUrl(target || '/'),
+      error: () => {
+        if (target) {
+          showToast('Không thể đồng bộ bản nháp hồ sơ phong cách lúc này.');
+          void this.router.navigateByUrl(target);
+          return;
+        }
+        void this.router.navigateByUrl('/ai/style-quiz');
+      },
     });
   }
 

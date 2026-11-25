@@ -81,6 +81,14 @@ spec:
             secretKeyRef:
               name: litellm-credentials
               key: image-model
+        - name: MISTRAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: mistral-api-key
+              # Optional until the owner adds this key to the encrypted secret; the gateway
+              # and chatbot provider both already treat a missing Mistral key as "skip".
+              optional: true
         volumeMounts:
         - name: config
           mountPath: /etc/litellm

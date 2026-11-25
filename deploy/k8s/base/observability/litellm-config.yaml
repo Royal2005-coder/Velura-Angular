@@ -29,12 +29,18 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY
       rpm: 60
       tpm: 60000
+  - model_name: ministral-8b-latest
+    litellm_params:
+      model: mistral/ministral-8b-latest
+      api_key: os.environ/MISTRAL_API_KEY
+      rpm: 60
+      tpm: 60000
 litellm_settings:
   callbacks: [prometheus]
   # LiteLLM 1.79 reads this setting here, not under general_settings.
   require_auth_for_metrics_endpoint: true
   telemetry: false
   request_timeout: 60
-  num_retries: 0
+  num_retries: 2
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

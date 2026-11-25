@@ -22,13 +22,13 @@ export interface ChatbotService {
   listSessions(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
   /** Creates an owned session and persists its first assistant introduction. */
   createSession(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
-  /** Returns an owner's transcript without moderated originals or internal review context. */
+  /** Returns an owner's transcript with only their own author copy; internal review context stays private. */
   getMessages(context: AuthContext | undefined, sessionId: string, searchParams: URLSearchParams): Promise<unknown>;
   /** Closes an owned session, preventing new or late AI turns. */
   deleteSession(context: AuthContext | undefined, sessionId: string, body?: JsonObject): Promise<unknown>;
   /** Reopens a recent case or links a new one outside the configured period; records closed-case ratings. */
   lifecycle(context: AuthContext | undefined, sessionId: string, body: JsonObject): Promise<unknown>;
-  /** Authenticates selected orders, grounds/reviews replies and escalates finite model failures; never performs commerce writes. */
+  /** Authenticates selected orders and grounds/reviews replies; only an explicit customer request creates a CSKH handoff. */
   sendMessage(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
   /** Saves a member's existing assistant recommendation, never client-provided product data. */
   saveFavorite(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
@@ -68,7 +68,11 @@ export function createChatbotService({ repository, model = createLLMService(), i
   async function transcript(session: JsonObject, staff = false) {
     session = await repository.getSession(asString(session.session_id)) || session;
     const result = await repository.listMessages(asString(session.session_id), 150);
-    const messages = (result.rows || []).map((row) => publicMessage(row, staff));
+    const originals = staff
+      ? new Map<string, string>()
+      : new Map(((await repository.listOwnerOriginals(asString(session.session_id))).rows || [])
+        .map((row) => [asString(row.message_id), asString(row.original_text)] as const));
+    const messages = (result.rows || []).map((row) => publicMessage(row, staff, originals.get(asString(row.message_id))));
     const ids = messages.flatMap((row) => Array.isArray(row.product_ids) ? row.product_ids : []);
     const products = (await repository.listProductsByIds(ids)).rows || [];
     const offers = staff ? await listEligibleSupportOffers(asString(session.session_id)) : [];
@@ -81,57 +85,38 @@ export function createChatbotService({ repository, model = createLLMService(), i
       : "Mình rất tiếc vì chưa giải quyết được yêu cầu của bạn. Mình đã chuyển thông tin tới CSKH để kiểm tra và hỗ trợ tiếp. Bạn không cần trình bày lại từ đầu và vẫn có thể bổ sung thông tin tại đây.";
   }
 
-  async function escalate(session: JsonObject, actor: ChatActor, _message: JsonObject, analysis: ChatAnalysis, _history: JsonObject[], reason: string, _verified: boolean) {
-    const summary = {
-      summary: analysis.filtered.problem,
-      problem: analysis.filtered.problem,
-      wanted: analysis.filtered.wanted,
-      failed_approaches: analysis.filtered.failedApproaches,
-      confirmed_facts: _verified ? ["Đã xác minh quyền truy cập đơn hàng được chọn."] : [],
-      unconfirmed_claims: [analysis.filtered.problem],
-      unresolved_need: analysis.filtered.wanted,
-      confirmation_status: "unconfirmed",
-      risk: analysis.risk,
-      sentiment: analysis.sentiment,
-      trace: analysis.trace || [],
-      message: buildHandoffSoothingMessage(reason),
-    };
-    const result = await repository.handoff(asString(session.session_id), actor, summary, reason, analysis.risk === "red");
-    await enqueueChatReport(asString(session.session_id), "l3");
-    return transcript(isJsonObject(result.session) ? result.session : { ...session, handoff_status: "requested", support_ticket_id: result.ticket_id });
-  }
-
-  function canKeepCatalogFailureWithAi(analysis: ChatAnalysis): boolean {
-    return analysis.intent === "catalog" &&
-      analysis.level === "L1" &&
-      ["green", "yellow"].includes(analysis.risk) &&
-      analysis.moderation === "none" &&
-      !analysis.context.authorityExceeded &&
-      !analysis.context.compromiseFailed &&
-      !analysis.context.rejectedApproach;
-  }
-
-  async function commitCatalogFailureFallback(session: JsonObject, turn: JsonObject, userMessage: JsonObject, issueKey: string, analysis: ChatAnalysis, trace: unknown): Promise<unknown> {
+  async function commitFailureFallback(session: JsonObject, turn: JsonObject, userMessage: JsonObject, issueKey: string, analysis: ChatAnalysis, trace: unknown, query: string): Promise<unknown> {
+    let sources: ChatSource[] = [];
+    if (analysis.intent === "catalog") {
+      try {
+        const products = (await repository.searchProducts(query, 4)).rows || [];
+        sources = products.map(productSource).filter((source) => Array.isArray(source.snapshot.variants) && source.snapshot.variants.length > 0);
+      } catch { sources = []; }
+    }
+    const names = sources.map((source) => asString(asJsonObject(source.snapshot).name)).filter(Boolean);
+    const catalogText = names.length
+      ? `Mình tìm được ${names.length} lựa chọn đang bán phù hợp để bạn tham khảo: ${names.join(", ")}. Bạn có thể mở từng sản phẩm bên dưới để xem màu, size và giá hiện tại.`
+      : "Mình chưa lấy được gợi ý sản phẩm lúc này, nhưng cuộc trò chuyện vẫn ở AI Stylist. Bạn có thể thử lại sau ít phút hoặc bổ sung kiểu dáng, màu sắc và ngân sách mong muốn.";
     const result = await repository.commitAiTurn(
       asString(session.session_id),
       asNumber(turn.epoch),
       asNumber(userMessage.sequence),
       {
-        text: "Mình đang gặp gián đoạn khi tạo gợi ý, nhưng cuộc trò chuyện vẫn ở AI Stylist. Bạn cho mình biết thêm kiểu dáng, màu sắc hoặc ngân sách mong muốn để mình thử lại nhé.",
-        product_ids: [],
+        text: analysis.intent === "catalog" ? catalogText : "Mình chưa thể hoàn tất câu trả lời tự động lúc này. Cuộc trò chuyện vẫn ở AI Stylist và chưa được chuyển cho CSKH; bạn có thể thử lại sau ít phút hoặc chủ động chọn “Gặp nhân viên CSKH” nếu muốn.",
+        product_ids: sources.map((source) => source.recordId),
         metadata: {
           speaker: "AI",
           level: analysis.level,
           issue_key: issueKey,
-          approach: "clarify_catalog_preferences_after_temporary_failure",
-          source_ids: [],
+          approach: analysis.intent === "catalog" ? "grounded_catalog_fallback" : "safe_ai_retry_fallback",
+          source_ids: sources.map((source) => source.id),
           risk_check: "local_safe_fallback",
           filter_verified: true,
           model_failure: true,
           trace,
         },
       },
-      [],
+      sources.map((source) => ({ kind: source.kind, id: source.recordId, version: source.version, approved: source.approved, snapshot: source.snapshot })),
     ).catch(() => null);
     if (result && isJsonObject(result) && result.sent === true) {
       return transcript(isJsonObject(result.session) ? result.session : session);
@@ -141,15 +126,13 @@ export function createChatbotService({ repository, model = createLLMService(), i
 
   async function handleResponseFailure(
     session: JsonObject,
-    actor: ChatActor,
     turn: JsonObject,
     userMessage: JsonObject,
     issueKey: string,
     analysis: ChatAnalysis,
-    history: JsonObject[],
     reason: string,
-    verified: boolean,
     trace: unknown[],
+    query: string,
   ): Promise<unknown> {
     const failure = await repository.recordAnalysis(
       asString(session.session_id),
@@ -160,18 +143,7 @@ export function createChatbotService({ repository, model = createLLMService(), i
     );
     const failedSession = asJsonObject(failure.session);
     if (failedSession.handoff_status !== "ai") return transcript(failedSession);
-    if (canKeepCatalogFailureWithAi(analysis)) {
-      return commitCatalogFailureFallback(failedSession, turn, userMessage, issueKey, analysis, trace);
-    }
-    return escalate(
-      failedSession,
-      actor,
-      userMessage,
-      analysis,
-      history,
-      asNumber(failure.issue_failures) >= 2 ? "REPEATED_MODEL_FAILURE" : reason,
-      verified,
-    );
+    return commitFailureFallback(failedSession, turn, userMessage, issueKey, analysis, trace, query);
   }
 
   function catalogClassifierFallback(message: string): ChatAnalysis | null {
@@ -201,6 +173,17 @@ export function createChatbotService({ repository, model = createLLMService(), i
       },
       confidence: 0,
       reasons: ["classifier_unavailable_local_catalog_fallback"],
+    };
+  }
+
+  function unavailableClassifierFallback(): ChatAnalysis {
+    const filteredText = "Yêu cầu của khách đang chờ AI Stylist xử lý lại vì dịch vụ phân tích tạm thời gián đoạn.";
+    return {
+      intent: "facts", level: "L0", issue: "general",
+      context: { issueKey: "classifier_unavailable", problem: filteredText, wanted: "Tiếp tục trao đổi với AI Stylist", failedApproaches: [], compromiseFailed: false, authorityExceeded: false },
+      sentiment: "neutral", risk: "yellow", moderation: "sensitive",
+      filtered: { text: filteredText, problem: filteredText, wanted: "Tiếp tục trao đổi với AI Stylist", failedApproaches: [] },
+      confidence: 0, reasons: ["classifier_unavailable_local_safe_fallback"],
     };
   }
 
@@ -275,22 +258,21 @@ export function createChatbotService({ repository, model = createLLMService(), i
         const prior = asJsonObject(asJsonObject(session.metadata).handoff_summary);
         const failureKey = `unclassified:${input.orderId || asString(prior.issue_key) || "conversation"}`;
         const failureTrace = error instanceof Error && "trace" in error && Array.isArray(error.trace) ? error.trace : [];
-        const fallbackAnalysis = !input.attachment && !input.orderId && !explicitHuman ? catalogClassifierFallback(input.message) : null;
+        const fallbackAnalysis = explicitHuman ? null : catalogClassifierFallback(input.message) || unavailableClassifierFallback();
         if (fallbackAnalysis && session.handoff_status === "ai") {
-          const fallbackKey = `catalog:${input.orderId || "conversation"}:${fallbackAnalysis.context.issueKey}`;
+          const fallbackKey = `${fallbackAnalysis.intent}:${input.orderId || "conversation"}:${fallbackAnalysis.context.issueKey}`;
           const filtered = await repository.recordAnalysis(sessionId, asString(userMessage.message_id), fallbackKey, fallbackAnalysis as unknown as JsonObject, false);
           session = asJsonObject(filtered.session);
           const failure = await repository.recordAnalysis(sessionId, asString(userMessage.message_id), fallbackKey, { trace: failureTrace }, true);
           session = asJsonObject(failure.session);
           await enqueueChatReport(sessionId, "warning");
           if (session.handoff_status !== "ai") return transcript(session);
-          return commitCatalogFailureFallback(session, turn, userMessage, fallbackKey, fallbackAnalysis, failureTrace);
+          return commitFailureFallback(session, turn, userMessage, fallbackKey, fallbackAnalysis, failureTrace, input.message);
         }
         const state = await repository.recordAnalysis(sessionId, asString(userMessage.message_id), failureKey, { trace: failureTrace }, true);
         session = asJsonObject(state.session);
         await enqueueChatReport(sessionId, "warning");
         if (session.handoff_status !== "ai") return transcript(session);
-        if (asNumber(state.issue_failures) >= 2) return escalate(session, actor, userMessage, humanAnalysis(), history, "REPEATED_MODEL_FAILURE", Boolean(order));
         return transcript(session);
       }
       if (analysis.moderation === "none" && ["orange", "red"].includes(analysis.risk)) analysis.risk = "yellow";
@@ -322,10 +304,9 @@ export function createChatbotService({ repository, model = createLLMService(), i
       const rejected = asNumber(state.l2_attempts) > 0 && rejectionText;
       const additionalAttempt = analysis.level === "L2" && asNumber(state.l2_attempts) === 1 && analysis.context.compromiseFailed && !rejected;
       if (additionalAttempt) analysis.context.compromiseFailed = false;
-      if (session.handoff_status === "ai" && (analysis.intent === "human" || analysis.level === "L3" || analysis.context.authorityExceeded || analysis.context.compromiseFailed || rejected || analysis.risk === "red" || (analysis.level === "L2" && asNumber(state.l2_attempts) >= 2))) {
-        return escalate(session, actor, userMessage, analysis, history, rejected ? "COMPROMISE_REJECTED" : analysis.context.authorityExceeded ? "AUTHORITY_EXCEEDED" : analysis.context.compromiseFailed ? "COMPROMISE_FAILED" : analysis.risk === "red" ? "SEVERE_CONTENT" : "ISSUE_ATTEMPTS_EXHAUSTED", Boolean(order));
+      if (analysis.intent === "human" || analysis.level === "L3" || analysis.context.authorityExceeded || analysis.context.compromiseFailed || rejected || analysis.risk === "red" || (analysis.level === "L2" && asNumber(state.l2_attempts) >= 2) || (analysis.risk === "orange" && analysis.moderation !== "none")) {
+        return commitFailureFallback(session, turn, userMessage, issueKey, analysis, analysis.trace || [], input.message);
       }
-      if (session.handoff_status === "ai" && analysis.risk === "orange" && analysis.moderation !== "none") return escalate(session, actor, userMessage, analysis, history, "CONTENT_MODERATION", Boolean(order));
       if (analysis.intent === "order" && !order) {
         const result = await repository.commitAiTurn(sessionId, asNumber(turn.epoch), asNumber(userMessage.sequence), { text: "Để bảo vệ thông tin riêng tư, hãy chọn đúng đơn hàng và đăng nhập tài khoản sở hữu đơn hoặc xác thực OTP của đơn đó.", metadata: { system: true, otp_required: !actor.profileUserId }, product_ids: [] }, []);
         return transcript(isJsonObject(result.session) ? result.session : session);
@@ -340,16 +321,16 @@ export function createChatbotService({ repository, model = createLLMService(), i
         const deterministic = responseRiskCheck(analysis, draft, sources);
         if (!deterministic.safe) {
           const reason = `RESPONSE_REJECTED:${deterministic.reasons.join(",")}`.slice(0, 1000);
-          return handleResponseFailure(session, actor, turn, userMessage, issueKey, analysis, history, reason, Boolean(order), analysis.trace || []);
+          return handleResponseFailure(session, turn, userMessage, issueKey, analysis, reason, analysis.trace || [], input.message);
         }
         // Fresh catalog/policy reads precede the final review; SQL checks again at commit.
         const current = await refreshSources(repository, sources, sessionId, actor, listEligibleSupportOffers);
-        if (!current) return handleResponseFailure(session, actor, turn, userMessage, issueKey, analysis, history, "SOURCE_STALE", Boolean(order), analysis.trace || []);
+        if (!current) return handleResponseFailure(session, turn, userMessage, issueKey, analysis, "SOURCE_STALE", analysis.trace || [], input.message);
         const risk = await model.review(analysis.filtered.text, analysis, draft, current);
         analysis.trace.push(...(risk.trace || []));
         if (!risk.safe) {
           const reason = `RISK_REJECTED:${risk.reasons.join(",")}`.slice(0, 1000);
-          return handleResponseFailure(session, actor, turn, userMessage, issueKey, analysis, history, reason, Boolean(order), analysis.trace);
+          return handleResponseFailure(session, turn, userMessage, issueKey, analysis, reason, analysis.trace, input.message);
         }
         result = await repository.commitAiTurn(sessionId, asNumber(turn.epoch), asNumber(userMessage.sequence), {
           text: draft.text, product_ids: draft.productIds,
@@ -357,10 +338,10 @@ export function createChatbotService({ repository, model = createLLMService(), i
         }, current.map((source) => ({ kind: source.kind, id: source.recordId, version: source.version, approved: source.approved, snapshot: source.snapshot })));
       } catch (error: unknown) {
         const failureTrace = error instanceof Error && "trace" in error && Array.isArray(error.trace) ? error.trace : [];
-        return handleResponseFailure(session, actor, turn, userMessage, issueKey, analysis, history, "RESPONSE_CHECK_UNAVAILABLE", Boolean(order), [...(analysis.trace || []), ...failureTrace]);
+        return handleResponseFailure(session, turn, userMessage, issueKey, analysis, "RESPONSE_CHECK_UNAVAILABLE", [...(analysis.trace || []), ...failureTrace], input.message);
       }
-      if (asString(result.reason) === "SOURCE_STALE") return handleResponseFailure(session, actor, turn, userMessage, issueKey, analysis, history, "SOURCE_STALE", Boolean(order), analysis.trace || []);
-      if (asString(result.reason) === "L2_ATTEMPTS_EXHAUSTED") return escalate(session, actor, userMessage, analysis, history, "L2_ATTEMPTS_EXHAUSTED", Boolean(order));
+      if (asString(result.reason) === "SOURCE_STALE") return handleResponseFailure(session, turn, userMessage, issueKey, analysis, "SOURCE_STALE", analysis.trace || [], input.message);
+      if (asString(result.reason) === "L2_ATTEMPTS_EXHAUSTED") return commitFailureFallback(session, turn, userMessage, issueKey, analysis, analysis.trace || [], input.message);
       if (result.sent === true && analysis.level === "L2") await enqueueChatReport(sessionId, "l2");
       return transcript(isJsonObject(result.session) ? result.session : await repository.getSession(sessionId) || session);
     },
@@ -568,8 +549,8 @@ async function refreshSources(repository: ChatbotRepository, sources: ChatSource
   return sources;
 }
 function productSource(product: JsonObject): ChatSource {
-  const snapshot = { base_price: product.base_price, sale_price: product.sale_price, variants: availableVariants(product) };
-  return { id: `product:${product.product_id}`, kind: "product", recordId: asString(product.product_id), version: asString(product.updated_at), approved: false, content: JSON.stringify({ name: product.name, description: asString(product.description).slice(0, 300), ...snapshot }), snapshot };
+  const snapshot = { name: product.name, base_price: product.base_price, sale_price: product.sale_price, variants: availableVariants(product) };
+  return { id: `product:${product.product_id}`, kind: "product", recordId: asString(product.product_id), version: asString(product.updated_at), approved: false, content: JSON.stringify({ ...snapshot, description: asString(product.description).slice(0, 300) }), snapshot };
 }
 function availableVariants(product: JsonObject): JsonObject[] {
   return (Array.isArray(product.variants) ? product.variants.filter(isJsonObject) : []).filter((variant) => asNumber(variant.stock_quantity) - asNumber(variant.reserved_quantity) > 0).map((variant) => ({ variant_id: variant.variant_id, size: variant.size, color: variant.color, stock_quantity: variant.stock_quantity, reserved_quantity: variant.reserved_quantity })).sort((a, b) => asString(a.variant_id).localeCompare(asString(b.variant_id)));
@@ -578,13 +559,14 @@ function formatProductCard(product: JsonObject): JsonObject {
   const variants = availableVariants(product).map((variant) => ({ ...variant, stock_quantity: asNumber(variant.stock_quantity) - asNumber(variant.reserved_quantity) }));
   return { product_id: product.product_id, name: product.name, image_url: Array.isArray(product.images) ? product.images[0] : "", base_price: product.base_price, sale_price: product.sale_price, price: product.sale_price ?? product.base_price, detail_url: `/products/${product.product_id}`, variant: variants[0] || null, variants };
 }
-function publicMessage(message: JsonObject, staff = false): JsonObject {
+function publicMessage(message: JsonObject, staff = false, ownerOriginal = ""): JsonObject {
   const metadata = asJsonObject(message.metadata);
   const pending = message.moderation_status === "pending";
+  const authorCopy = !staff && message.sender === "user" && Boolean(ownerOriginal);
   return {
     message_id: message.message_id, session_id: message.session_id,
     sender: message.sender, sequence: message.sequence, created_at: message.created_at,
-    text: pending ? "[Đang lọc nội dung để bảo vệ cuộc trò chuyện]" : asString(message.text),
+    text: authorCopy ? ownerOriginal : pending ? "[Đang lọc nội dung để bảo vệ cuộc trò chuyện]" : asString(message.text),
     product_ids: message.product_ids, moderation_status: message.moderation_status,
     metadata: {
       system: metadata.system === true,
@@ -594,6 +576,7 @@ function publicMessage(message: JsonObject, staff = false): JsonObject {
       approach: metadata.approach, source_ids: metadata.source_ids,
       risk: metadata.risk, otp_required: metadata.otp_required,
       moderated: message.moderation_status === "restricted",
+      author_copy: authorCopy,
       ...(staff ? {
         ...(isJsonObject(metadata.classification) && typeof metadata.classification.level === "string"
           ? { classification: metadata.classification }
@@ -656,9 +639,6 @@ async function requireOwnedSession(repository: ChatbotRepository, sessionId: str
 }
 function requireSupportAdmin(context: AuthContext | undefined): asserts context is AuthContext {
   if (!context?.authUser?.id || !context.isAdmin || context.profile?.is_active !== true || !CHAT_SUPPORT_ROLES.includes(context.roleCode)) throw new HttpError(403, "RBAC_DENIED", "Active CSKH staff access required");
-}
-function humanAnalysis(): ChatAnalysis {
-  return { intent: "human", level: "L3", issue: "general", context: { issueKey: "human_request", problem: "Cần nhân viên hỗ trợ", wanted: "Nhân viên CSKH hỗ trợ", failedApproaches: [], compromiseFailed: false, authorityExceeded: false }, sentiment: "neutral", risk: "green", moderation: "none", filtered: { text: "Cần nhân viên hỗ trợ", problem: "Cần nhân viên hỗ trợ", wanted: "Nhân viên CSKH hỗ trợ", failedApproaches: [] }, confidence: 0, reasons: ["monitoring_unavailable"] };
 }
 function requireUuid(value: unknown, field: string): void {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(asString(value))) throw new HttpError(422, "VALIDATION_ERROR", `${field} must be a UUID`);

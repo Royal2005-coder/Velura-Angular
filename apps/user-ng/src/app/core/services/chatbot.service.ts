@@ -7,7 +7,7 @@ import { guestSessionId } from '../utils/guest-session';
 
 /** Server-owned conversation routing; every non-AI state suppresses new AI output. */
 export type ChatHandoffStatus = 'ai' | 'requested' | 'assigned' | 'closed';
-/** Public filtered turn; pending text and attachments are not publishable transcript content. */
+/** Public turn; only the owning customer may receive their exact quarantined author copy. */
 export interface ChatMessage {
   message_id: string;
   session_id?: string;
@@ -20,6 +20,8 @@ export interface ChatMessage {
     local_greeting?: boolean;
     /** Browser-only author copy shown while the server moderates this exact outbound turn. */
     local_pending?: boolean;
+    /** Server-authorized copy of this customer's own quarantined text. */
+    author_copy?: boolean;
     typing?: boolean;
     error?: boolean;
     product_ids?: string[];
@@ -98,7 +100,6 @@ export interface ChatSendResponse {
 const GUEST_ID_KEY = 'velura_chat_guest_id';
 const SESSION_ID_KEY = 'velura_chat_session_id';
 const SESSION_OWNER_KEY = 'velura_chat_session_owner';
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Chat model. Talks to the original `/api/v1/chat` contract used by port 3002.
@@ -109,6 +110,8 @@ export class ChatbotService {
   readonly activeHandoff = signal<ChatHandoffStatus>('ai');
   readonly activeSession = signal('');
   private readonly auth = inject(AuthService);
+  private readonly pageGuestId = crypto.randomUUID();
+  private guestSessionId = '';
   constructor() {
     // Guest chat identity/session must not outlive this browser tab. sessionStorage
     // alone doesn't guarantee that: it survives reloads by design, and browsers copy
@@ -234,23 +237,17 @@ export class ChatbotService {
     return this.api.delete(`/api/v1/chat/${encodeURIComponent(sessionId)}`, { guestId });
   }
 
-  /**
-   * Keeps the anonymous chat owner only for this browser tab.
-   */
+  /** Keeps an anonymous owner only in this page instance, so reload and a new tab start fresh. */
   guestId(): string {
-    const existing = sessionStorage.getItem(GUEST_ID_KEY);
-    if (existing && UUID_RE.test(existing)) {
-      return existing;
-    }
-    const created = crypto.randomUUID();
-    sessionStorage.setItem(GUEST_ID_KEY, created);
-    return created;
+    return this.pageGuestId;
   }
 
-  /**
-   * Persists the active session id only inside the current tab.
-   */
+  /** Keeps guest sessions in memory; only signed-in members may resume from session storage. */
   saveSessionId(sessionId: string): void {
+    if (!this.auth.session()) {
+      this.guestSessionId = sessionId;
+      return;
+    }
     if (sessionId) {
       sessionStorage.setItem(SESSION_ID_KEY, sessionId);
       sessionStorage.setItem(SESSION_OWNER_KEY, this.ownerKey());
@@ -262,6 +259,7 @@ export class ChatbotService {
 
   /** Resumes only the session saved by the current member or guest identity; API rechecks ownership. */
   savedSessionId(): string {
+    if (!this.auth.session()) return this.guestSessionId;
     return sessionStorage.getItem(SESSION_OWNER_KEY) === this.ownerKey() ? sessionStorage.getItem(SESSION_ID_KEY) || '' : '';
   }
 
@@ -273,6 +271,7 @@ export class ChatbotService {
    * Clears the current session so a new chat starts like vanilla `initChatbot`.
    */
   clearSessionId(): void {
+    this.guestSessionId = '';
     sessionStorage.removeItem(SESSION_ID_KEY);
     sessionStorage.removeItem(SESSION_OWNER_KEY);
   }

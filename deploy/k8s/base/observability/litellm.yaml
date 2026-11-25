@@ -61,6 +61,11 @@ spec:
             secretKeyRef:
               name: litellm-credentials
               key: provider-api-key
+        - name: GEMINI_API_KEY_2
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: provider-api-key-2
         - name: LITELLM_MASTER_KEY
           valueFrom:
             secretKeyRef:

@@ -163,55 +163,55 @@ model_list:
       rpm: 10
   - model_name: gemini-3.5-flash-lite
     litellm_params:
-      model: os.environ/LITELLM_TEXT_MODEL
+      model: gemini/gemini-3.5-flash
       api_key: os.environ/GEMINI_API_KEY
       rpm: 60
       tpm: 60000
   - model_name: gemini-3.5-flash-lite
     litellm_params:
-      model: os.environ/LITELLM_TEXT_MODEL
+      model: gemini/gemini-3.5-flash
       api_key: os.environ/GEMINI_API_KEY_2
       rpm: 60
       tpm: 60000
   - model_name: gemini-3.5-flash-lite
     litellm_params:
-      model: os.environ/LITELLM_TEXT_MODEL
+      model: gemini/gemini-3.5-flash
       api_key: os.environ/GEMINI_API_KEY_3
       rpm: 60
       tpm: 60000
   - model_name: gemini-3.5-flash-lite
     litellm_params:
-      model: os.environ/LITELLM_TEXT_MODEL
+      model: gemini/gemini-3.5-flash
       api_key: os.environ/GEMINI_API_KEY_4
       rpm: 60
       tpm: 60000
   - model_name: gemini-3.5-flash-lite
     litellm_params:
-      model: os.environ/LITELLM_TEXT_MODEL
+      model: gemini/gemini-3.5-flash
       api_key: os.environ/GEMINI_API_KEY_5
       rpm: 60
       tpm: 60000
   - model_name: gemini-3.5-flash-lite
     litellm_params:
-      model: os.environ/LITELLM_TEXT_MODEL
+      model: gemini/gemini-3.5-flash
       api_key: os.environ/GEMINI_API_KEY_6
       rpm: 60
       tpm: 60000
   - model_name: gemini-3.5-flash-lite
     litellm_params:
-      model: os.environ/LITELLM_TEXT_MODEL
+      model: gemini/gemini-3.5-flash
       api_key: os.environ/GEMINI_API_KEY_7
       rpm: 60
       tpm: 60000
   - model_name: gemini-3.5-flash-lite
     litellm_params:
-      model: os.environ/LITELLM_TEXT_MODEL
+      model: gemini/gemini-3.5-flash
       api_key: os.environ/GEMINI_API_KEY_8
       rpm: 60
       tpm: 60000
   - model_name: gemini-3.5-flash-lite
     litellm_params:
-      model: os.environ/LITELLM_TEXT_MODEL
+      model: gemini/gemini-3.5-flash
       api_key: os.environ/GEMINI_API_KEY_9
       rpm: 60
       tpm: 60000
@@ -390,9 +390,5 @@ litellm_settings:
   telemetry: false
   request_timeout: 60
   num_retries: 4
-  fallbacks:
-    - commerce-text: [gemini-3-flash-preview, gemini-3.5-flash]
-    - gemini-3.5-flash-lite: [gemini-3-flash-preview, gemini-3.5-flash]
-    - ministral-8b-latest: [commerce-text, gemini-3-flash-preview]
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

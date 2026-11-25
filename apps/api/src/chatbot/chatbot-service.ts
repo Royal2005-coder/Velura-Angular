@@ -534,7 +534,7 @@ export async function loadSources(repository: ChatbotRepository, analysis: ChatA
     sources.push({ id: `policy:${policy.policy_id}`, kind: "policy", recordId: asString(policy.policy_id), version: asString(policy.updated_at), approved: approvals.some((approval) => approval.policy_id === policy.policy_id && approval.source_updated_at === policy.updated_at), content: JSON.stringify({ title: policy.title, summary: policy.summary, content: policy.content }), snapshot: { updated_at: policy.updated_at } });
   }
   if (analysis.level === "L1") {
-    const candidates = (await repository.searchProducts(query, 6)).rows || [];
+    const candidates = (await repository.searchProducts(query, 12)).rows || [];
     const products = (await repository.listProductsByIds(candidates.map((row) => row.product_id))).rows || [];
     for (const product of products.filter((row) => availableVariants(row).length)) sources.push(productSource(product));
   }
@@ -575,8 +575,8 @@ function availableVariants(product: JsonObject): JsonObject[] {
   return (Array.isArray(product.variants) ? product.variants.filter(isJsonObject) : []).filter((variant) => asNumber(variant.stock_quantity) - asNumber(variant.reserved_quantity) > 0).map((variant) => ({ variant_id: variant.variant_id, size: variant.size, color: variant.color, stock_quantity: variant.stock_quantity, reserved_quantity: variant.reserved_quantity })).sort((a, b) => asString(a.variant_id).localeCompare(asString(b.variant_id)));
 }
 function formatProductCard(product: JsonObject): JsonObject {
-  const variant = availableVariants(product)[0] || null;
-  return { product_id: product.product_id, name: product.name, image_url: Array.isArray(product.images) ? product.images[0] : "", base_price: product.base_price, sale_price: product.sale_price, price: product.sale_price ?? product.base_price, detail_url: `/products/${product.product_id}`, variant: variant ? { ...variant, stock_quantity: asNumber(variant.stock_quantity) - asNumber(variant.reserved_quantity) } : null };
+  const variants = availableVariants(product).map((variant) => ({ ...variant, stock_quantity: asNumber(variant.stock_quantity) - asNumber(variant.reserved_quantity) }));
+  return { product_id: product.product_id, name: product.name, image_url: Array.isArray(product.images) ? product.images[0] : "", base_price: product.base_price, sale_price: product.sale_price, price: product.sale_price ?? product.base_price, detail_url: `/products/${product.product_id}`, variant: variants[0] || null, variants };
 }
 function publicMessage(message: JsonObject, staff = false): JsonObject {
   const metadata = asJsonObject(message.metadata);
@@ -637,8 +637,12 @@ function publicSession(session: JsonObject, staff = false): JsonObject {
   };
 }
 function resolveChatActor(context: AuthContext | undefined, input: { guestId?: unknown; guest_id?: unknown }): ChatActor {
-  if (context?.profile) {
-    if (!context.authUser?.id || context.profile.is_active !== true || context.profile.role === "guest") throw new HttpError(403, "ACCOUNT_ACCESS_DENIED", "Account is not active");
+  if (context?.authUser?.id) {
+    // A verified bearer token with no profile means profile loading failed (RLS/service
+    // credential outage), not that the signed-in member is a guest; never fall through to
+    // the guestId path for them, which would always 422 since authenticated clients send none.
+    if (!context.profile) throw new HttpError(503, "PROFILE_UNAVAILABLE", "Không tải được hồ sơ, vui lòng thử lại");
+    if (context.profile.is_active !== true || context.profile.role === "guest") throw new HttpError(403, "ACCOUNT_ACCESS_DENIED", "Account is not active");
     return { authUserId: context.authUser.id, profileUserId: context.profile.user_id, guestId: null };
   }
   const guestId = asString(input.guestId || input.guest_id); requireUuid(guestId, "guestId");

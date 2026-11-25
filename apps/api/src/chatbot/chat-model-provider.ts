@@ -32,12 +32,19 @@ export async function requestChatJson(provider: "mistral" | "gemini", model: str
   if (!candidates.length) throw new ChatModelError("CHAT_PROVIDER_UNVERIFIED", []);
   const traces: ChatModelTrace[] = [];
   for (const candidate of candidates) {
-    try {
-      return await attemptChatJson(candidate.provider, candidate.model, operation, prompt);
-    } catch (error) {
-      if (error instanceof ChatModelError) traces.push(...error.trace);
+    // One short-backoff retry per candidate before moving on: a single transient
+    // provider hiccup (upstream 5xx, truncated stream, timeout) must not look the
+    // same as "every candidate is genuinely unavailable" to the caller.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await attemptChatJson(candidate.provider, candidate.model, operation, prompt);
+      } catch (error) {
+        if (error instanceof ChatModelError) traces.push(...error.trace);
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 300));
+      }
     }
   }
+  console.error("chat_provider_exhausted", { operation, candidates, traces });
   throw new ChatModelError("CHAT_PROVIDER_UNVERIFIED", traces);
 }
 

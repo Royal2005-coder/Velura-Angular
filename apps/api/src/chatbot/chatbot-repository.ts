@@ -231,9 +231,9 @@ export function createChatbotRepository() {
     },
 
     async createSession(input: CreateSessionInput) {
-      return withChatError(async () => normalizeSessionRow(await insertRow("chat_session", {
+      const row = (userId: string | null) => ({
         session_id: randomUUID(),
-        user_id: input.authUserId || null,
+        user_id: userId,
         profile_user_id: input.profileUserId || null,
         guest_id: input.guestId || null,
         title: input.title,
@@ -243,7 +243,18 @@ export function createChatbotRepository() {
         last_message_preview: input.lastMessagePreview || null,
         last_message_at: new Date().toISOString(),
         metadata: input.metadata || {}
-      }))!);
+      });
+      try {
+        return (await withChatError(async () => normalizeSessionRow(await insertRow("chat_session", row(input.authUserId || null)))))!;
+      } catch (error) {
+        // Legacy accounts predating the auth project have a profile row with no matching
+        // auth.users row; ownership still comes from profile_user_id, so drop the redundant
+        // auth user_id link instead of failing the whole session on this stale-data FK.
+        if (input.authUserId && isMissingAuthUserFk(error)) {
+          return (await withChatError(async () => normalizeSessionRow(await insertRow("chat_session", row(null)))))!;
+        }
+        throw error;
+      }
     },
 
 
@@ -479,6 +490,12 @@ async function withChatError<T>(operation: () => Promise<T>): Promise<T> {
     }
     throw error;
   }
+}
+
+function isMissingAuthUserFk(error: unknown): boolean {
+  if (!(error instanceof HttpError)) return false;
+  const details = asJsonObject(error.details);
+  return `${asString(details.message)} ${asString(details.details)} ${error.code}`.includes("chat_session_user_id_fkey");
 }
 
 function chatbotErrorMessage(code: string): string {

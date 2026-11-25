@@ -110,6 +110,16 @@ export class ChatbotService {
   readonly activeSession = signal('');
   private readonly auth = inject(AuthService);
   constructor() {
+    // Guest chat identity/session must not outlive this browser tab. sessionStorage
+    // alone doesn't guarantee that: it survives reloads by design, and browsers copy
+    // it into tabs opened via duplicate/reopen-closed-tab. So on every real page load
+    // (this service is a root singleton constructed once per load) we drop any saved
+    // guest identity unless a member is logged in, forcing a fresh guestId per load.
+    if (typeof sessionStorage !== 'undefined' && !this.auth.session()) {
+      sessionStorage.removeItem(GUEST_ID_KEY);
+      sessionStorage.removeItem(SESSION_ID_KEY);
+      sessionStorage.removeItem(SESSION_OWNER_KEY);
+    }
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(GUEST_ID_KEY);
       localStorage.removeItem(SESSION_ID_KEY);

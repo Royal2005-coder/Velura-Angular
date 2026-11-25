@@ -163,17 +163,18 @@ export class ChatbotPage {
           }
           const staleRouting = this.handoffStatus() !== 'ai' && data.session?.handoff_status === 'ai';
           this.loading.set(false);
-          this.pendingUserMessage = null;
           if (!staleRouting) this.adoptTranscript(data);
           if (staleRouting) this.refreshMessages();
+          this.pendingUserMessage = null;
           this.refreshSessions();
           this.scrollToBottom();
         },
         error: () => {
           if (generation !== this.generation || identity !== this.auth.session()) return;
           this.transcriptEpoch++;
-          this.pendingUserMessage = null;
-          this.messages.update(rows => rows.filter(row => row.message_id !== 'typing' && row.message_id !== userMessage.message_id));
+          this.messages.update(rows => rows
+            .filter(row => row.message_id !== 'typing')
+            .map(row => row.message_id === userMessage.message_id ? { ...row, metadata: { ...row.metadata, error: true } } : row));
           this.draft.set(message);
           this.chatError.set('Chưa gửi được tin nhắn. Vui lòng thử lại hoặc liên hệ CSKH.');
           this.loading.set(false);
@@ -295,6 +296,7 @@ export class ChatbotPage {
     this.rememberProducts(data.products || []);
     this.rememberBlogs(data.blogs || []);
     const rows = (data.messages || []).filter(message => !message.session_id || message.session_id === this.sessionId()).map<ChatMessage>(message => {
+      if (message.sender === 'user' && message.metadata?.author_copy) return message;
       if (message.moderation_status !== 'pending' && message.moderation_status !== 'restricted') return message;
       if (message.moderation_status === 'pending' && message.sender === 'user' && this.pendingUserMessage) {
         return {

@@ -1,5 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { UserSession } from '../models/user-session.interface';
+import { clearOAuthReturnUrl } from '../utils/auth-return-url';
 import { rotateGuestSession } from '../utils/guest-session';
 
 const GUEST_STYLE_QUIZ_WELCOME_SEEN_KEY = 'velura_guest_style_quiz_welcome_seen';
@@ -113,12 +114,18 @@ export class AuthService {
    * Clears the persisted user session and leftover OAuth/storage keys.
    */
   signOut(): void {
-    localStorage.removeItem('velura_token');
-    localStorage.removeItem('velura_user');
-    localStorage.removeItem('velura-user-oauth-pkce-code-verifier');
-    localStorage.removeItem('velura-oauth-pkce-code-verifier');
-    sessionStorage.removeItem('velura_token');
-    sessionStorage.removeItem('velura_user');
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('velura_token');
+      localStorage.removeItem('velura_user');
+      localStorage.removeItem('velura-user-oauth-pkce-code-verifier');
+      localStorage.removeItem('velura-oauth-pkce-code-verifier');
+      localStorage.removeItem('velura-user-oauth-state');
+    }
+    clearOAuthReturnUrl();
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('velura_token');
+      sessionStorage.removeItem('velura_user');
+    }
     rotateGuestSession();
     this.sessionState.set(null);
   }

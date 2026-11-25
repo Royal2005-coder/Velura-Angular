@@ -54,7 +54,7 @@ describe('ChatbotPage', () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it('keeps the author optimistic text visible and removes it when sending fails', async () => {
+  it('keeps the author optimistic text visible when sending fails', async () => {
     const page = await createStorefrontPage(ChatbotPage);
     const response = new Subject<ChatSendResponse>();
     vi.spyOn(TestBed.inject(ChatbotService), 'sendMessage').mockReturnValue(response);
@@ -62,7 +62,7 @@ describe('ChatbotPage', () => {
     expect(page.messages().some(message => message.text.includes('raw private draft') && message.metadata?.local_pending)).toBe(true);
     expect(page.messages().some(message => message.moderation_status === 'pending')).toBe(true);
     response.error(new Error('unavailable'));
-    expect(page.messages().some(message => message.moderation_status === 'pending')).toBe(false);
+    expect(page.messages().some(message => message.text === 'raw private draft' && message.metadata?.error)).toBe(true);
     expect(page.draft()).toBe('raw private draft');
   });
 
@@ -129,6 +129,14 @@ describe('ChatbotPage', () => {
     const fixture = lastStorefrontFixture(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).not.toContain('raw sensitive text');
     expect(fixture.nativeElement.querySelector('.chatbot-message__attachment')).toBeNull();
+  });
+
+  it('renders the exact server-authorized author copy while moderation runs', async () => {
+    const page = await createStorefrontPage(ChatbotPage);
+    page.messages.set([{ message_id: 'pending', sender: 'user', text: 'Phối đồ công sở thanh lịch', created_at: '', moderation_status: 'pending', metadata: { author_copy: true } }]);
+    const fixture = lastStorefrontFixture(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Phối đồ công sở thanh lịch');
+    expect(fixture.nativeElement.textContent).not.toContain('Tin nhắn đang được xử lý');
   });
 
   it('adopts the server-linked case ID when reopening outside the same-case window', async () => {

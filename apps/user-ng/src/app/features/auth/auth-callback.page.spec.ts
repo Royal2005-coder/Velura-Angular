@@ -1,4 +1,5 @@
 import { createStorefrontPage } from '../../../testing/storefront-testing';
+import { of } from 'rxjs';
 import { AuthCallbackPage } from './auth-callback.page';
 
 describe('AuthCallbackPage', () => {
@@ -104,10 +105,53 @@ describe('AuthCallbackPage', () => {
     expect(page.errorMessage()).toContain('Đăng nhập Google chưa được bật');
   });
 
-  it('accepts direct access token returned in hash fragment', async () => {
-    window.history.replaceState({}, '', '/auth/callback#access_token=mock-access-token&token_type=bearer');
+  it('rejects unsolicited #access_token without matching stored state (Login-CSRF guard)', async () => {
+    window.history.replaceState({}, '', '/auth/callback#access_token=attacker-token&token_type=bearer');
     const page = await createStorefrontPage(AuthCallbackPage);
-    expect(page).toBeTruthy();
-    expect(page.errorMessage()).not.toBe('Không tìm thấy mã xác thực trong URL.');
+    expect(page.title()).toBe('Xác thực thất bại');
+    expect(page.technicalCode()).toBe('STATE_MISMATCH');
+  });
+
+  it('accepts direct access token with matching state and consumes stored OAuth returnUrl', async () => {
+    const postSpy = vi.fn().mockReturnValue(of({ token: 'member-jwt', user: { user_id: 'u1' } }));
+    window.history.replaceState({}, '', '/auth/callback#access_token=mock-access-token&state=state-123&token_type=bearer');
+    const routes = [{ path: 'products/:id', component: class {} }];
+    const page = await createStorefrontPage(
+      AuthCallbackPage,
+      { post: postSpy },
+      {
+        routes,
+        localStorageSeed: {
+          'velura-user-oauth-state': 'state-123',
+          'velura-user-oauth-return-url': JSON.stringify({ url: '/products/p1?variant=v1&vto=1', expiresAt: Date.now() + 60000 }),
+        },
+      },
+    );
+    expect(page.errorMessage()).toBeNull();
+    expect(localStorage.getItem('velura-user-oauth-return-url')).toBeNull();
+  });
+
+  it('exchanges PKCE code and preserves returnUrl navigation on success', async () => {
+    const postSpy = vi.fn().mockImplementation((path: string) =>
+      path === '/api/auth/pkce'
+        ? of({ token: 'sb-jwt' })
+        : of({ token: 'member-jwt', user: { user_id: 'u1' } }),
+    );
+    window.history.replaceState({}, '', '/auth/callback?code=pkce-code-1');
+    const routes = [{ path: 'products/:id', component: class {} }];
+    const page = await createStorefrontPage(
+      AuthCallbackPage,
+      { post: postSpy },
+      {
+        routes,
+        localStorageSeed: {
+          'velura-user-oauth-pkce-code-verifier': 'verifier-1',
+          'velura-user-oauth-return-url': JSON.stringify({ url: '/products/p1?variant=v2&vto=1', expiresAt: Date.now() + 60000 }),
+        },
+      },
+    );
+    expect(page.errorMessage()).toBeNull();
+    expect(postSpy).toHaveBeenCalledWith('/api/auth/pkce', expect.objectContaining({ auth_code: 'pkce-code-1', code_verifier: 'verifier-1' }));
+    expect(localStorage.getItem('velura-user-oauth-return-url')).toBeNull();
   });
 });

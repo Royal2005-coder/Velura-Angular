@@ -80,4 +80,40 @@ test("admin lock_type blocks OTP/reset self-reactivation until an admin unlocks"
     () => assertAccountNotLocked({ lock_type: "temporary" }),
     (error: unknown) => error instanceof HttpError && error.status === 423
   );
+  assert.throws(
+    () => assertAccountNotLocked({ lock_type: "temporary", lock_reason: "Vi pham spam don hang", locked_until: "2026-12-01T00:00:00Z" }),
+    (error: unknown) =>
+      error instanceof HttpError &&
+      error.status === 423 &&
+      error.code === "ACCOUNT_LOCKED" &&
+      error.message.includes("Vi pham spam don hang") &&
+      (error.details as Record<string, unknown>)?.["lock_type"] === "temporary"
+  );
+});
+
+test("KAN-122: active sessions enforce lock_type via profile select, rbac, and requireUserAuth", async () => {
+  const [{ AUTH_PROFILE_SELECT }, { requireUserAuth }, rbacSource] = await Promise.all([
+    import("../../apps/api/src/auth-profile.js"),
+    import("../../apps/api/src/user/auth.js"),
+    readFile(path.join(ROOT, "apps/api/src/rbac.ts"), "utf8")
+  ]);
+  assert.match(AUTH_PROFILE_SELECT, /\block_type\b/);
+  assert.match(AUTH_PROFILE_SELECT, /\blocked_until\b/);
+  assert.match(AUTH_PROFILE_SELECT, /\block_reason\b/);
+  assert.match(rbacSource, /if \(!isSignOutRequest\(req\)\)/);
+  assert.match(rbacSource, /assertAccountNotLocked\(profile\)/);
+  assert.throws(
+    () =>
+      requireUserAuth({
+        authUser: { id: "u-locked", email: "locked@velura.vn" },
+        profile: { user_id: "u-locked", role: "member", is_active: false, lock_type: "permanent", lock_reason: "Gian lan" },
+        roleCode: "member",
+        roleName: "Member",
+        isAdmin: false,
+        allowedPages: [],
+        allowedModules: [],
+        accessToken: "tok"
+      }),
+    (error: unknown) => error instanceof HttpError && error.status === 423 && error.code === "ACCOUNT_LOCKED" && error.message.includes("Gian lan")
+  );
 });

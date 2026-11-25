@@ -4,6 +4,7 @@ import { config, assertRuntimeConfig } from "./config.js";
 import { applyCors, applySecurityHeaders, getRequestIp, HttpError, parsePathname, readJson, sendError, sendJson, sendNoContent } from "./http.js";
 import { completeAdminPasswordSignIn, recordAdminSignOut, revokeAdminSession } from "./auth-signin.js";
 import { buildAuthContext, capabilitiesForRole, requireAdmin, requireAuthenticated, requirePermission } from "./rbac.js";
+import { validatedOAuthRedirect } from "./user/oauth-redirect.js";
 import { buildDashboardSummary } from "./dashboard.js";
 import { handleDashboardRoute } from "./dashboard-router.js";
 import { handleDashboardSlaRoute } from "./features/dashboard/dashboard.routes.js";
@@ -317,6 +318,18 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 
     if (req.method === "POST" && parts[1] === "auth" && parts[2] === "pkce") {
       const body = await readJson(req);
+      const authCode = typeof body.auth_code === "string" ? body.auth_code.trim() : "";
+      const codeVerifier = typeof body.code_verifier === "string" ? body.code_verifier.trim() : "";
+      if (!authCode || !codeVerifier) {
+        throw new HttpError(400, "BAD_REQUEST", "Thiếu mã xác thực PKCE hợp lệ");
+      }
+      let normalizedRedirectUri: string | undefined;
+      if (body.redirect_uri !== undefined && body.redirect_uri !== null && String(body.redirect_uri).trim() !== "") {
+        if (typeof body.redirect_uri !== "string") {
+          throw new HttpError(400, "BAD_REQUEST", "OAuth redirect_uri không hợp lệ");
+        }
+        normalizedRedirectUri = validatedOAuthRedirect(body.redirect_uri.trim());
+      }
       const response = await fetch(`${config.supabaseUrl}/auth/v1/token?grant_type=pkce`, {
         method: "POST",
         headers: {
@@ -325,9 +338,9 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
           "content-type": "application/json"
         },
         body: JSON.stringify({
-          auth_code: body.auth_code,
-          code_verifier: body.code_verifier,
-          redirect_uri: body.redirect_uri
+          auth_code: authCode,
+          code_verifier: codeVerifier,
+          ...(normalizedRedirectUri ? { redirect_uri: normalizedRedirectUri } : {})
         })
       });
       const payload = asJsonObject(await response.json().catch(() => ({})));
@@ -595,33 +608,6 @@ if (process.env.VERCEL !== "1") {
   server.listen(config.port, () => {
     console.log(`Velura API listening on http://localhost:${config.port}`);
   });
-}
-
-function validatedOAuthRedirect(raw: string): string {
-  let target: URL;
-  try {
-    target = new URL(raw);
-  } catch {
-    throw new HttpError(400, "BAD_REQUEST", "OAuth redirect must be an absolute URL");
-  }
-  const isKnownOrigin =
-    config.corsOrigins.includes(target.origin) ||
-    [
-      "https://velura.royalai.dev",
-      "https://admin-erp.royalai.dev",
-      "https://admin.royalai.dev",
-    ].includes(target.origin) ||
-    (config.nodeEnv !== "production" &&
-      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(target.origin));
-
-  if (!isKnownOrigin || target.pathname !== "/auth/callback") {
-    throw new HttpError(
-      400,
-      "BAD_REQUEST",
-      `OAuth redirect origin '${target.origin}' is not allowed or path is not /auth/callback`
-    );
-  }
-  return target.toString();
 }
 
 export default handleApiRequest;

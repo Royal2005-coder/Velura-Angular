@@ -70,6 +70,10 @@ interface ApiOrderItem {
   unit_price?: number;
   return_count?: number;
   available_quantity?: number;
+  held_quantity?: number;
+  refunded_quantity?: number;
+  exhausted_quantity?: number;
+  exchanged_once_quantity?: number;
   is_combo?: boolean;
   is_in_progress?: boolean;
   in_progress_return_code?: string | null;
@@ -93,6 +97,13 @@ interface ApiOrder {
   refunded_amount?: number;
   can_cancel?: boolean;
   can_request_return?: boolean;
+  return_window_open?: boolean;
+  return_window_ends_at?: string | null;
+  order_kind?: string;
+  source_return_id?: string | null;
+  source_order_id?: string | null;
+  source_order_code?: string | null;
+  is_exchange_replacement?: boolean;
   can_pay_again?: boolean;
   subtotal?: number;
   shipping_fee?: number;
@@ -286,6 +297,10 @@ function mapOrderItem(item: ApiOrderItem): DemoOrderLine {
     unit_price: item.unit_price || 0,
     returnCount: item.return_count ?? 0,
     availableQuantity: item.available_quantity ?? item.quantity ?? 0,
+    heldQuantity: item.held_quantity,
+    refundedQuantity: item.refunded_quantity,
+    exhaustedQuantity: item.exhausted_quantity,
+    exchangedOnceQuantity: item.exchanged_once_quantity,
     itemId: item.item_id,
     is_combo: Boolean(item.is_combo || /combo/i.test(item.product_name || '') || /set\s+/i.test(item.product_name || '')),
     isInProgress: Boolean(item.is_in_progress),
@@ -333,6 +348,13 @@ function mapOrder(order: ApiOrder, member: boolean, userId: string | null): Demo
     refundedAmount: typeof order.refunded_amount === 'number' && Number.isFinite(order.refunded_amount) ? order.refunded_amount : undefined,
     can_cancel: order.can_cancel,
     can_request_return: order.can_request_return,
+    return_window_open: order.return_window_open,
+    return_window_ends_at: order.return_window_ends_at ?? null,
+    orderKind: order.order_kind,
+    sourceReturnId: order.source_return_id ?? null,
+    sourceOrderId: order.source_order_id ?? null,
+    sourceOrderCode: order.source_order_code ?? null,
+    isExchangeReplacement: Boolean(order.is_exchange_replacement || order.order_kind === 'exchange'),
     can_pay_again: order.can_pay_again,
   };
 }

@@ -102,6 +102,10 @@ metadata:
   name: supabase-cloud-sync
   namespace: database
 spec:
+  # Suspended: Velura runs directly on Supabase Cloud without local DB replication.
+  # Running full-table SELECT * on 41 tables without updated_at every 5 min burns ~1.2-2 GB/day
+  # of Supabase Cloud egress quota (triggering 402 exceed_egress_quota).
+  suspend: true
   schedule: "*/5 * * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 2

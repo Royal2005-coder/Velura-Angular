@@ -44,6 +44,8 @@ export class AiImageWorkbench {
   readonly productId = input<string>('');
   readonly variantId = input<string>('');
   readonly hideTrigger = input<boolean>(false);
+  /** Optional relative product URL (including `?variant=...&vto=1`) preserved through guest sign-in/sign-up links. */
+  readonly authReturnUrl = input<string | null>(null);
   /** Published products surviving the catalog's current filters; undefined leaves retrieval unrestricted. */
   readonly candidateProductIds = input<string[] | undefined>();
   readonly matches = output<string[]>();
@@ -61,6 +63,8 @@ export class AiImageWorkbench {
    * Other tasks are always offered.
    */
   readonly offered = signal(false);
+  /** Tracks whether the background capabilities check for the current product/variant has settled. */
+  readonly offerStatus = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
   /** Try-on uses personal photos stored per account, so only signed-in users may use it. */
   readonly memberRequired = computed(
     () => this.task() === 'virtual_try_on' && !this.auth.isLoggedIn(),
@@ -382,23 +386,32 @@ export class AiImageWorkbench {
      effect(() => {
        const task = this.task();
        const productId = this.productId();
-      const variantId = this.variantId();
+       const variantId = this.variantId();
        untracked(() => {
          if (task !== 'virtual_try_on') {
            this.offered.set(true);
+           this.offerStatus.set('ready');
            return;
          }
          this.offered.set(false);
-        if (!productId || !variantId) return;
-        const epoch = ++this.capabilitiesEpoch;
-        void firstValueFrom(this.model.capabilities(productId, variantId))
+         if (!productId || !variantId) {
+           this.offerStatus.set('idle');
+           return;
+         }
+         this.offerStatus.set('loading');
+         const epoch = ++this.capabilitiesEpoch;
+         void firstValueFrom(this.model.capabilities(productId, variantId))
            .then((caps) => {
-            if (epoch === this.capabilitiesEpoch && productId === this.productId() && variantId === this.variantId()) {
-              this.offered.set(caps.product_supported === true && caps.variant_supported === true);
-            }
+             if (epoch === this.capabilitiesEpoch && productId === this.productId() && variantId === this.variantId()) {
+               this.offered.set(caps.product_supported === true && caps.variant_supported === true);
+               this.offerStatus.set('ready');
+             }
            })
            .catch(() => {
-            if (epoch === this.capabilitiesEpoch) this.offered.set(false);
+             if (epoch === this.capabilitiesEpoch) {
+               this.offered.set(false);
+               this.offerStatus.set('error');
+             }
            });
        });
      });

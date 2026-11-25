@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { AuthService } from './auth.service';
 import { CartLine } from './cart.store';
+import { parseApiDate } from '../utils/date';
 import { isGuestPreview, isPreviewMode, isUserPreview } from '../utils/preview-mode';
 
 /** Frontend-only order states; never interpreted as a real payment or fulfillment. */
@@ -30,6 +31,10 @@ export interface DemoAddress {
 export interface DemoOrderLine extends CartLine {
   returnCount: number;
   availableQuantity: number;
+  heldQuantity?: number;
+  refundedQuantity?: number;
+  exhaustedQuantity?: number;
+  exchangedOnceQuantity?: number;
   /** Real backend order_item UUID, needed to submit a return for this line; unset in the demo. */
   itemId?: string;
   is_combo?: boolean;
@@ -71,6 +76,16 @@ export interface DemoOrder {
   can_cancel?: boolean;
   /** Production return entitlement is provided by the API, including the window and rules. */
   can_request_return?: boolean;
+  /** Server-authoritative 7-day time-window flag, independent of per-item eligibility/quota. */
+  return_window_open?: boolean;
+  /** Authoritative ISO-8601 UTC deadline for the 7-day return window. */
+  return_window_ends_at?: string | null;
+  /** Order classification (`sale` vs `exchange`) from the backend. */
+  orderKind?: string;
+  sourceReturnId?: string | null;
+  sourceOrderId?: string | null;
+  sourceOrderCode?: string | null;
+  isExchangeReplacement?: boolean;
   /** Backend controls whether an existing payment attempt may be reopened. */
   can_pay_again?: boolean;
 }
@@ -247,8 +262,10 @@ export function canCancel(order: DemoOrder): boolean {
 }
 /** Missing delivery dates fail closed; the inclusive window is seven elapsed days. */
 export function withinReturnWindow(order: DemoOrder, now = Date.now()): boolean {
-  const age = now - Date.parse(order.deliveredAt || '');
-  return order.status === 'delivered' && Number.isFinite(age) && age >= 0 && age <= 7 * 86400000;
+  const deliveredAt = parseApiDate(order.deliveredAt);
+  if (order.status !== 'delivered' || !deliveredAt) return false;
+  const age = now - deliveredAt.getTime();
+  return Number.isFinite(age) && age >= 0 && age <= 7 * 86400000;
 }
 /** Session-only simulation Model. No API mutations, authentication tokens or real bank data. */
 @Injectable({ providedIn: 'root' })

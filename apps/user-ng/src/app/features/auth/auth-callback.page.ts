@@ -4,6 +4,12 @@ import { environment } from '../../../environments/environment';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
+import {
+  clearOAuthReturnUrl,
+  consumeOAuthReturnUrl,
+  peekOAuthReturnUrl,
+  sanitizeReturnUrl,
+} from '../../core/utils/auth-return-url';
 
 const PKCE_STORAGE_KEY = 'velura-user-oauth-pkce-code-verifier';
 const STATE_STORAGE_KEY = 'velura-user-oauth-state';
@@ -63,7 +69,13 @@ function extractCallbackParams(): Map<string, string> {
               @if (canRetry()) {
                 <button type="button" class="btn-login" (click)="retryGoogle()">Thử lại bằng Google</button>
               }
-              <a class="btn-login btn-login--secondary" routerLink="/auth/signin" style="text-align: center; text-decoration: none;">Quay lại đăng nhập</a>
+              <a
+                class="btn-login btn-login--secondary"
+                routerLink="/auth/signin"
+                [queryParams]="retryReturnUrl() ? { returnUrl: retryReturnUrl() } : null"
+                (click)="onBackToSignIn()"
+                style="text-align: center; text-decoration: none;"
+              >Quay lại đăng nhập</a>
             </div>
           }
         </section>
@@ -77,6 +89,7 @@ export class AuthCallbackPage {
   private readonly wishlist = inject(WishlistStore);
   private readonly router = inject(Router);
 
+  readonly retryReturnUrl = signal<string | null>(peekOAuthReturnUrl());
   readonly title = signal('Đang xác thực với Google...');
   readonly detail = signal('Hệ thống đang kiểm tra danh tính thành viên.');
   readonly errorMessage = signal<string | null>(null);
@@ -102,8 +115,8 @@ export class AuthCallbackPage {
     const storedState = localStorage.getItem(STATE_STORAGE_KEY);
     const returnedState = params.get('state');
 
-    // GoTrue's PKCE redirect does not echo a custom `state`; login-CSRF is prevented by the browser-held code_verifier.
-    // So only reject when a state WAS returned and disagrees with the one we stored.
+    // GoTrue's PKCE redirect does not always echo a custom `state`; login-CSRF is prevented by the browser-held code_verifier.
+    // So only reject `code` when a state WAS returned and disagrees with the one we stored.
     if (storedState && returnedState && returnedState !== storedState) {
       localStorage.removeItem(PKCE_STORAGE_KEY);
       localStorage.removeItem(STATE_STORAGE_KEY);
@@ -116,10 +129,19 @@ export class AuthCallbackPage {
       return;
     }
 
-    // Direct token returned in hash (e.g. Implicit grant or OAuth redirect fragment)
+    // Direct token returned in hash fragment requires strict browser-originated state to prevent Login-CSRF.
     if (accessToken) {
       localStorage.removeItem(PKCE_STORAGE_KEY);
       localStorage.removeItem(STATE_STORAGE_KEY);
+      if (!storedState || returnedState !== storedState) {
+        this.fail({
+          message: 'Mã định danh bảo mật (state) không khớp hoặc bị thiếu.',
+          hint: 'Yêu cầu đăng nhập có thể đã bị can thiệp hoặc phiên làm việc đã hết hạn.',
+          code: 'STATE_MISMATCH',
+          retryable: true,
+        });
+        return;
+      }
       this.api
         .post<{ token?: string; user?: Record<string, unknown> }>('/api/user/auth/social-login', {
           token: accessToken,
@@ -128,7 +150,8 @@ export class AuthCallbackPage {
           next: (session) => {
             this.auth.applySession(session.token, session.user);
             this.wishlist.refresh();
-            void this.router.navigateByUrl('/');
+            const nextUrl = sanitizeReturnUrl(consumeOAuthReturnUrl()) || '/';
+            void this.router.navigateByUrl(nextUrl);
           },
           error: (error: Error) =>
             this.fail({
@@ -169,7 +192,8 @@ export class AuthCallbackPage {
                 next: (session) => {
                   this.auth.applySession(session.token, session.user);
                   this.wishlist.refresh();
-                  void this.router.navigateByUrl('/');
+                  const nextUrl = sanitizeReturnUrl(consumeOAuthReturnUrl()) || '/';
+                  void this.router.navigateByUrl(nextUrl);
                 },
                 error: (error: Error) =>
                   this.fail({
@@ -195,6 +219,11 @@ export class AuthCallbackPage {
       code: 'MISSING_AUTH_CODE',
       retryable: true,
     });
+  }
+
+  /** Clears stored OAuth return URL when stepping back manually to email/password sign-in (URL query carries returnUrl). */
+  onBackToSignIn(): void {
+    clearOAuthReturnUrl();
   }
 
   /**

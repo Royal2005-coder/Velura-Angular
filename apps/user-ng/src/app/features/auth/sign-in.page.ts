@@ -1,10 +1,12 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
+import { clearOAuthReturnUrl, rememberOAuthReturnUrl, sanitizeReturnUrl } from '../../core/utils/auth-return-url';
 import { showToast } from '../../core/utils/toast';
 import { AuthOtpModal, AuthOtpResult } from '../../shared/auth-otp-modal/auth-otp-modal';
 
@@ -23,7 +25,10 @@ export class SignInPage {
   private readonly auth = inject(AuthService);
   private readonly wishlist = inject(WishlistStore);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
 
+  readonly safeReturnUrl = signal<string | null>(sanitizeReturnUrl(this.route.snapshot.queryParamMap.get('returnUrl')));
   readonly method = signal<'phone' | 'email'>('phone');
   readonly errorMessage = signal<string | null>(null);
   readonly showEmailPassword = signal(false);
@@ -38,6 +43,12 @@ export class SignInPage {
     password: ['', [Validators.required, Validators.minLength(8)]],
     remember: [false],
   });
+
+  constructor() {
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((params) => this.safeReturnUrl.set(sanitizeReturnUrl(params.get('returnUrl'))));
+  }
 
   /**
    * Switches between email and phone sign-in panels.
@@ -116,6 +127,7 @@ export class SignInPage {
       const challenge = await this.codeChallenge(verifier);
       localStorage.setItem(PKCE_STORAGE_KEY, verifier);
       localStorage.setItem(STATE_STORAGE_KEY, state);
+      rememberOAuthReturnUrl(this.safeReturnUrl());
       const url =
         `${environment.apiUrl}/api/auth/google` +
         `?redirect_to=${encodeURIComponent(redirectTo)}` +
@@ -137,8 +149,9 @@ export class SignInPage {
   private finishAuth(response: { token?: string; user?: Record<string, unknown> }): void {
     this.auth.applySession(response.token, response.user);
     this.wishlist.refresh();
+    clearOAuthReturnUrl();
     showToast('Đăng nhập thành công!');
-    void this.router.navigateByUrl('/');
+    void this.router.navigateByUrl(this.safeReturnUrl() || '/');
   }
 
   private randomVerifier(): string {

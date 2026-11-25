@@ -189,6 +189,7 @@ export class VoucherWallet {
     if (currentId) {
       const still = this.items().find((item) => item.voucher_id === currentId);
       if (still?.eligible) {
+        this.preferredNotice.set(null);
         this.emit(still);
         return;
       }
@@ -201,8 +202,9 @@ export class VoucherWallet {
 
     if (!this.autoApply() || this.dismissed() || !bestId) {
       if (invalidated) {
+        const reason = (invalidated.reason_text || 'đã hết lượt sử dụng').replace(/\.+$/, '');
         this.preferredNotice.set(
-          `Mã ${invalidated.code} chưa dùng được cho đơn này: ${invalidated.reason_text || 'đã hết lượt sử dụng'}.`
+          `Mã ${invalidated.code} chưa dùng được cho đơn này: ${reason}.`
         );
       }
       return;
@@ -212,9 +214,12 @@ export class VoucherWallet {
       this.selectedId.set(best.voucher_id);
       this.emit(best);
       if (invalidated) {
+        const reason = (invalidated.reason_text || 'đã hết lượt sử dụng').replace(/\.+$/, '');
         this.preferredNotice.set(
-          `Mã ${invalidated.code} không áp dụng được (${invalidated.reason_text || 'đã hết lượt sử dụng'}). Đã tự động chuyển sang mã ${best.code}.`
+          `Mã ${invalidated.code} không áp dụng được (${reason}). Đã tự động chuyển sang mã ${best.code}.`
         );
+      } else if (currentId) {
+        this.preferredNotice.set(null);
       }
     }
   }

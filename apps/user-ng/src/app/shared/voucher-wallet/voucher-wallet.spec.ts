@@ -250,4 +250,33 @@ describe('VoucherWallet', () => {
     const alert = fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement | null;
     expect(alert?.textContent).toContain('UAT-NOT-EXIST-20261121');
   });
+
+  it('does not append double periods to invalidated voucher notices', () => {
+    const first = walletVoucher({ voucher_id: 'v-vip', code: 'VIP100K', discount_amount: 100000 });
+    const service = stubVoucherService([first], 'v-vip');
+    const fixture = createWallet(service);
+    const wallet = fixture.componentInstance;
+
+    vi.spyOn(service, 'loadWallet').mockReturnValue(
+      of({
+        success: true,
+        order_value: 1000000,
+        shipping_fee: 30000,
+        best_voucher_id: null,
+        eligible_count: 0,
+        vouchers: [
+          walletVoucher({
+            voucher_id: 'v-vip',
+            code: 'VIP100K',
+            eligible: false,
+            discount_amount: 0,
+            reason: 'USER_LIMIT_REACHED',
+            reason_text: 'Bạn đã dùng hết lượt cho mã này.',
+          }),
+        ],
+      }),
+    );
+    wallet.refresh(1000000, 30000);
+    expect(wallet.preferredNotice()).toBe('Mã VIP100K chưa dùng được cho đơn này: Bạn đã dùng hết lượt cho mã này.');
+  });
 });

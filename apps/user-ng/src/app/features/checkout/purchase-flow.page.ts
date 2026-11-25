@@ -64,12 +64,16 @@ export class PurchaseFlowPage {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   @ViewChild('addressDialog') private addressDialog!: ElementRef<HTMLDialogElement>;
+  @ViewChild(VoucherWallet) private voucherWallet?: VoucherWallet;
   readonly step = signal<'form' | 'gateway' | 'result' | 'success' | 'invite' | 'activated'>(
     'form',
   );
   readonly displaySize = formatSizeDisplay;
   readonly member = this.model.member;
   readonly lines = signal(this.checkout.readCheckoutItems().map((line) => ({ ...line })));
+  readonly localSubtotal = computed(() =>
+    this.lines().reduce((sum, line) => sum + (Number(line.unit_price) || 0) * (Number(line.quantity) || 0), 0),
+  );
   private readonly lineEditor = inject(CheckoutLineEditorService);
   readonly variantChoices = signal<Record<string, CheckoutVariantChoice[]>>({});
   readonly lineEditError = signal('');
@@ -108,11 +112,10 @@ export class PurchaseFlowPage {
   readonly expectedPointsVnd = computed(() => this.expectedPoints() * 1000);
    readonly busy = signal(false);
   readonly paymentProviders = signal<PurchasePaymentProvider[]>([{ code: 'COD', enabled: true }, { code: 'STRIPE', enabled: false }, { code: 'VNPAY', enabled: false }, { code: 'MOMO', enabled: false }]);
-  readonly providerLabel: Record<PurchasePaymentProvider['code'], string> = { COD: 'Thanh toán khi nhận hàng (COD)', STRIPE: 'Thanh toán bằng thẻ', VNPAY: 'VNPay', MOMO: 'Ví MoMo' };
+  readonly providerLabel: Record<PurchasePaymentProvider['code'], string> = { COD: 'Thanh toán khi nhận hàng (COD)', STRIPE: 'Thanh toán bằng thẻ', VNPAY: 'Thanh toán VNPay', MOMO: 'Thanh toán MoMo' };
 
   /**
-   * Dòng mô tả dưới mỗi phương thức. API cho biết `enabled`, `reason` và `environment`, nên nơi này
-   * không được tự đoán: "Tạm chưa khả dụng" phải đi kèm lý do thật, còn sandbox thì phải nói rõ.
+   * Phương thức đang khả dụng chỉ hiển thị tên chính gọn gàng; chỉ giữ ghi chú ngắn khi cổng tạm tắt.
    */
   providerHint(provider: PurchasePaymentProvider): string {
     if (!provider.enabled) {
@@ -120,11 +123,7 @@ export class PurchaseFlowPage {
         ? 'Chưa bật được cổng thanh toán này lúc đặt hàng; bạn vẫn có thể trả bằng COD hoặc thẻ.'
         : 'Tạm chưa khả dụng';
     }
-    if (provider.code === 'COD') return 'Thanh toán cho người giao hàng.';
-    const sandbox = provider.environment === 'sandbox' ? ' Chế độ sandbox: giao dịch ký và đối soát như thật nhưng không trừ tiền thật.' : '';
-    return provider.code === 'STRIPE'
-      ? 'Chuyển đến trang Stripe để trả bằng thẻ hoặc ví liên kết.'
-      : `Lấy mã QR riêng của đơn này; quét bằng app ${provider.code === 'MOMO' ? 'MoMo hoặc app ngân hàng' : 'ngân hàng có hỗ trợ VNPAY QR'}.${sandbox}`;
+    return '';
   }
   readonly resumeLoading = signal(false);
   readonly resumeLocked = signal(false);
@@ -314,7 +313,7 @@ export class PurchaseFlowPage {
       });
     });
     effect(() => {
-      this.lines(); this.shippingMethod(); this.voucherId(); this.voucherDeclined(); this.model.userId(); this.requestedPoints();
+      this.lines(); this.shippingMethod(); this.voucherId(); this.voucherDeclined(); this.model.userId(); this.requestedPoints(); this.guestCheckoutToken();
       untracked(() => this.refreshQuote());
     });
     let initialUser = this.model.userId();
@@ -577,9 +576,6 @@ export class PurchaseFlowPage {
         this.otpVerified.set(!!token);
         this.otpError.set(token ? '' : response.message || 'Chưa xác thực được số điện thoại. Vui lòng thử lại.');
         this.sendingOtp.set(false);
-        if (token) {
-          this.refreshQuote();
-        }
       },
       error: (error: Error) => {
         if (phone !== normalizePhone(this.address.phone)) return;
@@ -909,9 +905,11 @@ export class PurchaseFlowPage {
         sessionStorage.removeItem('checkout_voucher_code');
           }
           this.refreshQuote();
+          this.voucherWallet?.refresh(this.order()?.subtotal ?? this.serverQuote()?.subtotal ?? this.localSubtotal(), this.quote().shipping);
           const requested = details?.requested_code ? `Mã ${details.requested_code}` : 'Mã giảm giá đã chọn';
+          const reason = (details?.reason_text || error.message || '').replace(/\.+$/, '');
           const next = replacement ? ` Đã chuyển sang mã ${replacement.code}.` : ' Đơn hàng được giữ lại không áp mã.';
-          this.voucherNotice.set(`${requested} không còn dùng được: ${details?.reason_text || error.message}.${next} Vui lòng kiểm tra lại tổng tiền và bấm hoàn tất.`);
+          this.voucherNotice.set(`${requested} không còn dùng được: ${reason}.${next} Vui lòng kiểm tra lại tổng tiền và bấm hoàn tất.`);
         }
         if (error instanceof ApiRequestError && (error.code === 'CHECKOUT_PROOF_REQUIRED' || error.code === 'INVALID_OTP' || error.code === 'EXPIRED_OTP')) {
           this.otpVerified.set(false);

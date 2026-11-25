@@ -345,6 +345,16 @@ spec:
     - protocol: TCP
       port: 8000
   - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: database
+      podSelector:
+        matchLabels:
+          app: kong
+    ports:
+    - protocol: TCP
+      port: 8000
+  - to:
     - ipBlock:
         cidr: 0.0.0.0/0
         except:
@@ -437,6 +447,19 @@ spec:
       podSelector:
         matchLabels:
           app: supabase-cloud-sync
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: database
+      podSelector:
+        matchExpressions:
+        - key: app
+          operator: In
+          values:
+          - postgrest
+          - gotrue
+          - storage-api
+          - postgres-meta
+          - studio
     ports:
     - protocol: TCP
       port: 5432

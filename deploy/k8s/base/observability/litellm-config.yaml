@@ -5,10 +5,114 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY
       rpm: 60
       tpm: 60000
+  - model_name: commerce-text
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_2
+      rpm: 60
+      tpm: 60000
+  - model_name: commerce-text
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_3
+      rpm: 60
+      tpm: 60000
+  - model_name: commerce-text
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_4
+      rpm: 60
+      tpm: 60000
+  - model_name: commerce-text
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_5
+      rpm: 60
+      tpm: 60000
+  - model_name: commerce-text
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_6
+      rpm: 60
+      tpm: 60000
+  - model_name: commerce-text
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_7
+      rpm: 60
+      tpm: 60000
+  - model_name: commerce-text
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_8
+      rpm: 60
+      tpm: 60000
+  - model_name: commerce-text
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_9
+      rpm: 60
+      tpm: 60000
   - model_name: commerce-embedding
     litellm_params:
       model: os.environ/LITELLM_EMBEDDING_MODEL
       api_key: os.environ/GEMINI_API_KEY
+      # Gemini returns floats natively; the API's OpenAI encoding_format is unsupported.
+      drop_params: true
+      rpm: 60
+  - model_name: commerce-embedding
+    litellm_params:
+      model: os.environ/LITELLM_EMBEDDING_MODEL
+      api_key: os.environ/GEMINI_API_KEY_2
+      # Gemini returns floats natively; the API's OpenAI encoding_format is unsupported.
+      drop_params: true
+      rpm: 60
+  - model_name: commerce-embedding
+    litellm_params:
+      model: os.environ/LITELLM_EMBEDDING_MODEL
+      api_key: os.environ/GEMINI_API_KEY_3
+      # Gemini returns floats natively; the API's OpenAI encoding_format is unsupported.
+      drop_params: true
+      rpm: 60
+  - model_name: commerce-embedding
+    litellm_params:
+      model: os.environ/LITELLM_EMBEDDING_MODEL
+      api_key: os.environ/GEMINI_API_KEY_4
+      # Gemini returns floats natively; the API's OpenAI encoding_format is unsupported.
+      drop_params: true
+      rpm: 60
+  - model_name: commerce-embedding
+    litellm_params:
+      model: os.environ/LITELLM_EMBEDDING_MODEL
+      api_key: os.environ/GEMINI_API_KEY_5
+      # Gemini returns floats natively; the API's OpenAI encoding_format is unsupported.
+      drop_params: true
+      rpm: 60
+  - model_name: commerce-embedding
+    litellm_params:
+      model: os.environ/LITELLM_EMBEDDING_MODEL
+      api_key: os.environ/GEMINI_API_KEY_6
+      # Gemini returns floats natively; the API's OpenAI encoding_format is unsupported.
+      drop_params: true
+      rpm: 60
+  - model_name: commerce-embedding
+    litellm_params:
+      model: os.environ/LITELLM_EMBEDDING_MODEL
+      api_key: os.environ/GEMINI_API_KEY_7
+      # Gemini returns floats natively; the API's OpenAI encoding_format is unsupported.
+      drop_params: true
+      rpm: 60
+  - model_name: commerce-embedding
+    litellm_params:
+      model: os.environ/LITELLM_EMBEDDING_MODEL
+      api_key: os.environ/GEMINI_API_KEY_8
+      # Gemini returns floats natively; the API's OpenAI encoding_format is unsupported.
+      drop_params: true
+      rpm: 60
+  - model_name: commerce-embedding
+    litellm_params:
+      model: os.environ/LITELLM_EMBEDDING_MODEL
+      api_key: os.environ/GEMINI_API_KEY_9
       # Gemini returns floats natively; the API's OpenAI encoding_format is unsupported.
       drop_params: true
       rpm: 60
@@ -17,24 +121,278 @@ model_list:
       model: os.environ/LITELLM_IMAGE_MODEL
       api_key: os.environ/GEMINI_API_KEY
       rpm: 10
+  - model_name: commerce-image-edit
+    litellm_params:
+      model: os.environ/LITELLM_IMAGE_MODEL
+      api_key: os.environ/GEMINI_API_KEY_2
+      rpm: 10
+  - model_name: commerce-image-edit
+    litellm_params:
+      model: os.environ/LITELLM_IMAGE_MODEL
+      api_key: os.environ/GEMINI_API_KEY_3
+      rpm: 10
+  - model_name: commerce-image-edit
+    litellm_params:
+      model: os.environ/LITELLM_IMAGE_MODEL
+      api_key: os.environ/GEMINI_API_KEY_4
+      rpm: 10
+  - model_name: commerce-image-edit
+    litellm_params:
+      model: os.environ/LITELLM_IMAGE_MODEL
+      api_key: os.environ/GEMINI_API_KEY_5
+      rpm: 10
+  - model_name: commerce-image-edit
+    litellm_params:
+      model: os.environ/LITELLM_IMAGE_MODEL
+      api_key: os.environ/GEMINI_API_KEY_6
+      rpm: 10
+  - model_name: commerce-image-edit
+    litellm_params:
+      model: os.environ/LITELLM_IMAGE_MODEL
+      api_key: os.environ/GEMINI_API_KEY_7
+      rpm: 10
+  - model_name: commerce-image-edit
+    litellm_params:
+      model: os.environ/LITELLM_IMAGE_MODEL
+      api_key: os.environ/GEMINI_API_KEY_8
+      rpm: 10
+  - model_name: commerce-image-edit
+    litellm_params:
+      model: os.environ/LITELLM_IMAGE_MODEL
+      api_key: os.environ/GEMINI_API_KEY_9
+      rpm: 10
   - model_name: gemini-3.5-flash-lite
     litellm_params:
       model: os.environ/LITELLM_TEXT_MODEL
       api_key: os.environ/GEMINI_API_KEY
       rpm: 60
       tpm: 60000
+  - model_name: gemini-3.5-flash-lite
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_2
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash-lite
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_3
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash-lite
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_4
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash-lite
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_5
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash-lite
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_6
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash-lite
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_7
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash-lite
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_8
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash-lite
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_9
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY_2
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY_3
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY_4
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY_5
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY_6
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY_7
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY_8
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY_9
+      rpm: 60
+      tpm: 60000
   - model_name: gemini-3.5-flash
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY_2
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY_3
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY_4
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY_5
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY_6
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY_7
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY_8
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY_9
+      rpm: 60
+      tpm: 60000
+  - model_name: ministral-8b-latest
     litellm_params:
       model: os.environ/LITELLM_TEXT_MODEL
       api_key: os.environ/GEMINI_API_KEY
       rpm: 60
       tpm: 60000
+  - model_name: ministral-8b-latest
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_2
+      rpm: 60
+      tpm: 60000
+  - model_name: ministral-8b-latest
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_3
+      rpm: 60
+      tpm: 60000
+  - model_name: ministral-8b-latest
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_4
+      rpm: 60
+      tpm: 60000
+  - model_name: ministral-8b-latest
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_5
+      rpm: 60
+      tpm: 60000
+  - model_name: ministral-8b-latest
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_6
+      rpm: 60
+      tpm: 60000
+  - model_name: ministral-8b-latest
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_7
+      rpm: 60
+      tpm: 60000
+  - model_name: ministral-8b-latest
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_8
+      rpm: 60
+      tpm: 60000
+  - model_name: ministral-8b-latest
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY_9
+      rpm: 60
+      tpm: 60000
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 4
+  retry_after: 1
+  allowed_fails: 2
+  cooldown_time: 60
 litellm_settings:
   callbacks: [prometheus]
   # LiteLLM 1.79 reads this setting here, not under general_settings.
   require_auth_for_metrics_endpoint: true
   telemetry: false
   request_timeout: 60
-  num_retries: 2
+  num_retries: 4
+  fallbacks:
+    - commerce-text: [gemini-3-flash-preview, gemini-3.5-flash]
+    - gemini-3.5-flash-lite: [gemini-3-flash-preview, gemini-3.5-flash]
+    - ministral-8b-latest: [commerce-text, gemini-3-flash-preview]
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

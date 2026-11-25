@@ -66,6 +66,41 @@ spec:
             secretKeyRef:
               name: litellm-credentials
               key: provider-api-key-2
+        - name: GEMINI_API_KEY_3
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: provider-api-key-3
+        - name: GEMINI_API_KEY_4
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: provider-api-key-4
+        - name: GEMINI_API_KEY_5
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: provider-api-key-5
+        - name: GEMINI_API_KEY_6
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: provider-api-key-6
+        - name: GEMINI_API_KEY_7
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: provider-api-key-7
+        - name: GEMINI_API_KEY_8
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: provider-api-key-8
+        - name: GEMINI_API_KEY_9
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: provider-api-key-9
         - name: LITELLM_MASTER_KEY
           valueFrom:
             secretKeyRef:

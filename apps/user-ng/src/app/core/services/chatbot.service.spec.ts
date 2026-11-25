@@ -35,17 +35,17 @@ describe('ChatbotService guest tab isolation', () => {
     expect(localStorage.getItem('velura_chat_session_id')).toBeNull();
   });
 
-  it('creates a different guest and empty chat after the tab session ends', () => {
+  it('creates a different guest and empty chat after a reload without relying on storage cleanup', () => {
     const first = configure();
     const firstGuest = first.guestId();
     first.saveSessionId(crypto.randomUUID());
     expect(first.savedSessionId()).not.toBe('');
 
     TestBed.resetTestingModule();
-    sessionStorage.clear();
     const next = configure();
 
     expect(next.guestId()).not.toBe(firstGuest);
     expect(next.savedSessionId()).toBe('');
+    expect(sessionStorage.getItem('velura_chat_guest_id')).toBeNull();
   });
 });

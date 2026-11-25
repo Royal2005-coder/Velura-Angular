@@ -269,6 +269,16 @@ export function createChatbotRepository() {
       return { ...result, rows: [...(result.rows || [])].reverse() };
     },
 
+    /**
+     * Reads the customer's own quarantined text for an already owner-authorized transcript.
+     * Callers must never use these rows in staff views, model context, reports, or handoff summaries.
+     */
+    async listOwnerOriginals(sessionId: string) {
+      return withChatError(() => selectRows("chat_moderated_original", {
+        select: "message_id,original_text", session_id: `eq.${sessionId}`, limit: 150
+      }));
+    },
+
     async insertMessage(input: InsertMessageInput) {
       return withChatError(() => insertRow("chat_message", {
         message_id: randomUUID(),

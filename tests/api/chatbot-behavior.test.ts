@@ -96,6 +96,7 @@ function fixture(modelOverrides: Partial<ChatModel> = {}) {
     },
     insertMessage: async (input) => append(input.sender, input.text, input.metadata, input.productIds),
     listMessages: async (_id, limit = 100) => ({ rows: state.messages.slice(-limit).map((row) => ({ ...row })), count: state.messages.length }),
+    listOwnerOriginals: async () => ({ rows: [...state.originals.entries()].map(([message_id, original]) => ({ message_id, original_text: original.text })), count: state.originals.size }),
     listSessions: async () => ({ rows: [{ ...state.session }], count: 1 }),
     listAdminSessions: async () => ({ rows: [{ ...state.session }], count: 1 }),
     listProductsByIds: async (ids) => ({ rows: state.products.filter((product) => Array.isArray(ids) && ids.includes(product.product_id)), count: state.products.length }),
@@ -286,12 +287,13 @@ test("follow-up sizing details remain with AI instead of being mistaken for a ha
   assert.equal(f.state.reviewCalls, 3);
 });
 
-test("failed compromise and requests beyond authority escalate without drafting a transaction", async () => {
+test("failed compromise and requests beyond authority stay with AI without drafting a transaction", async () => {
   for (const field of ["compromiseFailed", "authorityExceeded"] as const) {
     const base = analysis();
     const f = fixture({ analyze: async () => analysis({ context: { ...base.context, [field]: true } }), draft: async () => { throw new Error("must not draft"); } });
     const result = await f.send("Tôi cần giải quyết vấn đề đổi trả này");
-    assert.equal(session(result).handoff_status, "requested");
+    assert.equal(session(result).handoff_status, "ai");
+    assert.equal(f.state.tickets.size, 0);
     assert.equal(f.state.reviewCalls, 0);
   }
 });
@@ -299,7 +301,7 @@ test("failed compromise and requests beyond authority escalate without drafting 
 test("L2 requires every cited resolution policy to be explicitly approved", async () => {
   const f = fixture({ analyze: async () => analysis({ intent: "policy_problem", level: "L2" }) });
   let result = await f.send("Hướng dẫn xử lý đổi trả trong chính sách");
-  assert.equal(session(result).handoff_status, "requested");
+  assert.equal(session(result).handoff_status, "ai");
   assert.equal(f.state.reviewCalls, 0);
   const approved = fixture({ analyze: async () => analysis({ intent: "policy_problem", level: "L2" }) });
   approved.state.approvals.push({ policy_id: POLICY, source_updated_at: VERSION });
@@ -310,7 +312,7 @@ test("L2 requires every cited resolution policy to be explicitly approved", asyn
   approved.state.policies.push({ ...approved.state.policies[0], policy_id: secondPolicy });
   approved.model.draft = async () => draft({ claims: [{ sourceId: `policy:${POLICY}`, quote: POLICY_RULE }, { sourceId: `policy:${secondPolicy}`, quote: POLICY_RULE }] });
   result = await approved.send("Cần áp dụng thêm chính sách thứ hai");
-  assert.equal(session(result).handoff_status, "requested");
+  assert.equal(session(result).handoff_status, "ai");
   assert.equal(approved.state.reviewCalls, 1);
 });
 
@@ -336,17 +338,17 @@ test("invented benefits, refund/order promises and recycled failed approaches ar
     const base = analysis();
     const f = fixture({ analyze: async () => analysis({ context: { ...base.context, failedApproaches: ["try_again"] } }), draft: async () => draft(reply) });
     const result = await f.send("Vấn đề thanh toán chưa được xử lý");
-    assert.equal(session(result).handoff_status, "requested");
+    assert.equal(session(result).handoff_status, "ai");
     assert.equal(f.state.reviewCalls, 0);
-    assert.equal(rows(result).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 0);
+    assert.equal(rows(result).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 1);
   }
 });
 
 test("independent risk rejection prevents publication even when declared citations pass", async () => {
   const f = fixture({ review: async () => ({ safe: false, reasons: ["UNSUPPORTED_TEXT_FACT"] }) });
   const result = await f.send("Chính sách đổi trả");
-  assert.equal(session(result).handoff_status, "requested");
-  assert.equal(rows(result).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 0);
+  assert.equal(session(result).handoff_status, "ai");
+  assert.equal(rows(result).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 1);
 });
 
 test("prices and variants are freshly loaded and depleted products are not recommended", async () => {
@@ -368,10 +370,10 @@ test("prices and variants are freshly loaded and depleted products are not recom
   const rejected = await empty.send("Gợi ý đầm công sở");
   assert.equal(rows(rejected, "products").length, 0);
   assert.equal(session(rejected).handoff_status, "ai");
-  assert.equal(asJsonObject(rows(rejected).find((message) => message.sender === "bot")?.metadata).approach, "clarify_catalog_preferences_after_temporary_failure");
+  assert.equal(asJsonObject(rows(rejected).find((message) => message.sender === "bot")?.metadata).approach, "grounded_catalog_fallback");
 });
 
-test("stale catalog answers stay with AI while stale policy answers hand off", async () => {
+test("stale catalog and policy answers stay with AI without an implicit handoff", async () => {
   for (const change of ["price", "stock", "policy", "approval"] as const) {
     const f = fixture({
       analyze: async () => analysis({ intent: change === "price" || change === "stock" ? "catalog" : "policy_problem", level: change === "price" || change === "stock" ? "L1" : "L2" }),
@@ -386,11 +388,11 @@ test("stale catalog answers stay with AI while stale policy answers hand off", a
     f.state.approvals.push({ policy_id: POLICY, source_updated_at: VERSION });
     const result = await f.send("Hỗ trợ yêu cầu này");
     const catalogChange = change === "price" || change === "stock";
-    assert.equal(session(result).handoff_status, catalogChange ? "ai" : "requested");
+    assert.equal(session(result).handoff_status, "ai");
     assert.equal(f.state.reviewCalls, 0);
     const botMessages = rows(result).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system);
-    assert.equal(botMessages.length, catalogChange ? 1 : 0);
-    if (catalogChange) assert.equal(asJsonObject(botMessages[0].metadata).approach, "clarify_catalog_preferences_after_temporary_failure");
+    assert.equal(botMessages.length, 1);
+    assert.equal(asJsonObject(botMessages[0].metadata).approach, catalogChange ? "grounded_catalog_fallback" : "safe_ai_retry_fallback");
   }
 });
 
@@ -432,15 +434,15 @@ test("negative sentiment alone cannot moderate a message or lock an account", as
   }
 });
 
-test("severe content is private, escalates to supervisor and never automatically locks the account", async () => {
+test("severe content stays private from staff and never automatically transfers or locks the account", async () => {
   const original = "Nội dung nghiêm trọng riêng tư";
   const base = analysis();
   const f = fixture({ analyze: async () => analysis({ risk: "red", moderation: "threat", context: { ...base.context, problem: original, wanted: original, failedApproaches: [original] }, filtered: { text: "Khách cần hỗ trợ giải quyết dịch vụ", problem: "Yêu cầu giải quyết dịch vụ", wanted: "Nhân viên hỗ trợ", failedApproaches: [] } }) });
   const result = await f.send(original);
-  assert.equal(session(result).handoff_status, "requested");
+  assert.equal(session(result).handoff_status, "ai");
   assert.equal(session(result).is_active, true);
   assert.equal(f.state.originals.size, 1);
-  assert.ok(!JSON.stringify(result).includes(original));
+  assert.ok(JSON.stringify(result).includes(original));
   assert.ok(!JSON.stringify(f.state.summaries).includes(original));
   const staff = await f.service.getAdminMessages(principal("admin_operator_cskh_dt"), SESSION, new URLSearchParams());
   assert.ok(!JSON.stringify(staff).includes(original));
@@ -462,16 +464,16 @@ test("inactive staff and non-CSKH admins cannot mutate or access moderated origi
   assert.equal(f.state.originalReads, 0);
 });
 
-test("malformed or unavailable classifiers have finite failure and then human escalation", async () => {
+test("malformed or unavailable classifiers use a safe AI fallback without human escalation", async () => {
   for (const analyze of [async () => parseChatAnalysis({ intent: "facts" }), async () => { throw new Error("provider unavailable"); }]) {
     const f = fixture({ analyze });
     const first = await f.send("Chính sách đổi trả");
     assert.equal(session(first).handoff_status, "ai");
-    assert.equal(rows(first).filter((message) => message.sender === "bot").length, 0);
+    assert.equal(rows(first).filter((message) => message.sender === "bot").length, 1);
     const second = await f.send("Vẫn cần biết chính sách đổi trả");
-    assert.equal(session(second).handoff_status, "requested");
-    assert.equal(f.state.tickets.size, 1);
-    assert.ok(f.state.handoffReasons.includes("REPEATED_MODEL_FAILURE"));
+    assert.equal(session(second).handoff_status, "ai");
+    assert.equal(f.state.tickets.size, 0);
+    assert.equal(f.state.handoffReasons.length, 0);
   }
 });
 
@@ -489,18 +491,18 @@ test("catalog classifier outages publish a safe fallback and never create a supp
   const botMessages = messages.filter((message) => message.sender === "bot");
   assert.equal(customerMessages.length, 2);
   assert.ok(customerMessages.every((message) => message.moderation_status === "restricted"));
-  assert.ok(customerMessages.every((message) => asString(message.text).includes("bộ lọc AI tạm thời gián đoạn")));
+  assert.deepEqual(customerMessages.map((message) => message.text), ["Tìm váy dự tiệc", "Màu đen, ngân sách dưới một triệu"]);
   assert.equal(botMessages.length, 2);
-  assert.ok(botMessages.every((message) => asJsonObject(message.metadata).approach === "clarify_catalog_preferences_after_temporary_failure"));
-  assert.ok(!JSON.stringify(second).includes("Màu đen, ngân sách dưới một triệu"));
+  assert.ok(botMessages.every((message) => asJsonObject(message.metadata).approach === "grounded_catalog_fallback"));
+  assert.ok(JSON.stringify(second).includes("Màu đen, ngân sách dưới một triệu"));
 });
 
-test("malformed drafts and unavailable risk reviewers hand off without publishing a draft", async () => {
+test("malformed drafts and unavailable risk reviewers stay with AI without publishing the unsafe draft", async () => {
   for (const overrides of [{ draft: async () => parseChatDraft({ text: "Tôi sẽ hoàn tiền" }) }, { review: async () => { throw new Error("review unavailable"); } }]) {
     const f = fixture(overrides);
     const result = await f.send("Chính sách đổi trả");
-    assert.equal(session(result).handoff_status, "requested");
-    assert.equal(rows(result).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 0);
+    assert.equal(session(result).handoff_status, "ai");
+    assert.equal(rows(result).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 1);
   }
 });
 
@@ -547,8 +549,8 @@ test("safe catalog response failures stay with AI and never create a support tic
     assert.equal(f.state.handoffReasons.length, 0);
     const botMessages = rows(second).filter((message) => message.sender === "bot");
     assert.equal(botMessages.length, 2);
-    assert.ok(botMessages.every((message) => asJsonObject(message.metadata).approach === "clarify_catalog_preferences_after_temporary_failure"));
-    assert.ok(botMessages.every((message) => asString(message.text).includes("cuộc trò chuyện vẫn ở AI Stylist")));
+    assert.ok(botMessages.every((message) => asJsonObject(message.metadata).approach === "grounded_catalog_fallback"));
+    assert.ok(botMessages.every((message) => asString(message.text).includes("Đầm công sở")));
   }
 });
 
@@ -595,7 +597,7 @@ test("concurrent staff reads never expose an unfiltered pending turn", async () 
   release.release();
   const ready = await send;
   assert.equal(rows(ready)[0].moderation_status, "visible");
-  assert.ok(!JSON.stringify(ready).includes(raw));
+  assert.ok(JSON.stringify(ready).includes(raw));
 });
 
 test("filter outages after takeover preserve quarantine without an AI failure reply", async () => {
@@ -606,11 +608,11 @@ test("filter outages after takeover preserve quarantine without an AI failure re
   assert.equal(session(result).handoff_status, "assigned");
   assert.equal(rows(result)[0].moderation_status, "pending");
   assert.equal(rows(result).filter((message) => message.sender === "bot").length, 0);
-  assert.ok(!JSON.stringify(result).includes(raw));
+  assert.ok(JSON.stringify(result).includes(raw));
   assert.ok(f.state.reports.some((report) => report.event === "warning"));
 });
 
-test("L2 gets exactly one additional approved attempt, then hands off without another reply", async () => {
+test("L2 attempt exhaustion stays with AI and never creates an implicit handoff", async () => {
   let turns = 0;
   const base = analysis();
   const f = fixture({ analyze: async () => analysis({ level: "L2", intent: "policy_problem", context: { ...base.context, compromiseFailed: ++turns > 1 } }), draft: async () => draft({ approach: `approved_approach_${turns}` }) });
@@ -620,19 +622,21 @@ test("L2 gets exactly one additional approved attempt, then hands off without an
   assert.equal(session(second).handoff_status, "ai");
   assert.equal(rows(second).filter((message) => message.sender === "bot").length, 2);
   const final = await f.send("Phương án bổ sung vẫn không giải quyết được");
-  assert.equal(session(final).handoff_status, "requested");
-  assert.equal(rows(final).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 2);
+  assert.equal(session(final).handoff_status, "ai");
+  assert.equal(rows(final).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 3);
+  assert.equal(f.state.tickets.size, 0);
 });
 
-test("explicit compromise rejection cannot evade the attempt state by changing the model issue label", async () => {
+test("explicit compromise rejection cannot trigger a handoff by changing the model issue label", async () => {
   let turns = 0;
   const base = analysis();
   const f = fixture({ analyze: async () => analysis({ level: "L2", intent: "policy_problem", context: { ...base.context, issueKey: ++turns === 1 ? "exchange" : "unrelated_model_label" } }) });
   f.state.approvals.push({ policy_id: POLICY, source_updated_at: VERSION });
   await f.send("Tư vấn phương án đổi hàng");
   const rejected = await f.send("Tôi không đồng ý");
-  assert.equal(session(rejected).handoff_status, "requested");
-  assert.equal(rows(rejected).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 1);
+  assert.equal(session(rejected).handoff_status, "ai");
+  assert.equal(rows(rejected).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 2);
+  assert.equal(f.state.tickets.size, 0);
 });
 
 test("database denials and missing governance RPCs never downgrade to direct table writes", async () => {

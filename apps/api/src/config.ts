@@ -1,3 +1,7 @@
+const supabaseFallbackEnabled = ["1", "true", "on"].includes(
+  (process.env.VELURA_SUPABASE_FALLBACK_ENABLED || "").trim().toLowerCase()
+);
+
 export const config = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT || 8787),
@@ -15,9 +19,15 @@ export const config = {
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     "",
-  supabaseFallbackUrl: stripTrailingSlash(
-    process.env.VELURA_SUPABASE_FALLBACK_URL || process.env.SUPABASE_FALLBACK_URL || "http://kong.database.svc:8000"
-  ),
+  /**
+   * Production runs directly against Supabase Cloud (no local standby fallback unless
+   * explicitly opted in via VELURA_SUPABASE_FALLBACK_ENABLED=true).
+   */
+  supabaseFallbackUrl: supabaseFallbackEnabled
+    ? stripTrailingSlash(
+        process.env.VELURA_SUPABASE_FALLBACK_URL || process.env.SUPABASE_FALLBACK_URL || ""
+      )
+    : "",
   supabaseFallbackAnonKey:
     process.env.VELURA_SUPABASE_FALLBACK_ANON_KEY ||
     process.env.SUPABASE_FALLBACK_ANON_KEY ||

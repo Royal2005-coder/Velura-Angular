@@ -161,6 +161,7 @@ export function requireUserAuth(context: AuthContext | null | undefined): UserPr
   if (!context || !context.profile || !context.profile.user_id) {
     throw new HttpError(401, "UNAUTHORIZED", "Đăng nhập là bắt buộc để thực hiện thao tác này");
   }
+  assertAccountNotLocked(context.profile);
   return context.profile;
 }
 

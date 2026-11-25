@@ -1,4 +1,5 @@
 import { HttpError, readJson, sendJson } from "./http.js";
+import { assertAccountNotLocked } from "./auth-lockout.js";
 import {
   addWishlistProductForUser,
   readWishlistProductsForUser,
@@ -11,6 +12,7 @@ function requireUserAuth(context: AuthContext) {
   if (!context || !context.profile || !context.profile.user_id) {
     throw new HttpError(401, "UNAUTHORIZED", "Đăng nhập là bắt buộc để thực hiện thao tác này");
   }
+  assertAccountNotLocked(context.profile);
   return context.profile;
 }
 

@@ -357,7 +357,8 @@ export function buildBirthdayPrompt(profile: UserProfile | null, now: Date): Jso
 function resolveProfile(context: AuthContext): UserProfile | null {
   try {
     return requireUserAuth(context);
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof HttpError && error.status === 423) throw error;
     return null;
   }
 }

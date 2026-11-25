@@ -221,21 +221,28 @@ export async function buildWallet(
         ? selectRows("users", { phone: `in.(${quotedPhones})`, select: "user_id", limit: 10 }).catch(() => ({ rows: [] as JsonObject[] }))
         : Promise.resolve({ rows: [] as JsonObject[] }),
       cleanEmail
-        ? selectRows("users", { email: `eq.${cleanEmail}`, select: "user_id", limit: 5 }).catch(() => ({ rows: [] as JsonObject[] }))
+        ? selectRows("users", { email: `eq.${cleanEmail}`, select: "user_id,phone", limit: 5 }).catch(() => ({ rows: [] as JsonObject[] }))
         : Promise.resolve({ rows: [] as JsonObject[] })
     ]);
     const userIds = Array.from(new Set([
       ...(cleanResolvedUserId ? [cleanResolvedUserId] : []),
       ...matchedByPhone.rows.map((u) => String(u.user_id || "")),
-      ...matchedByEmail.rows.map((u) => String(u.user_id || ""))
+      ...filterMatchingEmailUserIds(matchedByEmail.rows, cleanPhone)
     ].filter(Boolean)));
     const byUser = userIds.length
       ? await selectRows("orders", { user_id: `in.(${userIds.map(quotePostgrestValue).join(",")})`, limit: 500 }).catch(() => ({ rows: [] as JsonObject[] }))
       : { rows: [] as JsonObject[] };
     const merged = new Map<string, JsonObject>();
-    for (const row of [...byPhone.rows, ...byUser.rows]) {
+    for (const row of byUser.rows) {
       const id = String(row.order_id || "");
       if (id) merged.set(id, row);
+    }
+    for (const row of byPhone.rows) {
+      const id = String(row.order_id || "");
+      if (!id || merged.has(id)) continue;
+      // Chỉ tính các đơn guest theo SĐT nhận (tránh đơn tặng của thành viên khác gán nhầm lượt cho khách vãng lai).
+      if (row.is_guest === false && !userIds.includes(String(row.user_id || ""))) continue;
+      merged.set(id, row);
     }
     return { rows: Array.from(merged.values()) };
   };
@@ -350,10 +357,40 @@ function countBillableOrders(orders: readonly JsonObject[]): number {
   return orders.filter((order) => String(order.status) !== "cancelled").length;
 }
 
+/**
+ * Lọc các `user_id` tìm theo email có cùng SĐT (hoặc chưa gắn SĐT), đồng bộ với `resolveGuest`
+ * để tránh kéo nhầm lịch sử dùng voucher của tài khoản khác khi khách gõ email trùng.
+ */
+export function filterMatchingEmailUserIds(
+  rows: readonly JsonObject[],
+  verifiedPhone: string
+): string[] {
+  const targetPhone = normalizeGuestPhone(verifiedPhone);
+  return rows
+    .filter((row) => {
+      if (!targetPhone) return true;
+      const rowPhone = normalizeGuestPhone(row.phone);
+      return !rowPhone || rowPhone === targetPhone;
+    })
+    .map((row) => String(row.user_id || ""))
+    .filter(Boolean);
+}
+
+function normalizeGuestPhone(value: unknown): string {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("84") && digits.length >= 11) {
+    return `0${digits.slice(2)}`;
+  }
+  return digits;
+}
+
 function resolveProfile(context: AuthContext): UserProfile | null {
   try {
     return requireUserAuth(context);
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof HttpError && error.status === 423) {
+      throw error;
+    }
     return null;
   }
 }

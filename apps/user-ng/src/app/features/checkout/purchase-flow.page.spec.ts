@@ -454,8 +454,38 @@ describe('PurchaseFlowPage with mocked Model', () => {
     expect(page.gateway().qrPayload).toContain('vpcpay.html');
     await vi.waitFor(() => expect(page.qrImage()).toMatch(/^data:image\/png;base64,/));
     expect(page.gatewaySandbox()).toBe(true);
-    expect(page.providerHint({ code: 'VNPAY', enabled: true, environment: 'sandbox' })).toContain('sandbox');
-    expect(page.providerHint({ code: 'MOMO', enabled: true, environment: 'production' })).not.toContain('sandbox');
+    expect(page.providerLabel.COD).toBe('Thanh toán khi nhận hàng (COD)');
+    expect(page.providerLabel.STRIPE).toBe('Thanh toán bằng thẻ');
+    expect(page.providerLabel.VNPAY).toBe('Thanh toán VNPay');
+    expect(page.providerLabel.MOMO).toBe('Thanh toán MoMo');
+    expect(page.providerHint({ code: 'VNPAY', enabled: true, environment: 'sandbox' })).toBe('');
+    expect(page.providerHint({ code: 'MOMO', enabled: true, environment: 'production' })).toBe('');
+    expect(page.providerHint({ code: 'VNPAY', enabled: false, reason: 'not_configured' })).toContain('Chưa bật được');
+  });
+
+  it('renders only large main payment labels without descriptions underneath enabled methods', () => {
+    providers.mockReturnValue(of({
+      providers: [
+        { code: 'COD', enabled: true },
+        { code: 'STRIPE', enabled: true, environment: 'sandbox' },
+        { code: 'VNPAY', enabled: true, environment: 'sandbox' },
+        { code: 'MOMO', enabled: true, environment: 'sandbox' },
+      ],
+    }));
+    const fixture = createCheckoutFixture();
+    fixture.detectChanges();
+    const choices = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('input[name="payment"]'))
+      .map((el) => el.closest('label.choice'));
+    expect(choices.length).toBe(4);
+    expect(choices.map((c) => c?.querySelector('strong')?.textContent?.trim())).toEqual([
+      'Thanh toán khi nhận hàng (COD)',
+      'Thanh toán bằng thẻ',
+      'Thanh toán VNPay',
+      'Thanh toán MoMo',
+    ]);
+    for (const choice of choices) {
+      expect(choice?.querySelector('small')).toBeNull();
+    }
   });
 
   it('asks the gateway to confirm instead of trusting the browser when the customer says they paid', async () => {

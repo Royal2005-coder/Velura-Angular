@@ -591,7 +591,8 @@ export async function handleOrdersRoute(
       let profile: UserProfile | null = null;
       try {
         profile = requireUserAuth(context);
-      } catch {
+      } catch (error: unknown) {
+        if (error instanceof HttpError && error.status === 423) throw error;
         profile = null;
       }
 

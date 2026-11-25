@@ -4,6 +4,7 @@ import { clearOAuthReturnUrl } from '../utils/auth-return-url';
 import { rotateGuestSession } from '../utils/guest-session';
 
 const GUEST_STYLE_QUIZ_WELCOME_SEEN_KEY = 'velura_guest_style_quiz_welcome_seen';
+const LOCK_NOTICE_KEY = 'velura_locked_notice';
 
 /**
  * Session ViewModel store. No HTTP. Auth API belongs in a dedicated command service later.
@@ -11,6 +12,7 @@ const GUEST_STYLE_QUIZ_WELCOME_SEEN_KEY = 'velura_guest_style_quiz_welcome_seen'
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly sessionState = signal<UserSession | null>(this.readSession());
+  private lastLockNoticeAt = 0;
 
   readonly session = this.sessionState.asReadonly();
   readonly isLoggedIn = computed(() => this.sessionState() !== null);
@@ -28,6 +30,10 @@ export class AuthService {
    * Persists the original token/user payload then refreshes header state.
    */
   applySession(token?: string, user?: Record<string, unknown>): void {
+    this.lastLockNoticeAt = 0;
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(LOCK_NOTICE_KEY);
+    }
     if (token) {
       localStorage.setItem('velura_token', token);
     }
@@ -108,6 +114,37 @@ export class AuthService {
     }
     this.sessionState.set({ ...session, isNewUser: false });
     return true;
+  }
+
+  /**
+   * Immediately evicts a locked user session, stores the lock reason for the sign-in banner,
+   * and deduplicates rapid concurrent 423 triggers across parallel requests.
+   */
+  kickOutLocked(message: string): boolean {
+    const clean = (message || '').trim() || 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ CSKH để được hỗ trợ.';
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(LOCK_NOTICE_KEY, clean);
+    }
+    const now = Date.now();
+    const hadSession = this.isLoggedIn();
+    if (!hadSession && now - this.lastLockNoticeAt < 2000) {
+      return false;
+    }
+    this.lastLockNoticeAt = now;
+    if (hadSession) {
+      this.signOut();
+    }
+    return true;
+  }
+
+  /**
+   * Reads and clears the lock reason stored during forced account eviction.
+   */
+  consumeLockNotice(): string | null {
+    if (typeof sessionStorage === 'undefined') return null;
+    const notice = sessionStorage.getItem(LOCK_NOTICE_KEY);
+    if (notice) sessionStorage.removeItem(LOCK_NOTICE_KEY);
+    return notice;
   }
 
   /**

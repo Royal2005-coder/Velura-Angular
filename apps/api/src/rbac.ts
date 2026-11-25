@@ -1,5 +1,6 @@
 import { asProfile, AUTH_PROFILE_SELECT, loadProfileForAuthUser } from "./auth-profile.js";
 import { jwtClaims, verifyJwt } from "./auth-helper.js";
+import { assertAccountNotLocked } from "./auth-lockout.js";
 import { HttpError, getRequestIp } from "./http.js";
 import { getAuthUser, selectOne } from "./supabase.js";
 import type { AuthContext, AuthUser, HttpRequest, UserProfile } from "./types.js";
@@ -235,6 +236,9 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
     // Đăng xuất tăng users.token_epoch, nên token phát trước đó (claim `tv` cũ, hoặc token cũ
     // chưa từng có `tv`) không còn là phiên hợp lệ — không cần bảng thu hồi theo từng token.
     if (Number(decoded.tv ?? 0) !== Number(profile.token_epoch ?? 0)) return buildGuestContext(ipAddress);
+    if (!isSignOutRequest(req)) {
+      assertAccountNotLocked(profile);
+    }
 
     const roleCode = roleCodeForSession(profile, decoded);
     const access = accessForRole(roleCode);
@@ -293,6 +297,10 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
     };
   }
 
+  if (profile && !isSignOutRequest(req)) {
+    assertAccountNotLocked(profile);
+  }
+
   const roleCode = roleCodeOf(profile);
   const access = accessForRole(roleCode);
   return {
@@ -324,6 +332,9 @@ export function requireAuthenticated(context: AuthContext | undefined): asserts 
  */
 export function requireAdmin(context: AuthContext): void {
   requireAuthenticated(context);
+  if (context.profile) {
+    assertAccountNotLocked(context.profile);
+  }
   if (!context.isAdmin || !context.profile?.is_active) {
     throw new HttpError(403, "ADMIN_REQUIRED", "Admin access is required");
   }
@@ -362,6 +373,12 @@ function buildGuestContext(ipAddress?: string): AuthContext {
     accessToken: "",
     ipAddress
   };
+}
+
+function isSignOutRequest(req: HttpRequest): boolean {
+  if (req.method !== "POST") return false;
+  const pathname = (req.url || "").split("?")[0].replace(/\/+$/, "");
+  return pathname === "/api/auth/signout" || pathname === "/api/user/auth/logout";
 }
 
 function getToken(req: HttpRequest): string {

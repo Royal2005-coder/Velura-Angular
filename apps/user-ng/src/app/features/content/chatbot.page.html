@@ -172,7 +172,7 @@
                     <span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>
                   </div>
                 } @else {
-                  <div class="chatbot-message__text" [innerHTML]="formatBotText(message.moderation_status === 'pending' && !message.metadata?.local_pending ? 'Tin nhắn đang được xử lý...' : message.text)"></div>
+                  <div class="chatbot-message__text" [innerHTML]="formatBotText(message.moderation_status === 'pending' && !message.metadata?.local_pending && !message.metadata?.author_copy ? 'Tin nhắn đang được xử lý...' : message.text)"></div>
                 }
                 @if (message.moderation_status === 'visible' && message.metadata?.attachment?.data) {
                   <div class="chatbot-message__attachment u-inline-36ca0aff10">

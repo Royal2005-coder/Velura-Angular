@@ -16,6 +16,7 @@ import {
 import { CartStore } from '../../core/services/cart.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { useBodyClass } from '../../core/utils/body-class';
+import { ApiRequestError } from '../../core/models/api-request-error';
 
 function localGreeting(): ChatMessage {
   return {
@@ -146,7 +147,7 @@ export class ChatbotPage {
       .sendMessage({
         sessionId: this.sessionId() || undefined,
         guestId: this.chatbot.guestId(),
-        mode: localStorage.getItem('velura_token') ? 'user' : 'guest',
+        mode: ((typeof localStorage !== 'undefined' && localStorage.getItem('velura_token')) || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('velura_token'))) ? 'user' : 'guest',
         message: payloadText,
         attachment,
         orderId,
@@ -178,7 +179,11 @@ export class ChatbotPage {
           this.draft.set(message);
           this.chatError.set('Chưa gửi được tin nhắn. Vui lòng thử lại hoặc liên hệ CSKH.');
           this.loading.set(false);
-          this.refreshMessages();
+          if (this.sessionId()) {
+            this.refreshMessages();
+          } else {
+            this.refreshSessions();
+          }
           this.scrollToBottom();
         },
       });
@@ -252,9 +257,21 @@ export class ChatbotPage {
         this.loading.set(false);
         this.scrollToBottom();
       },
-      error: () => {
+      error: (err: unknown) => {
         if (generation !== this.generation || identity !== this.auth.session()) return;
         this.loading.set(false);
+        const status = err instanceof ApiRequestError ? err.status : 0;
+        if (status === 403 || status === 404 || status === 422) {
+          this.transcriptEpoch++;
+          this.sessionId.set('');
+          this.handoffStatus.set('ai');
+          this.chatbot.activeHandoff.set('ai');
+          this.chatbot.activeSession.set('');
+          this.chatbot.clearSessionId();
+          this.chatError.set('');
+          this.refreshSessions();
+          return;
+        }
         this.chatError.set('Chưa tải được hội thoại. Hệ thống sẽ tự thử lại.');
       },
     });

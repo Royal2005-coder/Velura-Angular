@@ -3,6 +3,7 @@ import { ChatbotPage } from './chatbot.page';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { ChatbotService, type ChatSendResponse } from '../../core/services/chatbot.service';
+import { AuthService } from '../../core/services/auth.service';
 import { ApiRequestError } from '../../core/models/api-request-error';
 import { CartStore } from '../../core/services/cart.store';
 import { OrderAccountApiStore } from '../../core/services/order-account-api.store';
@@ -161,5 +162,57 @@ describe('ChatbotPage', () => {
     expect(page.sessionId()).toBe('');
     expect(page.chatError()).toBe('');
     expect(clearSpy).toHaveBeenCalled();
+  });
+
+  it('does not reset an active member chat or leave a phantom typing indicator on reply', async () => {
+    localStorage.setItem('velura_token', 'member-jwt');
+    localStorage.setItem('velura_user', JSON.stringify({ user_id: 'member-1', role: 'member' }));
+    try {
+      const page = await createStorefrontPage(ChatbotPage);
+      const auth = TestBed.inject(AuthService);
+      const response = new Subject<ChatSendResponse>();
+      vi.spyOn(TestBed.inject(ChatbotService), 'sendMessage').mockReturnValue(response);
+
+      page.send('Phối đồ với áo blazer');
+      // Periodic SessionSyncService /api/auth/me check triggers syncRole on same member
+      auth.syncRole('member');
+      TestBed.flushEffects();
+
+      response.next({
+        session: { session_id: 'sess-live-1', handoff_status: 'ai' },
+        messages: [
+          { message_id: 'm1', session_id: 'sess-live-1', sender: 'user', text: 'Phối đồ với áo blazer', created_at: '' },
+          { message_id: 'm2', session_id: 'sess-live-1', sender: 'bot', text: 'Gợi ý phối blazer thanh lịch.', created_at: '' },
+        ],
+      });
+
+      expect(page.sessionId()).toBe('sess-live-1');
+      expect(page.messages().some((m) => m.metadata?.typing)).toBe(false);
+      expect(page.messages().some((m) => m.message_id === 'm2')).toBe(true);
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('does not churn messages or force-scroll when 3-second polling returns unchanged transcript', async () => {
+    vi.useFakeTimers();
+    try {
+      const page = await createStorefrontPage(ChatbotPage);
+      const payload: ChatSendResponse = {
+        session: { session_id: 'sess-scroll', handoff_status: 'ai' },
+        messages: [
+          { message_id: 'm1', session_id: 'sess-scroll', sender: 'user', text: 'Xin chào', created_at: '' },
+          { message_id: 'm2', session_id: 'sess-scroll', sender: 'bot', text: 'Chào bạn!', created_at: '' },
+        ],
+      };
+      vi.spyOn(TestBed.inject(ChatbotService), 'listMessages').mockReturnValue(of(payload));
+      page.openSession({ session_id: 'sess-scroll', handoff_status: 'ai' });
+      const firstRef = page.messages();
+
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(page.messages()).toBe(firstRef);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

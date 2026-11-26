@@ -484,6 +484,8 @@ function productErrorMessage(code: string): string {
     INVALID_IMAGE_COLORS: "Liên kết ảnh và màu không hợp lệ",
     INVALID_IMAGE_COLOR_ASSOCIATION: "Ảnh phải thuộc sản phẩm và màu phải khớp chính xác biến thể",
     IMAGE_COLOR_VARIANT_REQUIRED: "Hãy bỏ liên kết ảnh trước khi xóa màu biến thể cuối cùng",
+    IMAGE_APPROVAL_REQUIRED: "Ảnh mới hoặc ảnh vừa thay thế chưa được phê duyệt. Hãy kiểm tra/cải thiện và bấm Áp dụng ảnh trước khi lưu.",
+    IMAGE_APPROVAL_VERSION_CONFLICT: "Phiên bản sản phẩm đã thay đổi sau khi áp dụng ảnh. Hãy bấm Áp dụng ảnh lại trước khi lưu.",
     STOCK_INVALID: "Tồn kho phải là số không âm"
   };
   if (messages[code]) {

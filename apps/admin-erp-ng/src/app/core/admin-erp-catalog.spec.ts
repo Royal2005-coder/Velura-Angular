@@ -5,6 +5,7 @@ import {
   duplicateSkus,
   guessColorHex,
   lowStockVariants,
+  moveImageKey,
   normalizeColorCode,
   parseListInput,
   productStatusLabel,
@@ -82,5 +83,19 @@ describe('catalog rules mirrored from the API', () => {
 
   it('splits comma, semicolon and newline separated lists', () => {
     expect(parseListInput('Đen, Đỏ Ruby;\nXanh Lam,,')).toEqual(['Đen', 'Đỏ Ruby', 'Xanh Lam']);
+  });
+
+  it('drops undefined, null, or blank assignments when moving image keys', () => {
+    const initial: Record<string, string | undefined> = { 'https://old.example/1.jpg': undefined, 'https://old.example/2.jpg': 'Đen' };
+    expect(moveImageKey(initial, 'https://old.example/1.jpg', 'https://new.example/1.jpg', undefined)).toEqual({
+      'https://old.example/2.jpg': 'Đen',
+    });
+    expect(moveImageKey(initial, 'https://old.example/1.jpg', 'https://new.example/1.jpg', '   ')).toEqual({
+      'https://old.example/2.jpg': 'Đen',
+    });
+    expect(moveImageKey(initial, 'https://old.example/2.jpg', 'https://new.example/2.jpg', 'Đen')).toEqual({
+      'https://old.example/1.jpg': undefined,
+      'https://new.example/2.jpg': 'Đen',
+    });
   });
 });

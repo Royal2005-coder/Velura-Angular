@@ -252,13 +252,14 @@ export function moveImageKey<TValue>(
   map: Record<string, TValue>,
   previousUrl: string | undefined,
   nextUrl: string | null,
-  value: TValue | null,
+  value: TValue | null | undefined,
 ): Record<string, TValue> {
   const next = { ...map };
   if (previousUrl) {
     delete next[previousUrl];
   }
-  if (nextUrl && value !== null) {
+  const hasValue = value !== null && value !== undefined && (typeof value !== 'string' || value.trim().length > 0);
+  if (nextUrl && hasValue) {
     next[nextUrl] = value;
   }
   return next;

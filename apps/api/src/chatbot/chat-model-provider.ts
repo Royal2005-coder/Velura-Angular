@@ -12,35 +12,43 @@ export class ChatModelError extends HttpError {
   }
 }
 
+const DEFAULT_FALLBACK_GEMINI_MODEL = "gemini-3-flash-preview";
+
 /** Collects provider output privately; partial, truncated or refused output never becomes a result. */
 export async function requestChatJson(provider: "mistral" | "gemini", model: string, operation: ChatModelTrace["operation"], prompt: string): Promise<{ value: JsonObject; trace: ChatModelTrace }> {
+  const gateway = Boolean(process.env.LITELLM_ENDPOINT?.trim() && process.env.LITELLM_API_KEY?.trim());
   // A provider without a configured key is skipped silently; no key at all fails closed later.
   const candidates: { provider: "mistral" | "gemini"; model: string }[] = [];
-  if (provider === "mistral") {
-    if (config.mistralApiKey) {
-      candidates.push({ provider: "mistral", model });
-      candidates.push({ provider: "gemini", model: "gemini-3.5-flash-lite" });
-      const geminiFallback = config.geminiModel || "gemini-3.5-flash-lite";
-      if (geminiFallback !== "gemini-3.5-flash-lite") candidates.push({ provider: "gemini", model: geminiFallback });
-    } else {
-      candidates.push({ provider: "gemini", model: config.geminiModel || "gemini-3.5-flash-lite" });
+  const pushUnique = (nextProvider: "mistral" | "gemini", nextModel: string) => {
+    const cleanModel = nextModel.trim();
+    if (!cleanModel) return;
+    if (!candidates.some((entry) => entry.provider === nextProvider && entry.model === cleanModel)) {
+      candidates.push({ provider: nextProvider, model: cleanModel });
     }
-  } else if (config.geminiApiKey) {
-    candidates.push({ provider: "gemini", model });
-    if (model !== "gemini-3.5-flash-lite") candidates.push({ provider: "gemini", model: "gemini-3.5-flash-lite" });
+  };
+  if (provider === "mistral") {
+    if (gateway || config.mistralApiKey) {
+      pushUnique("mistral", model);
+      pushUnique("gemini", config.geminiModel || DEFAULT_FALLBACK_GEMINI_MODEL);
+      pushUnique("gemini", DEFAULT_FALLBACK_GEMINI_MODEL);
+    } else if (gateway || config.geminiApiKey) {
+      pushUnique("gemini", config.geminiModel || DEFAULT_FALLBACK_GEMINI_MODEL);
+    }
+  } else if (gateway || config.geminiApiKey) {
+    pushUnique("gemini", model);
+    pushUnique("gemini", DEFAULT_FALLBACK_GEMINI_MODEL);
   }
   if (!candidates.length) throw new ChatModelError("CHAT_PROVIDER_UNVERIFIED", []);
   const traces: ChatModelTrace[] = [];
+  // Single retry only when there is no fallback candidate; otherwise advance fast to keep latency well within proxy limits.
+  const maxAttemptsPerCandidate = candidates.length > 1 ? 1 : 2;
   for (const candidate of candidates) {
-    // One short-backoff retry per candidate before moving on: a single transient
-    // provider hiccup (upstream 5xx, truncated stream, timeout) must not look the
-    // same as "every candidate is genuinely unavailable" to the caller.
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < maxAttemptsPerCandidate; attempt++) {
       try {
         return await attemptChatJson(candidate.provider, candidate.model, operation, prompt);
       } catch (error) {
         if (error instanceof ChatModelError) traces.push(...error.trace);
-        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 300));
+        if (attempt + 1 < maxAttemptsPerCandidate) await new Promise((resolve) => setTimeout(resolve, 300));
       }
     }
   }
@@ -53,7 +61,7 @@ async function attemptChatJson(provider: "mistral" | "gemini", model: string, op
   const gateway = Boolean(process.env.LITELLM_ENDPOINT || process.env.LITELLM_API_KEY);
   const trace: ChatModelTrace = { provider, operation, transport: gateway ? "gateway" : "direct", requestedModel: model, model: null, latencyMs: 0, outcome: "unavailable", streamed: gateway || provider === "mistral" };
   const controller = new AbortController();
-  const timeoutMs = operation === "response_review" ? 45000 : 40000;
+  const timeoutMs = operation === "response_review" ? 25000 : 20000;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const endpoint = process.env.LITELLM_ENDPOINT?.trim();

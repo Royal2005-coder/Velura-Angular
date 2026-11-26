@@ -1,9 +1,11 @@
 import { Injectable, effect, inject, signal, untracked } from '@angular/core';
+import { Router } from '@angular/router';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import { environment } from '../../../environments/environment';
 import { guestSessionId } from '../utils/guest-session';
+import { showToast } from '../utils/toast';
 
 /** Server-owned conversation routing; every non-AI state suppresses new AI output. */
 export type ChatHandoffStatus = 'ai' | 'requested' | 'assigned' | 'closed';
@@ -107,6 +109,7 @@ const SESSION_OWNER_KEY = 'velura_chat_session_owner';
 @Injectable({ providedIn: 'root' })
 export class ChatbotService {
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
   readonly activeHandoff = signal<ChatHandoffStatus>('ai');
   readonly activeSession = signal('');
   private readonly auth = inject(AuthService);
@@ -152,7 +155,9 @@ export class ChatbotService {
     return new Observable<ChatSendResponse>(subscriber => {
       const controller = new AbortController();
       const identity = this.auth.session();
-      const token = localStorage.getItem('velura_token');
+      const token =
+        (typeof localStorage !== 'undefined' ? localStorage.getItem('velura_token') : null) ||
+        (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('velura_token') : null);
       const headers: Record<string, string> = {
         Accept: 'text/event-stream',
         'Content-Type': 'application/json',
@@ -164,7 +169,32 @@ export class ChatbotService {
           method: 'POST', headers, body: JSON.stringify(payload), signal: controller.signal,
         });
         if (identity !== this.auth.session()) throw new Error('Chat identity changed');
-        if (!response.ok) throw new Error('Chat request failed');
+        if (!response.ok) {
+          let payloadBody: Record<string, unknown> | null = null;
+          try {
+            const parsed = await response.json() as unknown;
+            if (parsed && typeof parsed === 'object') payloadBody = parsed as Record<string, unknown>;
+          } catch {}
+          const nested = payloadBody?.['error'] && typeof payloadBody['error'] === 'object'
+            ? (payloadBody['error'] as Record<string, unknown>)
+            : null;
+          const errorCode = typeof nested?.['code'] === 'string' ? nested['code'] : typeof payloadBody?.['code'] === 'string' ? payloadBody['code'] : '';
+          const errorMsg = (typeof nested?.['message'] === 'string' && nested['message'])
+            || (typeof payloadBody?.['message'] === 'string' && payloadBody['message'])
+            || '';
+          if (token && (response.status === 423 || errorCode === 'ACCOUNT_LOCKED')) {
+            const msg = errorMsg.trim() || 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ CSKH để được hỗ trợ.';
+            if (this.auth.kickOutLocked?.(msg)) {
+              showToast(msg);
+              void this.router.navigate(['/auth/signin'], { queryParams: { locked: '1' }, replaceUrl: true });
+            }
+            throw new Error(msg);
+          }
+          if (token && response.status === 401) {
+            this.auth.signOut?.();
+          }
+          throw new Error(errorMsg || 'Chat request failed');
+        }
         if (!response.headers.get('content-type')?.includes('text/event-stream')) {
           const data = await response.json() as ChatSendResponse;
           if (identity === this.auth.session()) subscriber.next(data);

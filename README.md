@@ -15,7 +15,7 @@
 | 2 | Trần Diễm Quỳnh | K234060724 | 100% | Fullstack, Backend API, Chatbot AI & kiểm soát nghiệp vụ CSKH, CI/CD & hạ tầng |
 | 3 | Nguyễn Tô Hoàng Gia | K234060689 | 100% | Fullstack, Backend API, CSDL Supabase, Thanh toán, AI Engine, DevOps/GitOps K3s |
 | 4 | Nguyễn Phan Ngọc Hân | K234060691 | 100% | Phân tích nghiệp vụ, luồng mua hàng, đơn hàng, đổi trả/hoàn tiền và kiểm thử UAT |
-| 5 | Nguyễn Trần Dạ Uyên | K234060737 | 100% | Thiết kế UI/UX, Frontend Angular (`user-ng`, `admin-ng`), chuẩn hóa trải nghiệm người dùng |
+| 5 | Nguyễn Trần Dạ Uyên | K234060737 | 100% | Thiết kế UI/UX, Frontend Angular (`user-ng`, `admin-erp-ng`), chuẩn hóa trải nghiệm người dùng |
 | 6 | Đoàn Phương Ninh | K234060716 | 100% | Nghiệp vụ quản trị, khuyến mãi/voucher, nội dung, kiểm thử hệ thống và tài liệu |
 
 ---
@@ -23,7 +23,7 @@
 ## 2. Mục tiêu, Tầm nhìn và Sứ mệnh
 
 ### Mục tiêu
-Xây dựng hoàn chỉnh một hệ thống thương mại điện tử thời trang theo chuẩn kiến trúc sản xuất (production-grade), tích hợp sâu các năng lực trí tuệ nhân tạo có kiểm soát (AI Stylist, Tìm kiếm ngữ nghĩa RAG, Thử đồ ảo Virtual Try-On, Chatbot tư vấn và CSKH phân tầng L0-L3), vận hành đồng bộ trên bốn phân hệ (Storefront, Admin Portal, Admin ERP, Backend API) với quy trình CI/CD và GitOps tự động.
+Xây dựng hoàn chỉnh một hệ thống thương mại điện tử thời trang theo chuẩn kiến trúc sản xuất (production-grade), tích hợp sâu các năng lực trí tuệ nhân tạo có kiểm soát (AI Stylist, Tìm kiếm ngữ nghĩa RAG, Thử đồ ảo Virtual Try-On, Chatbot tư vấn và CSKH phân tầng L0-L3), vận hành đồng bộ trên ba phân hệ chính (Storefront, Admin ERP, Backend HTTP API) với quy trình CI/CD và GitOps tự động.
 
 ### Tầm nhìn
 Trở thành nền tảng bán lẻ thời trang trực tuyến cá nhân hóa lấy dữ liệu và trí tuệ nhân tạo làm trung tâm, nơi trải nghiệm tư vấn phong cách, chọn kích cỡ, thử trang phục và chăm sóc hậu mãi được số hóa nhất quán, minh bạch và đáng tin cậy.
@@ -40,8 +40,7 @@ Trở thành nền tảng bán lẻ thời trang trực tuyến cá nhân hóa l
 | Phân hệ | Mô tả | Liên kết Production |
 |---|---|---|
 | Storefront (Khách hàng) | Mua sắm, tài khoản, thanh toán, đổi trả, AI Stylist, VTO, Chatbot | https://velura.royalai.dev/ |
-| Admin Portal | Cổng quản trị vận hành, RBAC, CSKH, đơn hàng, khuyến mãi, nội dung | https://admin.royalai.dev/login |
-| Admin ERP | Phân hệ quản trị doanh nghiệp, biểu đồ phân tích, mã QR vận hành | https://admin-erp.royalai.dev/login |
+| Admin ERP | Phân hệ quản trị doanh nghiệp (RBAC 7 vai trò, CSKH, đơn hàng, sản phẩm, giá/khuyến mãi, nội dung, biểu đồ phân tích ECharts, mã QR vận hành) | https://admin-erp.royalai.dev/login |
 | Backend HTTP API | Kiểm tra trạng thái dịch vụ và cổng API | https://velura.royalai.dev/api/health |
 
 ---
@@ -50,7 +49,7 @@ Trở thành nền tảng bán lẻ thời trang trực tuyến cá nhân hóa l
 
 | Tầng hệ thống | Công nghệ chính | Vai trò |
 |---|---|---|
-| Frontend SPA | Angular 21 (Standalone Components, Signals), TypeScript 5.9, RxJS 7.8, Vitest 4 | Xây dựng 3 ứng dụng độc lập: `user-ng`, `admin-ng`, `admin-erp-ng` (không sử dụng `NgModule`) |
+| Frontend SPA | Angular 21 (Standalone Components, Signals), TypeScript 5.9, RxJS 7.8, Vitest 4 | Xây dựng phân hệ Storefront (`user-ng`) và Admin ERP (`admin-erp-ng`) không sử dụng `NgModule` |
 | Trực quan hóa & QR | Apache ECharts 6 (`ngx-echarts`), `qrcode`, `jsqr` | Biểu đồ phân tích ERP, tạo và quét mã QR thanh toán/vận hành |
 | Backend API | Node.js 22+ (ESM), TypeScript (`tsx` / `tsc`), HTTP Server thuần chuẩn hóa | Tách lớp `Router -> Service -> Repository`, kiểm soát nghiệp vụ, bảo mật, webhook và SSE |
 | Cơ sở dữ liệu & Auth | Supabase (PostgreSQL, Auth/JWT, RLS, `pgvector`, SQL Migrations & RPC) | Lưu trữ giao dịch ACID, tìm kiếm vector 1536 chiều, xác thực thành viên và quản trị viên |
@@ -75,8 +74,7 @@ Trở thành nền tảng bán lẻ thời trang trực tuyến cá nhân hóa l
 velura-angular/
 ├── apps/
 │   ├── user-ng/                # SPA khách hàng (Storefront, Checkout, Account, AI, Chatbot)
-│   ├── admin-ng/               # SPA quản trị (RBAC, Orders, Products, Promotions, CSKH, Audit)
-│   ├── admin-erp-ng/           # SPA quản trị ERP (Dashboard ECharts, vận hành QR)
+│   ├── admin-erp-ng/           # SPA quản trị doanh nghiệp (RBAC, Orders, Products, Promotions, CSKH, ECharts, QR, Audit)
 │   ├── api/                    # Node.js TypeScript Backend API (Router -> Service -> Repository)
 │   └── ai-worker/              # Python Worker xử lý tác vụ hình ảnh AI / Virtual Try-On
 ├── database/
@@ -175,10 +173,9 @@ Mở các cửa sổ terminal riêng biệt tại thư mục gốc dự án và 
 |---|---|---|
 | Backend API | `npm run start:api` | http://localhost:8787/health |
 | Storefront (Khách hàng) | `npm run start:user` | http://localhost:4002/ |
-| Admin Portal | `npm run start:admin` | http://localhost:4001/login |
-| Admin ERP | `npm run start:admin-erp` | http://localhost:4003/login |
+| Admin ERP (Cổng quản trị) | `npm run start:admin-erp` | http://localhost:4003/login |
 
-Lưu ý: Khi khởi chạy `admin-ng` và `admin-erp-ng` ở chế độ cục bộ, Angular Dev Server đã cấu hình sẵn `proxy.conf.json` chuyển tiếp `/supabase` tới dự án Supabase Cloud và trỏ API tới `http://localhost:8787`.
+Lưu ý: Khi khởi chạy `admin-erp-ng` và `user-ng` ở chế độ cục bộ, Angular Dev Server đã cấu hình sẵn `proxy.conf.json` / môi trường phát triển chuyển tiếp `/supabase` tới dự án Supabase Cloud và trỏ API tới `http://localhost:8787`.
 
 ---
 
@@ -193,7 +190,7 @@ npm run typecheck:api
 # Chạy toàn bộ kiểm thử Backend API (chạy tuần tự trên Windows để tránh tranh chấp file tạm)
 npm run test:api
 
-# Chạy bộ kiểm thử đơn vị cho cả 3 ứng dụng Angular (user-ng, admin-ng, admin-erp-ng)
+# Chạy bộ kiểm thử đơn vị Angular trong workspace
 npm run test:ng
 
 # Chạy đánh giá AI Decision Engine và kiểm thử vận hành

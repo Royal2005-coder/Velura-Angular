@@ -2,7 +2,7 @@ import { HttpError } from "../http.js";
 import { randomUUID } from "node:crypto";
 import { callRpc, insertRow, selectOne, selectRows, updateRows, deleteRows } from "../supabase.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
-import { PRODUCT_SELECT, SKU_DUPLICATE_MESSAGE } from "./product-constants.js";
+import { ARCHIVED_LEGACY_TEST_PRODUCT_FILTER, PRODUCT_SELECT, SKU_DUPLICATE_MESSAGE } from "./product-constants.js";
 
 /**
  * PostgREST product repository used by `createProductService`.
@@ -42,6 +42,7 @@ export function createProductRepository() {
           query.sale_price = `lte.${filters.maxPrice}`;
         }
       }
+      query["not.and"] = ARCHIVED_LEGACY_TEST_PRODUCT_FILTER;
       return withProductError(() => selectRows("product", query, authOptions(accessToken)));
     },
 

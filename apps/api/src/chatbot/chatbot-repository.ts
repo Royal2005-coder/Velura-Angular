@@ -313,7 +313,20 @@ export function createChatbotRepository() {
             filter_size: null
           }));
           if (matchRows.length > 0) {
-            return { rows: matchRows };
+            const matchedIds = uniqueUuidList(matchRows.map((row) => row.product_id));
+            if (matchedIds.length > 0) {
+              const hydrated = await withChatError(() => selectRows("product", {
+                select: CHAT_PRODUCT_SELECT,
+                product_id: `in.(${matchedIds.join(",")})`,
+                status: "eq.on_sale",
+                limit: Math.min(matchedIds.length, 12)
+              }));
+              const byId = new Map((hydrated.rows || []).map((row) => [asString(row.product_id), row]));
+              const ordered = matchedIds.map((id) => byId.get(id)).filter((row): row is JsonObject => Boolean(row));
+              if (ordered.length > 0) {
+                return { rows: ordered };
+              }
+            }
           }
         }
       } catch (err: unknown) {

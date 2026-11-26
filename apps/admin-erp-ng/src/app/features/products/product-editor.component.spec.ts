@@ -190,4 +190,36 @@ describe('ProductEditorComponent', () => {
     expect(editor.error()).toContain('tải lại');
     expect(conflicts.length).toBe(1);
   });
+
+  it('saves approved studio-replaced common images even when imageColors contains blank or undefined values', () => {
+    const patches: AdminProductUpdateInput[] = [];
+    const studioUrl = 'https://cdn.example/enhanced.png';
+    const fixture = boot({
+      updateProduct: (_id: string, body: AdminProductUpdateInput) => {
+        patches.push(body);
+        return of({ ...saved, images: [studioUrl], image_colors: {} });
+      },
+      checkProductSku: (sku: string) => of(free(sku)),
+    });
+    const editor = open(fixture, saved);
+
+    editor.images.set([studioUrl]);
+    editor.approvals.set([
+      {
+        approvalId: 'app-1',
+        url: studioUrl,
+        sourceRevision: 'rev-1',
+        processingVersion: 'v1',
+        qualityScore: 95,
+        expiresAt: '2026-12-31T00:00:00Z',
+      },
+    ]);
+    editor.imageColors.set({ [studioUrl]: undefined as unknown as string, '/assets/images/removed.jpg': '' });
+    editor.submit();
+
+    expect(editor.error()).toBeNull();
+    expect(patches.length).toBe(1);
+    expect(patches[0].images).toEqual([studioUrl]);
+    expect(patches[0].imageColors).toEqual({});
+  });
 });

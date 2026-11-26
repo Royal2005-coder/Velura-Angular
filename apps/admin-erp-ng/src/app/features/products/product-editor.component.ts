@@ -748,7 +748,9 @@ export class ProductEditorComponent {
     const name = this.name().trim();
     const images = this.images();
     const imageColors = Object.fromEntries(
-      Object.entries(this.imageColors()).filter(([url]) => images.includes(url)),
+      Object.entries(this.imageColors())
+        .filter(([url, color]) => images.includes(url) && typeof color === 'string' && color.trim().length > 0)
+        .map(([url, color]) => [url, color.trim()]),
     );
     const colors = this.variantColors();
     const stale = Object.entries(imageColors).find(([, color]) => !colors.includes(color));
@@ -1013,7 +1015,11 @@ export class ProductEditorComponent {
     this.occasions.set(product.occasions?.length ? [...product.occasions] : []);
     this.bodyShapes.set(product.suitable_body_shapes?.length ? [...product.suitable_body_shapes] : []);
     this.images.set([...(product.images || [])]);
-    this.imageColors.set({ ...(product.image_colors || {}) });
+    this.imageColors.set(
+      Object.fromEntries(
+        Object.entries(product.image_colors || {}).filter(([, color]) => typeof color === 'string' && color.trim().length > 0),
+      ),
+    );
     this.variants.set(product.variants ? [...product.variants] : []);
     this.scheduleSkuCheck(product.product_id);
     if (product.is_combo) {

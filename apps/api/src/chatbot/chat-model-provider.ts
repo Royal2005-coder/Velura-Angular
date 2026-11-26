@@ -12,7 +12,11 @@ export class ChatModelError extends HttpError {
   }
 }
 
-const DEFAULT_FALLBACK_GEMINI_MODEL = "gemini-3-flash-preview";
+const DEFAULT_FALLBACK_GEMINI_MODELS = [
+  "gemini-3.5-flash-lite",
+  "gemini-3.8-flash",
+  "gemini-3.1-flash-lite-preview",
+] as const;
 
 /** Collects provider output privately; partial, truncated or refused output never becomes a result. */
 export async function requestChatJson(provider: "mistral" | "gemini", model: string, operation: ChatModelTrace["operation"], prompt: string): Promise<{ value: JsonObject; trace: ChatModelTrace }> {
@@ -29,15 +33,18 @@ export async function requestChatJson(provider: "mistral" | "gemini", model: str
   if (provider === "mistral") {
     if (gateway || config.mistralApiKey) {
       pushUnique("mistral", model);
-      pushUnique("gemini", config.geminiModel || DEFAULT_FALLBACK_GEMINI_MODEL);
-      pushUnique("gemini", DEFAULT_FALLBACK_GEMINI_MODEL);
+      pushUnique("gemini", config.geminiModel || DEFAULT_FALLBACK_GEMINI_MODELS[0]);
+      for (const fallback of DEFAULT_FALLBACK_GEMINI_MODELS) pushUnique("gemini", fallback);
     } else if (gateway || config.geminiApiKey) {
-      pushUnique("gemini", config.geminiModel || DEFAULT_FALLBACK_GEMINI_MODEL);
+      pushUnique("gemini", config.geminiModel || DEFAULT_FALLBACK_GEMINI_MODELS[0]);
+      for (const fallback of DEFAULT_FALLBACK_GEMINI_MODELS) pushUnique("gemini", fallback);
     }
   } else if (gateway || config.geminiApiKey) {
     pushUnique("gemini", model);
-    pushUnique("gemini", DEFAULT_FALLBACK_GEMINI_MODEL);
+    for (const fallback of DEFAULT_FALLBACK_GEMINI_MODELS) pushUnique("gemini", fallback);
   }
+  // Cap candidate chain to 3 distinct quota pools so worst-case latency stays well within proxy deadlines.
+  if (candidates.length > 3) candidates.splice(3);
   if (!candidates.length) throw new ChatModelError("CHAT_PROVIDER_UNVERIFIED", []);
   const traces: ChatModelTrace[] = [];
   // Single retry only when there is no fallback candidate; otherwise advance fast to keep latency well within proxy limits.
@@ -82,7 +89,7 @@ async function attemptChatJson(provider: "mistral" | "gemini", model: string, op
       contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0, maxOutputTokens: 3200, responseMimeType: "application/json" }
     };
     const response = await fetch(url, { method: "POST", redirect: "error", signal: controller.signal, headers: { "content-type": "application/json", ...(trace.streamed ? { authorization: `Bearer ${key}` } : { "x-goog-api-key": key }) }, body: JSON.stringify(payload) });
-    if (!response.ok) { await response.body?.cancel(); throw new Error("provider"); }
+    if (!response.ok) { trace.note = `HTTP_${response.status}`; await response.body?.cancel(); throw new Error("provider"); }
     trace.outcome = "invalid";
     let raw: string;
     if (trace.streamed) {

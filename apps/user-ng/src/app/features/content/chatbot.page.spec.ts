@@ -3,6 +3,7 @@ import { ChatbotPage } from './chatbot.page';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { ChatbotService, type ChatSendResponse } from '../../core/services/chatbot.service';
+import { ApiRequestError } from '../../core/models/api-request-error';
 import { CartStore } from '../../core/services/cart.store';
 import { OrderAccountApiStore } from '../../core/services/order-account-api.store';
 
@@ -147,5 +148,18 @@ describe('ChatbotPage', () => {
     expect(page.sessionId()).toBe('linked-case');
     expect(page.previousSessionId()).toBe('old-case');
     expect(TestBed.inject(ChatbotService).activeSession()).toBe('linked-case');
+  });
+
+  it('clears stale sessionId and storage when openSession fails with 404', async () => {
+    const page = await createStorefrontPage(ChatbotPage);
+    const model = TestBed.inject(ChatbotService);
+    const clearSpy = vi.spyOn(model, 'clearSessionId');
+    vi.spyOn(model, 'listMessages').mockReturnValue(
+      throwError(() => new ApiRequestError('Chat session not found', 404, 'CHAT_SESSION_NOT_FOUND', null)),
+    );
+    page.openSession({ session_id: 'stale-guest-id' });
+    expect(page.sessionId()).toBe('');
+    expect(page.chatError()).toBe('');
+    expect(clearSpy).toHaveBeenCalled();
   });
 });

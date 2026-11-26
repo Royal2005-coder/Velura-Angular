@@ -7,7 +7,7 @@ import { config } from "../../apps/api/src/config.js";
 import { asJsonObject, asString, isJsonObject, type AuthContext, type JsonObject } from "../../apps/api/src/types.js";
 import { createChatbotRepository, type ChatbotRepository } from "../../apps/api/src/chatbot/chatbot-repository.js";
 import { createChatbotService } from "../../apps/api/src/chatbot/chatbot-service.js";
-import { parseChatAnalysis, parseChatDraft } from "../../apps/api/src/chatbot/llm-service.js";
+import { parseChatAnalysis, parseChatDraft, responseRiskCheck } from "../../apps/api/src/chatbot/llm-service.js";
 import type { ChatAnalysis, ChatDraft, ChatModel } from "../../apps/api/src/chatbot/chatbot-types.js";
 
 const SESSION = "22222222-2222-4222-8222-222222222222";
@@ -770,4 +770,119 @@ test("parseChatAnalysis enforces independent emotion/risk fields without escalat
   });
   assert.equal(repeated.level, "L1");
   assert.equal(repeated.risk, "yellow");
+});
+
+test("searchProducts hydrates match_products hits with updated_at while keeping rank order", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalUrl = config.supabaseUrl;
+  const originalKey = config.supabaseServiceRoleKey;
+  const originalGeminiKey = config.geminiApiKey;
+  config.supabaseUrl = "https://catalog.test";
+  config.supabaseServiceRoleKey = "service-test";
+  config.geminiApiKey = "test-gemini-key";
+  const idA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const idB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  try {
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("embedContent") || url.includes("/embeddings")) {
+        const vec = Array.from({ length: 1536 }, () => 0.01);
+        return new Response(JSON.stringify({ embedding: { values: vec }, data: [{ embedding: vec }] }), { status: 200 });
+      }
+      if (url.includes("/rpc/match_products")) {
+        return new Response(JSON.stringify([
+          { product_id: idB, name: "Đầm B", variants: [{ variant_id: "1" }] },
+          { product_id: idA, name: "Đầm A", variants: [{ variant_id: "2" }] }
+        ]), { status: 200 });
+      }
+      if (url.includes("/rest/v1/product?")) {
+        return new Response(JSON.stringify([
+          { product_id: idA, name: "Đầm A", updated_at: VERSION, base_price: 500000, variants: [{ variant_id: "2", stock_quantity: 2, reserved_quantity: 0 }] },
+          { product_id: idB, name: "Đầm B", updated_at: VERSION, base_price: 600000, variants: [{ variant_id: "1", stock_quantity: 3, reserved_quantity: 0 }] }
+        ]), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 500 });
+    };
+    const repository = createChatbotRepository();
+    const res = await repository.searchProducts("đầm dự tiệc", 4);
+    assert.equal(res.rows.length, 2);
+    assert.equal(res.rows[0].product_id, idB);
+    assert.equal(res.rows[0].updated_at, VERSION);
+    assert.equal(res.rows[1].product_id, idA);
+  } finally {
+    globalThis.fetch = originalFetch;
+    config.supabaseUrl = originalUrl;
+    config.supabaseServiceRoleKey = originalKey;
+    config.geminiApiKey = originalGeminiKey;
+  }
+});
+
+test("catalog fallback retries text-only when product sources turn stale", async () => {
+  let commitCalls = 0;
+  const f = fixture({ analyze: async () => { throw new Error("classifier down"); } });
+  const origCommit = f.repository.commitAiTurn;
+  f.repository.commitAiTurn = async (sid, epoch, seq, draftPayload, srcPayload) => {
+    commitCalls++;
+    if (commitCalls === 1) {
+      assert.ok(srcPayload.length > 0);
+      return { sent: false, reason: "SOURCE_STALE" };
+    }
+    assert.equal(srcPayload.length, 0);
+    return origCommit(sid, epoch, seq, draftPayload, srcPayload);
+  };
+  const result = await f.send("Gợi ý đầm công sở", { auth: principal("member") });
+  const botMsgs = rows(result).filter((m) => m.sender === "bot");
+  assert.equal(commitCalls, 2);
+  assert.equal(botMsgs.length, 1);
+  assert.equal(asJsonObject(botMsgs[0].metadata).approach, "safe_ai_retry_fallback");
+});
+
+test("parseChatDraft normalizes product: prefix and responseRiskCheck handles L0 policy quotes safely", () => {
+  const parsed = parseChatDraft({
+    text: "Gợi ý Đầm công sở phù hợp.",
+    productIds: [`product:${PRODUCT}`],
+    claims: [{ sourceId: `product:${PRODUCT}`, quote: "Đầm công sở" }],
+    approach: "catalog_match",
+    promisedActions: []
+  });
+  assert.deepEqual(parsed.productIds, [PRODUCT]);
+
+  const policySource = {
+    id: `policy:${POLICY}`,
+    kind: "policy" as const,
+    recordId: POLICY,
+    version: VERSION,
+    approved: false,
+    content: JSON.stringify({ title: "Chính sách đổi trả", summary: "Hoàn tiền theo quy định.", content: [{ items: ["Đơn hợp lệ sẽ hoàn tiền trong 3-5 ngày làm việc."] }] }),
+    snapshot: { updated_at: VERSION }
+  };
+  const l0Analysis = analysis({ intent: "facts", level: "L0", issue: "return" });
+  const l0Passive = responseRiskCheck(l0Analysis, {
+    text: "Theo chính sách đổi trả, đơn hợp lệ sẽ hoàn tiền trong 3-5 ngày làm việc.",
+    productIds: [],
+    claims: [{ sourceId: `policy:${POLICY}`, quote: "Đơn hợp lệ sẽ hoàn tiền trong 3-5 ngày làm việc." }],
+    approach: "official_policy",
+    promisedActions: []
+  }, [policySource]);
+  assert.equal(l0Passive.safe, true);
+
+  const l0PersonalPromise = responseRiskCheck(l0Analysis, {
+    text: "Tôi sẽ hoàn tiền cho bạn ngay.",
+    productIds: [],
+    claims: [{ sourceId: `policy:${POLICY}`, quote: "Đơn hợp lệ sẽ hoàn tiền trong 3-5 ngày làm việc." }],
+    approach: "official_policy",
+    promisedActions: []
+  }, [policySource]);
+  assert.equal(l0PersonalPromise.safe, false);
+  assert.ok(l0PersonalPromise.reasons.includes("INVALID_PROMISE"));
+
+  const blankQuote = responseRiskCheck(l0Analysis, {
+    text: "Thông tin tham khảo.",
+    productIds: [],
+    claims: [{ sourceId: `policy:${POLICY}`, quote: "   :   " }],
+    approach: "official_policy",
+    promisedActions: []
+  }, [policySource]);
+  assert.equal(blankQuote.safe, false);
+  assert.ok(blankQuote.reasons.includes("INVALID_GROUNDING"));
 });

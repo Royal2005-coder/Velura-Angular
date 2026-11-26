@@ -192,6 +192,7 @@ export async function measureTechnicalQuality(bytes: Buffer): Promise<ProductIma
   // and side margins (x < 14 or x >= size - 14) to avoid head/hair touching top-center or hem touching bottom-center.
   const size = 160;
   const borderLums: number[] = [];
+  const cornerLums: number[] = [];
   let laplacianSum = 0;
   let laplacianCount = 0;
   let activeLaplacianCount = 0;
@@ -205,6 +206,10 @@ export async function measureTechnicalQuality(bytes: Buffer): Promise<ProductIma
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const lum = gray[y * size + x];
+      const isOuterCorner = (x < 10 || x >= size - 10) && (y < 10 || y >= size - 10);
+      if (isOuterCorner) {
+        cornerLums.push(lum);
+      }
       const isCorner = (x < 24 || x >= size - 24) && (y < 24 || y >= size - 24);
       const isSide = (x < 14 || x >= size - 14);
       if (isCorner || isSide) {
@@ -230,24 +235,75 @@ export async function measureTechnicalQuality(bytes: Buffer): Promise<ProductIma
     borderLums.reduce((acc, v) => acc + Math.pow(v - borderMean, 2), 0) / Math.max(1, borderLums.length);
   const borderStd = Math.sqrt(borderVar);
 
+  const cornerMean = cornerLums.reduce((a, b) => a + b, 0) / Math.max(1, cornerLums.length);
+  const cornerVar =
+    cornerLums.reduce((acc, v) => acc + Math.pow(v - cornerMean, 2), 0) / Math.max(1, cornerLums.length);
+  const cornerStd = Math.sqrt(cornerVar);
+  const brightStudioPixels = borderLums.filter((lum) => lum >= 225).length / Math.max(1, borderLums.length);
+
+  // Clean studio white/cream backdrops have bright uniform outer corners even if wide garments touch side margins.
+  const isCleanCornerBackdrop = cornerMean >= 225 && cornerStd <= 16 && brightStudioPixels >= 0.72;
+  const isFlatBlank = contrast < 4 || activeLaplacianCount <= 25;
+
   // Background score: studio backdrops have low borderStd (< 22) and bright clean tone (white/cream > 170).
   // Dark/black borders are heavily penalized so blank dark images cannot pretend to be studio backdrops.
   const darkPenalty = borderMean < 140 ? Math.min(60, (140 - borderMean) * 0.5) : 0;
   const uniformityScore = borderMean < 60 ? 0 : Math.max(0, Math.min(100, Math.round(100 - borderStd * 1.35 - darkPenalty)));
   const studioLightBonus = borderMean >= 205 ? 12 : borderMean >= 170 ? 6 : 0;
-  const backgroundScore = Math.max(25, Math.min(99, uniformityScore + studioLightBonus));
+  let backgroundScore = Math.max(25, Math.min(99, uniformityScore + studioLightBonus));
+  if (isCleanCornerBackdrop && !isFlatBlank) {
+    backgroundScore = Math.max(backgroundScore, cornerMean >= 242 ? 96 : 90);
+  }
+  if (isFlatBlank) {
+    backgroundScore = Math.min(backgroundScore, 55);
+  }
 
-  // Sharpness score from Laplacian edge energy normalized on active subject pixels
+  // Measure foreground/subject lighting separately when a clean studio backdrop surrounds the garment,
+  // preventing pure-white margins (#FFFFFF) from dragging light or dark garments into false lighting failures.
+  let fgLumSum = 0;
+  let fgLumSqSum = 0;
+  let fgCount = 0;
+  for (let i = 0; i < size * size; i++) {
+    const lum = gray[i];
+    if (Math.abs(lum - cornerMean) > 16) {
+      fgLumSum += lum;
+      fgLumSqSum += lum * lum;
+      fgCount++;
+    }
+  }
+  const hasSubjectOnStudio = isCleanCornerBackdrop && !isFlatBlank && fgCount >= 80;
+  const fgBrightness = hasSubjectOnStudio ? fgLumSum / fgCount : brightness;
+  const fgVariance = hasSubjectOnStudio ? Math.max(0, fgLumSqSum / fgCount - fgBrightness * fgBrightness) : contrast * contrast;
+  const fgContrast = Math.sqrt(fgVariance);
+  const evalBrightness = hasSubjectOnStudio ? Math.round(fgBrightness) : brightness;
+  const evalContrast = hasSubjectOnStudio ? Math.round(Math.max(contrast, fgContrast)) : contrast;
+
+  // Sharpness score from Laplacian edge energy on active subject edges (unaffected by solid studio white margins).
   const activeCount = Math.max(1, activeLaplacianCount);
-  const activeRatio = activeCount / Math.max(1, laplacianCount);
-  const meanLaplacian = activeCount > 25
-    ? (laplacianSum / activeCount) * Math.min(1.0, activeRatio * 4 + 0.35)
-    : (laplacianSum / Math.max(1, laplacianCount));
-  const sharpnessScore = Math.max(30, Math.min(99, Math.round(Math.min(100, meanLaplacian * 4.6 + (stats.sharpness || 0) * 8))));
+  const meanLaplacian = activeLaplacianCount > 40
+    ? laplacianSum / activeCount
+    : (laplacianSum / Math.max(1, laplacianCount)) * 0.5;
+  const sharpnessScore = isFlatBlank
+    ? 30
+    : Math.max(30, Math.min(99, Math.round(Math.min(100, meanLaplacian * 4.8 + (stats.sharpness || 0) * 8))));
+
   // Lighting score: ideal brightness is 125..215, contrast 32..85
   let lightingScore = 88;
   let lightingDetail = "Ánh sáng studio cân bằng, tôn rõ màu sắc và chất liệu vải.";
-  if (brightness < 95) {
+  if (isFlatBlank) {
+    lightingScore = 40;
+    lightingDetail = "Ảnh trống hoặc thiếu chi tiết ánh sáng/vật thể, chưa đạt chuẩn Studio.";
+  } else if (hasSubjectOnStudio) {
+    if (evalBrightness < 55) {
+      lightingScore = Math.max(58, 76 - Math.round((55 - evalBrightness) * 0.5));
+      lightingDetail = "Vùng sản phẩm hơi tối, cần cân bằng sáng nhẹ để rõ chi tiết.";
+    } else if (evalBrightness > 238 && evalContrast < 16) {
+      lightingScore = 70;
+      lightingDetail = "Sản phẩm sáng trùng nền, nên tăng nhẹ độ tương phản chi tiết.";
+    } else {
+      lightingScore = evalBrightness >= 85 && evalBrightness <= 228 ? 90 : 84;
+    }
+  } else if (brightness < 95) {
     lightingScore = Math.max(35, 65 - (95 - brightness));
     lightingDetail = "Ảnh hơi tối (thiếu sáng vùng chi tiết vải), cần tăng độ sáng studio.";
   } else if (brightness < 118) {
@@ -554,11 +610,12 @@ export async function enhanceProductImageStudio(body: JsonObject): Promise<Produ
   const width = origMeta.width || 800;
   const height = origMeta.height || 800;
   const origRgb = await origImage.clone().removeAlpha().raw().toBuffer();
+  const isFlatBlank = beforeAnalysis.metrics.contrast < 4;
 
   let maskAlpha: Uint8Array | null = null;
 
   // 1. Run AI U2Net background segmentation on K3s GPU worker to obtain the foreground alpha mask only
-  if (bgChoice === "studio_white" || bgChoice === "velura_cream" || bgChoice === "transparent") {
+  if (!isFlatBlank && (bgChoice === "studio_white" || bgChoice === "velura_cream" || bgChoice === "transparent")) {
     const segmented = await tryClusterWorkerSegmentation(bytes);
     if (segmented) {
       try {
@@ -571,6 +628,16 @@ export async function enhanceProductImageStudio(body: JsonObject): Promise<Produ
         for (let i = 0; i < width * height; i++) {
           maskAlpha[i] = segRgba[i * 4 + 3];
         }
+        // Clean residual semi-transparent perimeter halo on the outermost 6px margin so studio corners remain pure.
+        const margin = Math.max(4, Math.min(10, Math.round(Math.min(width, height) * 0.015)));
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            if (x < margin || x >= width - margin || y < margin || y >= height - margin) {
+              const p = y * width + x;
+              if (maskAlpha[p] < 140) maskAlpha[p] = 0;
+            }
+          }
+        }
         modelUsed = "k3s-u2net-apache2 + velura-color-safe-v3";
         improvements.push(
           bgChoice === "transparent"
@@ -582,6 +649,15 @@ export async function enhanceProductImageStudio(body: JsonObject): Promise<Produ
       } catch {
         maskAlpha = null;
       }
+    }
+    if (!maskAlpha) {
+      maskAlpha = buildFallbackStudioMask(origRgb, width, height);
+      modelUsed = "velura-studio-matte-v3";
+      improvements.push(
+        bgChoice === "velura_cream"
+          ? "Làm sạch viền nền sang tông Kem Studio Velura (#FAF6F0) — giữ nguyên 100% màu sản phẩm"
+          : "Làm sạch viền nền sang tông Trắng Studio (#FFFFFF) — giữ nguyên 100% màu sản phẩm",
+      );
     }
   }
 
@@ -598,13 +674,20 @@ export async function enhanceProductImageStudio(body: JsonObject): Promise<Produ
     }
   }
   const garmentMeanLum = fgCount > 0 ? fgLumSum / fgCount : beforeAnalysis.metrics.brightness;
-  // Only lift lighting slightly if the garment itself is genuinely dark (< 85/255); never darken or shift hue
-  const lightLift =
-    enhanceLighting && garmentMeanLum < 85 ? Math.min(1.07, Math.max(1.0, 92 / Math.max(garmentMeanLum, 45))) : 1.0;
+  // Balanced hue-preserving exposure calibration for dim indoor photos (only on non-blank images).
+  const lightLift = !enhanceLighting || isFlatBlank
+    ? 1.0
+    : garmentMeanLum < 122
+      ? Math.min(1.42, Math.max(1.0, 128 / Math.max(garmentMeanLum, 45)))
+      : garmentMeanLum > 228
+        ? Math.max(0.92, 220 / garmentMeanLum)
+        : 1.0;
 
   if (enhanceLighting) {
-    if (lightLift > 1.005) {
-      improvements.push("Cân bằng sáng nhẹ vùng tối (giữ nguyên 100% tỷ lệ màu RGB gốc của sản phẩm)");
+    if (lightLift > 1.01) {
+      improvements.push("Cân bằng sáng vùng tối theo chuẩn Studio (giữ nguyên tỷ lệ màu RGB sản phẩm)");
+    } else if (lightLift < 0.99) {
+      improvements.push("Giảm chói nhẹ vùng dư sáng để nổi rõ đường may & thớ vải");
     } else {
       improvements.push("Khóa bảo toàn 100% màu sắc & độ sáng gốc của trang phục (Zero Color Shift)");
     }
@@ -620,9 +703,12 @@ export async function enhanceProductImageStudio(body: JsonObject): Promise<Produ
 
   for (let i = 0; i < pixelCount; i++) {
     const srcIdx = i * 3;
-    const r = Math.min(255, Math.round(origRgb[srcIdx] * lightLift));
-    const g = Math.min(255, Math.round(origRgb[srcIdx + 1] * lightLift));
-    const b = Math.min(255, Math.round(origRgb[srcIdx + 2] * lightLift));
+    const rawR = origRgb[srcIdx];
+    const rawG = origRgb[srcIdx + 1];
+    const rawB = origRgb[srcIdx + 2];
+    const r = applyBalancedGain(rawR, lightLift);
+    const g = applyBalancedGain(rawG, lightLift);
+    const b = applyBalancedGain(rawB, lightLift);
 
     let w = 1.0;
     if (maskAlpha && bgChoice !== "keep") {
@@ -661,12 +747,26 @@ export async function enhanceProductImageStudio(body: JsonObject): Promise<Produ
   }
 
   if (enhanceSharpness) {
-    pipeline = pipeline.sharpen({ sigma: 0.7, m1: 0.35, m2: 0.75 });
+    pipeline = pipeline.sharpen({ sigma: 0.95, m1: 0.65, m2: 1.25 });
     improvements.push("Tăng cường độ sắc nét chi tiết sợi vải & đường may (Bảo toàn màu gốc)");
   }
 
-  const enhancedBytes = await pipeline.png({ compressionLevel: 8 }).toBuffer();
-  const afterAnalysis = await measureTechnicalQuality(enhancedBytes);
+  let enhancedBytes = await pipeline.png({ compressionLevel: 8 }).toBuffer();
+  let afterAnalysis = await measureTechnicalQuality(enhancedBytes);
+
+  // If a real non-blank garment photo still falls shy of Studio acceptance on crispness/contrast after upscale,
+  // run one deterministic studio clarity pass and re-measure the exact PNG bytes so score === Gate truth.
+  if (!isFlatBlank && !afterAnalysis.passed && (enhanceSharpness || enhanceLighting)) {
+    let refine = sharp(enhancedBytes);
+    if (enhanceLighting && afterAnalysis.metrics.brightness < 115 && bgChoice === "keep") {
+      refine = refine.modulate({ brightness: 1.15 });
+    }
+    if (enhanceSharpness && afterAnalysis.metrics.sharpnessScore < 76) {
+      refine = refine.sharpen({ sigma: 1.15, m1: 0.85, m2: 1.5 });
+    }
+    enhancedBytes = await refine.png({ compressionLevel: 8 }).toBuffer();
+    afterAnalysis = await measureTechnicalQuality(enhancedBytes);
+  }
 
   // The saved PNG must receive the same score and gate when analyzed again.
   // An enhancement attempt is not evidence that the resulting image passed.
@@ -682,6 +782,84 @@ export async function enhanceProductImageStudio(body: JsonObject): Promise<Produ
     beforeAnalysis,
     afterAnalysis,
   };
+}
+
+function applyBalancedGain(channel: number, gain: number): number {
+  if (Math.abs(gain - 1.0) < 0.005) return channel;
+  if (gain > 1.0) {
+    const scaled = channel * gain;
+    return Math.min(255, Math.round(scaled <= 220 ? scaled : 220 + (scaled - 220) * 0.45));
+  }
+  return Math.max(0, Math.round(channel * gain));
+}
+
+/**
+ * Deterministic border flood-fill studio mask fallback when U2Net worker is unreachable:
+ * samples the outermost perimeter color and clears connected edge backdrop pixels with soft feathering
+ * while preserving centered garment pixels.
+ */
+function buildFallbackStudioMask(origRgb: Buffer, width: number, height: number): Uint8Array {
+  const pixelCount = width * height;
+  const alpha = new Uint8Array(pixelCount).fill(255);
+  let rSum = 0;
+  let gSum = 0;
+  let bSum = 0;
+  let borderCount = 0;
+  const edge = Math.max(2, Math.min(8, Math.round(Math.min(width, height) * 0.02)));
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (x < edge || x >= width - edge || y < edge || y >= height - edge) {
+        const idx = (y * width + x) * 3;
+        rSum += origRgb[idx];
+        gSum += origRgb[idx + 1];
+        bSum += origRgb[idx + 2];
+        borderCount++;
+      }
+    }
+  }
+  const bgR = rSum / Math.max(1, borderCount);
+  const bgG = gSum / Math.max(1, borderCount);
+  const bgB = bSum / Math.max(1, borderCount);
+
+  const visited = new Uint8Array(pixelCount);
+  const queue = new Int32Array(pixelCount);
+  let head = 0;
+  let tail = 0;
+
+  const pushIfBg = (x: number, y: number) => {
+    const p = y * width + x;
+    if (visited[p]) return;
+    const idx = p * 3;
+    const dr = origRgb[idx] - bgR;
+    const dg = origRgb[idx + 1] - bgG;
+    const db = origRgb[idx + 2] - bgB;
+    const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+    if (dist <= 44) {
+      visited[p] = 1;
+      alpha[p] = dist <= 22 ? 0 : Math.round(((dist - 22) / 22) * 160);
+      queue[tail++] = p;
+    }
+  };
+
+  for (let x = 0; x < width; x++) {
+    pushIfBg(x, 0);
+    pushIfBg(x, height - 1);
+  }
+  for (let y = 1; y < height - 1; y++) {
+    pushIfBg(0, y);
+    pushIfBg(width - 1, y);
+  }
+
+  while (head < tail) {
+    const p = queue[head++];
+    const x = p % width;
+    const y = (p - x) / width;
+    if (x > 0) pushIfBg(x - 1, y);
+    if (x < width - 1) pushIfBg(x + 1, y);
+    if (y > 0) pushIfBg(x, y - 1);
+    if (y < height - 1) pushIfBg(x, y + 1);
+  }
+  return alpha;
 }
 
 function slugifyVi(value: string): string {

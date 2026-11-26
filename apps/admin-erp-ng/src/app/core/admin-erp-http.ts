@@ -55,7 +55,7 @@ export function adminErrorMessage(error: unknown, fallback = 'Không thể gọi
       return ADMIN_ERROR_MESSAGES[code];
     }
     const details = typeof payload?.error === 'object' ? payload.error?.details : undefined;
-    const detailText = formatErrorDetails(details);
+    const detailText = isDatabaseEnvelope(details) ? '' : formatErrorDetails(details);
     if (detailText) {
       return detailText;
     }
@@ -94,7 +94,17 @@ const ADMIN_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   PENDING_APPROVAL_EXISTS: 'Đã có yêu cầu nâng quyền đang chờ duyệt cho tài khoản này.',
   BUDGET_BELOW_ISSUED: 'Ngân sách không được nhỏ hơn số tiền đã sử dụng thực tế.',
   DUPLICATE_ACCOUNT: 'Email hoặc số điện thoại đã được sử dụng trên hệ thống.',
+  IMAGE_APPROVAL_REQUIRED: 'Ảnh mới hoặc ảnh vừa thay thế chưa được phê duyệt. Hãy kiểm tra/cải thiện và bấm Áp dụng ảnh trước khi lưu.',
+  IMAGE_APPROVAL_VERSION_CONFLICT: 'Phiên bản sản phẩm đã thay đổi sau khi áp dụng ảnh. Hãy bấm Áp dụng ảnh lại trước khi lưu.',
 };
+
+function isDatabaseEnvelope(details: unknown): boolean {
+  if (!details || typeof details !== 'object' || Array.isArray(details)) {
+    return false;
+  }
+  const { code, message } = details as { code?: unknown; message?: unknown };
+  return typeof code === 'string' && typeof message === 'string';
+}
 
 /**
  * Reads the validation details map (`{ field: [message] }`) out of the API error envelope.

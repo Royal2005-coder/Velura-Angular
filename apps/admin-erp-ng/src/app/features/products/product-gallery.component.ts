@@ -243,7 +243,11 @@ export class ProductGalleryComponent {
           this.enhanced.set({ url: result.enhancedUrl, model: result.modelUsed || 'velura-studio', after: result.afterAnalysis });
           this.scores.update((scores) => ({ ...scores, [result.enhancedUrl]: result.afterAnalysis }));
           this.analysis.set(result.afterAnalysis);
-          this.note.set('AI đã tạo bản ảnh studio. Bấm Áp dụng để ghi vào danh sách ảnh.');
+          this.note.set(
+            result.afterAnalysis?.passed
+              ? '✓ Ảnh AI Studio đã đạt chuẩn chất lượng. Bấm "Áp dụng ảnh" để ghi vào danh sách ảnh.'
+              : 'AI đã tạo bản xem trước, nhưng một số chỉ số vẫn thấp — hãy bật Nền Studio, Tán sáng và Tăng độ nét rồi thử lại.',
+          );
         },
         error: (error: unknown) => this.error.set(adminErrorMessage(error, 'Chưa thể cải thiện ảnh lúc này.')),
       });

@@ -1763,7 +1763,11 @@ export class AdminProductsPage {
             this.analysisSeq++;
             this.aiEnhanceResult.set(result);
             this.aiImageAnalysis.set(result.afterAnalysis);
-            this.imageNote.set('AI đã tạo phiên bản ảnh Studio chất lượng cao! Bấm "Áp dụng ảnh AI Studio" để đưa vào sản phẩm.');
+            this.imageNote.set(
+              result.afterAnalysis?.passed
+                ? '✓ Ảnh AI Studio đã đạt chuẩn chất lượng! Bấm "Áp dụng ảnh AI Studio" để đưa vào sản phẩm.'
+                : 'Đã tạo bản xem trước, hãy bật Nền Trắng/Kem Studio, Tán sáng và Tăng độ nét rồi cải thiện lại để đạt chuẩn phê duyệt.',
+            );
           }
         },
         error: (err: unknown) => {

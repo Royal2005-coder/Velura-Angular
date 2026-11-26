@@ -89,27 +89,37 @@ export function createChatbotService({ repository, model = createLLMService(), i
     let sources: ChatSource[] = [];
     if (analysis.intent === "catalog") {
       try {
-        const products = (await repository.searchProducts(query, 4)).rows || [];
-        sources = products.map(productSource).filter((source) => Array.isArray(source.snapshot.variants) && source.snapshot.variants.length > 0);
+        const candidates = (await repository.searchProducts(query, 4)).rows || [];
+        const missingVersion = candidates.some((row) => !asString(row.updated_at));
+        const hydrated = missingVersion
+          ? (await repository.listProductsByIds(candidates.map((row) => row.product_id))).rows || []
+          : candidates;
+        const byId = new Map(hydrated.map((row) => [asString(row.product_id), row]));
+        const ordered = candidates.map((row) => byId.get(asString(row.product_id)) || row);
+        sources = ordered
+          .map(productSource)
+          .filter((source) => Boolean(source.version) && Array.isArray(source.snapshot.variants) && source.snapshot.variants.length > 0);
       } catch { sources = []; }
     }
+    const safeRetryText = "Mình chưa thể hoàn tất câu trả lời tự động lúc này. Cuộc trò chuyện vẫn ở AI Stylist và chưa được chuyển cho CSKH; bạn có thể thử lại sau ít phút hoặc chủ động chọn “Gặp nhân viên CSKH” nếu muốn.";
     const names = sources.map((source) => asString(asJsonObject(source.snapshot).name)).filter(Boolean);
     const catalogText = names.length
       ? `Mình tìm được ${names.length} lựa chọn đang bán phù hợp để bạn tham khảo: ${names.join(", ")}. Bạn có thể mở từng sản phẩm bên dưới để xem màu, size và giá hiện tại.`
       : "Mình chưa lấy được gợi ý sản phẩm lúc này, nhưng cuộc trò chuyện vẫn ở AI Stylist. Bạn có thể thử lại sau ít phút hoặc bổ sung kiểu dáng, màu sắc và ngân sách mong muốn.";
+    const useCatalogFallback = analysis.intent === "catalog" && sources.length > 0;
     const result = await repository.commitAiTurn(
       asString(session.session_id),
       asNumber(turn.epoch),
       asNumber(userMessage.sequence),
       {
-        text: analysis.intent === "catalog" ? catalogText : "Mình chưa thể hoàn tất câu trả lời tự động lúc này. Cuộc trò chuyện vẫn ở AI Stylist và chưa được chuyển cho CSKH; bạn có thể thử lại sau ít phút hoặc chủ động chọn “Gặp nhân viên CSKH” nếu muốn.",
-        product_ids: sources.map((source) => source.recordId),
+        text: analysis.intent === "catalog" ? catalogText : safeRetryText,
+        product_ids: useCatalogFallback ? sources.map((source) => source.recordId) : [],
         metadata: {
           speaker: "AI",
           level: analysis.level,
           issue_key: issueKey,
           approach: analysis.intent === "catalog" ? "grounded_catalog_fallback" : "safe_ai_retry_fallback",
-          source_ids: sources.map((source) => source.id),
+          source_ids: useCatalogFallback ? sources.map((source) => source.id) : [],
           risk_check: "local_safe_fallback",
           filter_verified: true,
           model_failure: true,
@@ -117,9 +127,43 @@ export function createChatbotService({ repository, model = createLLMService(), i
         },
       },
       sources.map((source) => ({ kind: source.kind, id: source.recordId, version: source.version, approved: source.approved, snapshot: source.snapshot })),
-    ).catch(() => null);
+    ).catch((err: unknown) => {
+      console.error("[CHAT-FALLBACK] commitAiTurn failed with sources:", errorMessage(err));
+      return null;
+    });
     if (result && isJsonObject(result) && result.sent === true) {
       return transcript(isJsonObject(result.session) ? result.session : session);
+    }
+    if (sources.length > 0 && (!result || asString(result.reason) === "SOURCE_STALE")) {
+      const textOnlyResult = await repository.commitAiTurn(
+        asString(session.session_id),
+        asNumber(turn.epoch),
+        asNumber(userMessage.sequence),
+        {
+          text: analysis.intent === "catalog"
+            ? "Mình chưa lấy được gợi ý sản phẩm lúc này, nhưng cuộc trò chuyện vẫn ở AI Stylist. Bạn có thể thử lại sau ít phút hoặc bổ sung kiểu dáng, màu sắc và ngân sách mong muốn."
+            : safeRetryText,
+          product_ids: [],
+          metadata: {
+            speaker: "AI",
+            level: analysis.level,
+            issue_key: issueKey,
+            approach: "safe_ai_retry_fallback",
+            source_ids: [],
+            risk_check: "local_safe_fallback",
+            filter_verified: true,
+            model_failure: true,
+            trace,
+          },
+        },
+        [],
+      ).catch((err: unknown) => {
+        console.error("[CHAT-FALLBACK] text-only retry failed:", errorMessage(err));
+        return null;
+      });
+      if (textOnlyResult && isJsonObject(textOnlyResult) && textOnlyResult.sent === true) {
+        return transcript(isJsonObject(textOnlyResult.session) ? textOnlyResult.session : session);
+      }
     }
     return transcript(session);
   }
@@ -134,16 +178,21 @@ export function createChatbotService({ repository, model = createLLMService(), i
     trace: unknown[],
     query: string,
   ): Promise<unknown> {
+    console.warn("[CHAT-RESPONSE-FAILURE]", { sessionId: asString(session.session_id), reason });
+    const annotatedTrace = [
+      ...trace,
+      { operation: "response_review", provider: "gemini", transport: "gateway", requestedModel: "local-guard", model: null, latencyMs: 0, outcome: "rejected", streamed: false, note: reason },
+    ];
     const failure = await repository.recordAnalysis(
       asString(session.session_id),
       asString(userMessage.message_id),
       issueKey,
-      { failure_reason: reason, trace },
+      { failure_reason: reason, trace: annotatedTrace },
       true,
     );
     const failedSession = asJsonObject(failure.session);
     if (failedSession.handoff_status !== "ai") return transcript(failedSession);
-    return commitFailureFallback(failedSession, turn, userMessage, issueKey, analysis, trace, query);
+    return commitFailureFallback(failedSession, turn, userMessage, issueKey, analysis, annotatedTrace, query);
   }
 
   function catalogClassifierFallback(message: string): ChatAnalysis | null {
@@ -516,7 +565,12 @@ export async function loadSources(repository: ChatbotRepository, analysis: ChatA
   }
   if (analysis.level === "L1") {
     const candidates = (await repository.searchProducts(query, 12)).rows || [];
-    const products = (await repository.listProductsByIds(candidates.map((row) => row.product_id))).rows || [];
+    const hydrated = (await repository.listProductsByIds(candidates.map((row) => row.product_id))).rows || [];
+    const byId = new Map(hydrated.map((row) => [asString(row.product_id), row]));
+    const products = candidates.map((candidate) => byId.get(asString(candidate.product_id))).filter((row): row is JsonObject => Boolean(row));
+    for (const row of hydrated) {
+      if (!products.some((item) => item.product_id === row.product_id)) products.push(row);
+    }
     for (const product of products.filter((row) => availableVariants(row).length)) sources.push(productSource(product));
   }
   if (analysis.level === "L0") {

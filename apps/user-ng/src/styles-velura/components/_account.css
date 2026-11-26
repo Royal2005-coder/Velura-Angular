@@ -96,11 +96,13 @@ body.page-profile {
 /* Main account grid layout */
 .account-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 32px;
   margin-top: 24px;
   margin-bottom: 64px;
   align-items: start;
+  width: 100%;
+  max-width: 100%;
 }
 
 /* ---------- Left Column: Sidebar ---------- */
@@ -108,6 +110,8 @@ body.page-profile {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* User Card (Separate) */
@@ -119,6 +123,9 @@ body.page-profile {
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .account-sidebar__avatar-wrapper {
@@ -127,6 +134,7 @@ body.page-profile {
   height: 56px;
   border-radius: 50%;
   border: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .account-sidebar__avatar {
@@ -159,6 +167,7 @@ body.page-profile {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .account-sidebar__name {
@@ -166,6 +175,7 @@ body.page-profile {
   font-weight: 600;
   color: var(--text-dark);
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .account-sidebar__badge {
@@ -188,6 +198,9 @@ body.page-profile {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .account-sidebar__link {
@@ -230,11 +243,16 @@ body.page-profile {
   border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
   padding: 32px 40px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* ---------- Tab Content Toggle ---------- */
 .account-tab-content {
   display: none;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .account-tab-content.is-active {
@@ -278,6 +296,7 @@ body.page-profile {
   height: 96px;
   border-radius: 50%;
   border: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .profile-avatar-img {
@@ -340,6 +359,7 @@ body.page-profile {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .profile-avatar-name {
@@ -348,24 +368,28 @@ body.page-profile {
   font-weight: 700;
   color: var(--text-dark);
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .profile-avatar-meta {
   font-size: 0.8125rem;
   color: var(--soft);
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- Profile Form Grid & Inputs ---------- */
 .profile-form__row-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
   margin-bottom: 24px;
+  width: 100%;
 }
 
 .profile-form__group {
   margin-bottom: 0;
+  min-width: 0;
 }
 
 .profile-form__group label {
@@ -1322,20 +1346,35 @@ select.profile-form__input {
 /* ---------- Responsive Design ---------- */
 @media (max-width: 992px) {
   .account-layout {
-    grid-template-columns: 1fr;
-    gap: 24px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    margin-top: 16px;
+    margin-bottom: 48px;
+  }
+
+  .account-sidebar {
+    width: 100%;
+    min-width: 0;
+    gap: 12px;
   }
 
   .account-sidebar__user-card {
     border-radius: var(--radius-md);
+    width: 100%;
   }
 
   .account-sidebar__nav {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     flex-direction: row;
+    flex-wrap: nowrap;
     overflow-x: auto;
+    overflow-y: hidden;
     white-space: nowrap;
-    padding-bottom: 8px;
+    padding: 10px 12px !important;
     -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
     gap: 8px;
     border-radius: var(--radius-md);
   }
@@ -1353,23 +1392,37 @@ select.profile-form__input {
      flex-shrink:0 they compressed to fit the viewport, so every label wrapped mid-word and the
      icons overlapped their text. The rail is meant to scroll, not to squeeze. */
   .account-sidebar__link {
-    padding: 10px 16px;
+    padding: 9px 14px;
     display: inline-flex;
     flex: 0 0 auto;
     white-space: nowrap;
+    scroll-snap-align: start;
   }
 
-  .product-grid {
-    grid-template-columns: 1fr;
+  .account-main {
+    width: 100%;
+    min-width: 0;
+    padding: 24px 20px;
   }
 
+  .profile-form__row-grid,
   .profile-form__row-grid--three {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .profile-form__row-grid .u-inline-1f61f29863 {
+    grid-column: 1 / -1;
+  }
+
+  .profile-form__radio-group {
+    flex-wrap: wrap;
+    gap: 16px 24px;
   }
 
   .product-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
 
@@ -1411,32 +1464,142 @@ select.profile-form__input {
     width: 100%;
     text-align: center;
   }
+
+  .analytics-section__head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .analytics-loading-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .account-title-block {
+    margin-bottom: 16px;
+  }
+
+  .account-sidebar__user-card {
+    padding: 14px 16px !important;
+    gap: 12px;
+  }
+
+  .account-sidebar__nav {
+    padding: 8px 10px !important;
+  }
+
+  .account-main {
+    padding: 20px 16px !important;
+  }
+
+  .account-main__header {
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+  }
+
+  .profile-avatar-row {
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .profile-avatar-wrapper {
+    width: 76px;
+    height: 76px;
+  }
+
+  .profile-form__input {
+    font-size: 16px;
+  }
+
+  .address-card {
+    padding: 16px;
+    gap: 12px;
+    flex-direction: column;
+  }
+
+  .analytics-section {
+    padding: 16px !important;
+  }
+
+  .analytics-cat-meta {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  .offer-voucher-grid .voucher-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .offer-voucher-grid .voucher-card__side {
+    border-left: 0;
+    border-top: 1px dashed var(--velura-border, rgba(201, 79, 112, 0.35));
+    padding-left: 0;
+    padding-top: 10px;
+    align-items: stretch;
+  }
+
+  .offer-voucher-grid .voucher-card__use {
+    width: 100%;
+    text-align: center;
+  }
+
+  .modal__container {
+    padding: 12px;
+    max-height: 92dvh;
+    display: flex;
+  }
+
+  .modal__content {
+    width: 100%;
+    max-height: calc(92dvh - 24px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 20px 16px !important;
+  }
+
+  .toast-container {
+    right: 12px;
+    left: 12px;
+    bottom: 16px;
+  }
+
+  .toast {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+  }
 }
 
 @media (max-width: 576px) {
   .account-main {
-    padding: 24px 20px;
+    padding: 18px 14px !important;
   }
 
   .profile-avatar-row {
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 16px;
+    gap: 12px;
   }
 
   .profile-form__actions {
     flex-direction: column-reverse;
-    gap: 12px;
+    gap: 10px;
+    margin-top: 24px;
   }
 
   .profile-form__actions .btn {
     width: 100%;
     text-align: center;
+    justify-content: center;
   }
 
   .product-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .setting-row {
@@ -1456,6 +1619,24 @@ select.profile-form__input {
   .btn--settings-action {
     width: 100%;
     text-align: center;
+  }
+
+  .analytics-loading-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .account-login-required-modal__card {
+    padding: 24px 18px;
+  }
+
+  .account-login-required-modal__actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .account-login-required-modal__btn {
+    width: 100%;
+    min-width: 0;
   }
 }
 
@@ -1913,7 +2094,7 @@ select.profile-form__input {
 /* ── Responsive ── */
 @media (max-width: 640px) {
   .sp-section {
-    padding: 20px;
+    padding: 18px 16px;
   }
 
   .sp-overview__heading {
@@ -1921,15 +2102,15 @@ select.profile-form__input {
   }
 
   .sp-body__grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .sp-prefs__grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sp-tips__grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sp-update__inner {
@@ -1938,7 +2119,7 @@ select.profile-form__input {
   }
 
   .sp-overview__products-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2303,22 +2484,22 @@ select.profile-form__input {
 /* Responsive Breakpoints */
 @media (max-width: 992px) {
   .analytics-kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .analytics-vouchers-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .analytics-products-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 576px) {
   .analytics-kpi-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .analytics-products-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -2348,7 +2529,7 @@ select.profile-form__input {
 body.page-profile { background: var(--velura-canvas, #FAF0F3) !important; }
 body.page-profile .account-title { color: var(--velura-maroon, #7A283C); }
 body.page-profile .account-subtitle { color: var(--text-secondary, #78666A); }
-body.page-profile :is(.account-sidebar__user-card, .account-sidebar__nav, .account-main, .account-tab-content, .analytics-kpi-card, .analytics-voucher-card, .analytics-product-card) {
+body.page-profile :is(.account-sidebar__user-card, .account-sidebar__nav, .account-main, .analytics-kpi-card, .analytics-voucher-card, .analytics-product-card) {
   border-color: var(--velura-border, #F2C2CF);
   border-radius: var(--radius-lg, 20px);
   box-shadow: 0 8px 26px rgba(122, 40, 60, .06);

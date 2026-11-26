@@ -8,6 +8,10 @@ import {
   validateStatusChange,
   validateStockUpdate
 } from "../../apps/api/src/products/product-service.js";
+import {
+  ARCHIVED_LEGACY_TEST_PRODUCT_FILTER,
+  isArchivedLegacyTestProduct
+} from "../../apps/api/src/products/product-constants.js";
 import type { ProductRepository } from "../../apps/api/src/products/product-repository.js";
 
 const PRODUCT_ID = "30000000-0000-4000-8000-000000000001";
@@ -714,6 +718,37 @@ test("hidden drafts may remove all images but cannot publish without a primary",
   await assert.rejects(() => service.changeStatus(superAdminContext(), PRODUCT_ID,
     { status: "on_sale", reason: "Publish after product review", expectedVersion: 1 }, {}),
     (error) => error.status === 422 && Boolean(error.details.images));
+});
+
+test("isArchivedLegacyTestProduct targets only hidden UAT/TEMP records without hiding normal hidden drafts", () => {
+  assert.equal(isArchivedLegacyTestProduct({ sku: "VLR-AO-036", name: "UAT-Khai CSV Test 1", status: "hidden" }), true);
+  assert.equal(isArchivedLegacyTestProduct({ sku: "VLR-UATPRD02", name: "UAT-Khai CSV Test 2", status: "hidden" }), true);
+  assert.equal(isArchivedLegacyTestProduct({ sku: "TEMP-PROD-EXCH-1783188047488", name: "Sản phẩm đổi giá cao", status: "hidden" }), true);
+  assert.equal(isArchivedLegacyTestProduct({ sku: "VLR-AO-001", name: "Áo xuất khẩu linen trắng", status: "hidden" }), false);
+  assert.equal(isArchivedLegacyTestProduct({ sku: "VLR-UATPRD02", name: "UAT-Khai CSV Test 2", status: "on_sale" }), false);
+  assert.ok(ARCHIVED_LEGACY_TEST_PRODUCT_FILTER.includes("TEMP-PROD-EXCH-*"));
+});
+
+test("lowStock and lowStock list filter exclude archived hidden legacy UAT/TEMP products", async () => {
+  const archivedId = "30000000-0000-4000-8000-000000000099";
+  const listed: Record<string, unknown>[] = [];
+  const service = createProductService({ repository: {
+    lowStockCount: async () => [
+      { variant_id: "v-1", product_id: PRODUCT_ID, color: "Đen", size: "M", stock_quantity: 2, low_stock_threshold: 5 },
+      { variant_id: "v-2", product_id: archivedId, color: "Trắng", size: "S", stock_quantity: 6, low_stock_threshold: 10 }
+    ],
+    findProductsByIds: async () => ({
+      rows: [
+        { product_id: PRODUCT_ID, sku: "VLR-AO-001", name: "Áo Lụa Ivory", status: "on_sale" },
+        { product_id: archivedId, sku: "VLR-AO-036", name: "UAT-Khai CSV Test 1", status: "hidden" }
+      ]
+    }),
+    list: async (filters) => { listed.push(filters); return { rows: [], count: 0 }; }
+  } as unknown as ProductRepository });
+  const low = await service.lowStock(superAdminContext()) as Array<Record<string, unknown>>;
+  assert.deepEqual(low.map((row) => row.product_id), [PRODUCT_ID]);
+  await service.list(superAdminContext(), new URLSearchParams("lowStock=true"));
+  assert.deepEqual(listed[0]?.productIds, [PRODUCT_ID]);
 });
 
 // --- Helpers ---

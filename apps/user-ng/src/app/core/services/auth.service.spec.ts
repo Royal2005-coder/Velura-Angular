@@ -83,4 +83,15 @@ describe('AuthService', () => {
     expect(auth.session()?.email).toBe('session@example.com');
     expect(auth.isLoggedIn()).toBe(true);
   });
+
+  it('keeps the exact session reference when syncRole receives the same role', () => {
+    localStorage.setItem('velura_token', 'token');
+    localStorage.setItem('velura_user', JSON.stringify({ user_id: 'member-1', role: 'member' }));
+    const auth = TestBed.inject(AuthService);
+    const before = auth.session();
+
+    auth.syncRole('member');
+
+    expect(auth.session()).toBe(before);
+  });
 });

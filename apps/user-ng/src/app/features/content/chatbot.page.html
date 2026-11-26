@@ -25,8 +25,8 @@
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                   </svg>
                 </span>
-                <span class="chatbot-session-item__title" [title]="session.title || ''">
-                  {{ session.title || 'Cuộc trò chuyện' }}
+                <span class="chatbot-session-item__title" [title]="sessionLabel(session)">
+                  <span class="chatbot-session-item__label">{{ sessionLabel(session) }}</span>
                   @if (session.handoff_status === 'requested' || session.handoff_status === 'assigned') {
                     <span class="chatbot-session-item__badge">CSKH</span>
                   }
@@ -59,7 +59,15 @@
               <span class="chatbot-header__desc">{{ handoffStatus() === 'assigned' ? 'Nhân viên CSKH đang hỗ trợ trực tiếp' : handoffStatus() === 'requested' ? 'Đang kết nối chuyên viên CSKH' : handoffStatus() === 'closed' ? 'Phiên CSKH đã đóng' : 'Trợ lý AI trực tuyến' }}</span>
             </div>
           </div>
-          <div class="chatbot-state-switcher u-inline-16f2d51288">
+          <div class="chatbot-state-switcher chatbot-header__actions u-inline-16f2d51288">
+            <button type="button" class="chatbot-toolbar-btn" (click)="toggleOrderPanel()" [class.is-active]="orderPanelOpen() || !!selectedOrderId()" [disabled]="loading()">
+              <span>📦</span> {{ selectedOrderId() ? 'Đã chọn đơn' : 'Tra cứu đơn' }}
+            </button>
+            @if (handoffStatus() === 'ai') {
+              <button type="button" class="chatbot-human-btn" (click)="requestHuman()" [disabled]="loading()">
+                <span>💬</span> Gặp nhân viên CSKH
+              </button>
+            }
             <button type="button" aria-label="Lịch sử trò chuyện" (click)="toggleSidebar()" class="u-inline-95f092c71a">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="3" y1="12" x2="21" y2="12"></line>
@@ -69,6 +77,44 @@
             </button>
           </div>
         </div>
+        @if (orderPanelOpen()) {
+          <div class="chatbot-order-access">
+            <div class="chatbot-order-access__row">
+              <strong>Tra cứu đơn hàng an toàn</strong>
+              @if (isLoggedIn()) {
+                <button type="button" (click)="loadChatOrders()" [disabled]="orderBusy()">Tải danh sách đơn</button>
+                @if (orderAccount.orders().length) {
+                  <select aria-label="Chọn đơn hàng" [value]="selectedOrderId()" (change)="selectChatOrder($event)">
+                    <option value="">-- Không gắn đơn hàng --</option>
+                    @for (order of orderAccount.orders(); track order.orderId || order.id) {
+                      <option [value]="order.orderId || ''">#{{ order.id }} · {{ order.status }}</option>
+                    }
+                  </select>
+                } @else {
+                  <span class="chatbot-order-access__hint">Bấm “Tải danh sách đơn” để chọn đơn thuộc tài khoản của bạn.</span>
+                }
+              } @else {
+                <input type="text" placeholder="Nhập mã đơn hàng (VD: VLR...)" aria-label="Mã đơn hàng" [value]="otpTarget()" (input)="setCaseInput('otpTarget', $event)" [disabled]="orderBusy()" />
+                <button type="button" (click)="sendOrderOtp()" [disabled]="orderBusy() || !otpTarget().trim()">Gửi OTP</button>
+                @if (otpSent()) {
+                  <input type="text" placeholder="Nhập mã OTP" aria-label="Mã OTP" [value]="otpCode()" (input)="setCaseInput('otpCode', $event)" [disabled]="orderBusy()" />
+                  <button type="button" (click)="verifyOrderOtp()" [disabled]="orderBusy() || !otpCode().trim()">Xác thực OTP</button>
+                }
+                @if (orderAccount.orders().length) {
+                  <select aria-label="Chọn đơn đã xác thực" [value]="selectedOrderId()" (change)="selectChatOrder($event)">
+                    <option value="">-- Chọn đơn đã xác thực --</option>
+                    @for (order of orderAccount.orders(); track order.orderId || order.id) {
+                      <option [value]="order.orderId || ''">#{{ order.id }} · {{ order.status }}</option>
+                    }
+                  </select>
+                }
+              }
+            </div>
+            @if (orderFeedback()) {
+              <p class="chatbot-order-access__feedback">{{ orderFeedback() }}</p>
+            }
+          </div>
+        }
         @if (handoffStatus() === 'requested' || handoffStatus() === 'assigned' || handoffStatus() === 'closed') {
           <div class="chatbot-handoff-banner u-inline-83f8c4054d">
             <div class="u-inline-7e30d285d2">
@@ -79,12 +125,6 @@
               </div>
             </div>
             <button type="button" class="btn btn--outline btn--sm u-inline-659b2cf600" (click)="refreshMessages()" [disabled]="loading()">Tải lại tin nhắn</button>
-          </div>
-        } @else if (handoffStatus() === 'ai') {
-          <div class="u-inline-9ceb3e13fd">
-            <button type="button" class="chatbot-human-btn u-inline-2283f0b058" (click)="requestHuman()" [disabled]="loading()">
-              <span>💬</span> Gặp nhân viên CSKH
-            </button>
           </div>
         }
         @if ((handoffStatus() === 'requested' || handoffStatus() === 'assigned') && summaryProblem()) {

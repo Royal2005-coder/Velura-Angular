@@ -12,6 +12,7 @@ import {
   ChatProduct,
   ChatSession,
   ChatbotService,
+  chatIdentityKey,
 } from '../../core/services/chatbot.service';
 import { CartStore } from '../../core/services/cart.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
@@ -41,7 +42,9 @@ export class ChatbotPage {
   private readonly messagesEl = viewChild<ElementRef<HTMLElement>>('messagesPane');
   private readonly destroy = inject(DestroyRef);
   private readonly auth = inject(AuthService);
+  readonly isLoggedIn = this.auth.isLoggedIn;
   readonly orderAccount = inject(OrderAccountApiStore);
+  readonly orderPanelOpen = signal(false);
   readonly selectedOrderId = signal('');
   readonly otpTarget = signal('');
   readonly otpCode = signal('');
@@ -61,6 +64,7 @@ export class ChatbotPage {
   private transcriptEpoch = 0;
   private readSequence = 0;
   private appliedRead = 0;
+  private lastTranscriptSig = '';
   readonly connected = signal(navigator.onLine);
   readonly handoffStatus = signal<'ai' | 'requested' | 'assigned' | 'closed'>('ai');
   readonly humanTakeover = computed(() => this.handoffStatus() === 'assigned');
@@ -88,23 +92,38 @@ export class ChatbotPage {
     const initialSession = this.route.snapshot.queryParamMap.get('session') || (!initialQuery?.trim() ? this.chatbot.savedSessionId() : '');
     if (initialSession) this.openSession({ session_id: initialSession });
     else if (initialQuery?.trim()) this.send(initialQuery.trim());
-    let identity = this.auth.session();
-    effect(() => { const session = this.auth.session(); if (session !== identity) { identity = session; untracked(() => { this.newChat(); this.sessions.set([]); this.refreshSessions(); }); } });
+    let identityKey = chatIdentityKey(this.auth.session());
+    effect(() => {
+      const nextKey = chatIdentityKey(this.auth.session());
+      if (nextKey !== identityKey) {
+        identityKey = nextKey;
+        untracked(() => { this.newChat(); this.sessions.set([]); this.refreshSessions(); });
+      }
+    });
     fromEvent(window, 'offline').pipe(takeUntilDestroyed(this.destroy)).subscribe(() => this.connected.set(false));
     merge(timer(3000, 3000), fromEvent(window, 'online')).pipe(
       filter(() => !!this.sessionId()),
       exhaustMap(() => {
         this.connected.set(navigator.onLine);
-        const id = this.sessionId(), generation = this.generation, identity = this.auth.session();
+        const id = this.sessionId(), generation = this.generation, pollIdentity = chatIdentityKey(this.auth.session());
         const epoch = this.transcriptEpoch, sequence = ++this.readSequence;
         return this.chatbot.listMessages(id, this.chatbot.guestId()).pipe(
-          filter(() => generation === this.generation && identity === this.auth.session() && id === this.sessionId() && epoch === this.transcriptEpoch && sequence > this.appliedRead),
+          filter(() => generation === this.generation && pollIdentity === chatIdentityKey(this.auth.session()) && id === this.sessionId() && epoch === this.transcriptEpoch && sequence > this.appliedRead),
           filter(() => { this.appliedRead = sequence; return true; }),
-          catchError(() => { if (generation === this.generation && identity === this.auth.session()) this.chatError.set('Chưa cập nhật được hội thoại. Hệ thống sẽ tự thử lại.'); return EMPTY; }),
+          catchError(() => { if (generation === this.generation && pollIdentity === chatIdentityKey(this.auth.session())) this.chatError.set('Chưa cập nhật được hội thoại. Hệ thống sẽ tự thử lại.'); return EMPTY; }),
         );
       }),
       takeUntilDestroyed(this.destroy),
-    ).subscribe({ next: data => { this.chatError.set(''); this.adoptTranscript(data); this.scrollToBottom(); } });
+    ).subscribe({
+      next: data => {
+        if (this.chatError()) this.chatError.set('');
+        const nextSig = this.transcriptSignature(data);
+        if (nextSig === this.lastTranscriptSig) return;
+        const stickToBottom = this.isNearBottom();
+        this.adoptTranscript(data);
+        if (stickToBottom) this.scrollToBottom(true);
+      },
+    });
   }
 
   /**
@@ -135,9 +154,9 @@ export class ChatbotPage {
     };
     this.messages.update((rows) => [...rows.filter((row) => !row.metadata?.local_greeting), userMessage, ...(this.handoffStatus() === 'ai' ? [typing] : [])]);
     this.loading.set(true);
-    this.scrollToBottom();
+    this.scrollToBottom(true);
     const generation = this.generation;
-    const identity = this.auth.session();
+    const identityKey = chatIdentityKey(this.auth.session());
     this.transcriptEpoch++;
     this.chatError.set('');
     const orderId = this.selectedOrderId() || undefined;
@@ -156,23 +175,24 @@ export class ChatbotPage {
       .pipe(takeUntilDestroyed(this.destroy))
       .subscribe({
         next: (data) => {
-          if (generation !== this.generation || identity !== this.auth.session()) return;
+          if (generation !== this.generation || identityKey !== chatIdentityKey(this.auth.session())) return;
           this.transcriptEpoch++;
           if (data.session?.session_id) {
             this.sessionId.set(data.session.session_id);
             this.chatbot.saveSessionId(data.session.session_id);
           }
           const staleRouting = this.handoffStatus() !== 'ai' && data.session?.handoff_status === 'ai';
+          this.pendingUserMessage = null;
           this.loading.set(false);
           if (!staleRouting) this.adoptTranscript(data);
           if (staleRouting) this.refreshMessages();
-          this.pendingUserMessage = null;
           this.refreshSessions();
-          this.scrollToBottom();
+          this.scrollToBottom(true);
         },
         error: () => {
-          if (generation !== this.generation || identity !== this.auth.session()) return;
+          if (generation !== this.generation || identityKey !== chatIdentityKey(this.auth.session())) return;
           this.transcriptEpoch++;
+          this.pendingUserMessage = null;
           this.messages.update(rows => rows
             .filter(row => row.message_id !== 'typing')
             .map(row => row.message_id === userMessage.message_id ? { ...row, metadata: { ...row.metadata, error: true } } : row));
@@ -184,7 +204,7 @@ export class ChatbotPage {
           } else {
             this.refreshSessions();
           }
-          this.scrollToBottom();
+          this.scrollToBottom(true);
         },
       });
   }
@@ -209,6 +229,7 @@ export class ChatbotPage {
    */
   newChat(): void {
     this.generation++;
+    this.lastTranscriptSig = '';
     this.loading.set(false);
     this.pendingUserMessage = null;
     this.handoffStatus.set('ai');
@@ -242,7 +263,7 @@ export class ChatbotPage {
   openSession(session: ChatSession): void {
     this.newChat();
     const generation = this.generation;
-    const identity = this.auth.session();
+    const identityKey = chatIdentityKey(this.auth.session());
     this.handoffStatus.set(session.handoff_status || 'ai');
     this.chatbot.activeHandoff.set(this.handoffStatus());
     this.chatbot.activeSession.set(session.session_id);
@@ -252,13 +273,13 @@ export class ChatbotPage {
     this.loading.set(true);
     this.chatbot.listMessages(session.session_id, this.chatbot.guestId()).pipe(takeUntilDestroyed(this.destroy)).subscribe({
       next: (data) => {
-        if (generation !== this.generation || identity !== this.auth.session()) return;
+        if (generation !== this.generation || identityKey !== chatIdentityKey(this.auth.session())) return;
         this.adoptTranscript(data);
         this.loading.set(false);
-        this.scrollToBottom();
+        this.scrollToBottom(true);
       },
       error: (err: unknown) => {
-        if (generation !== this.generation || identity !== this.auth.session()) return;
+        if (generation !== this.generation || identityKey !== chatIdentityKey(this.auth.session())) return;
         this.loading.set(false);
         const status = err instanceof ApiRequestError ? err.status : 0;
         if (status === 403 || status === 404 || status === 422) {
@@ -280,19 +301,28 @@ export class ChatbotPage {
   /** Human escalation uses the normal customer-turn API; the backend decides ticket creation. */
   requestHuman(): void { if (this.handoffStatus() === 'ai') this.send('Tôi muốn gặp nhân viên CSKH.'); }
 
+  /** Toggles the secure order-lookup panel (CHAT-12 member orders / CHAT-13 guest OTP). */
+  toggleOrderPanel(): void {
+    const next = !this.orderPanelOpen();
+    this.orderPanelOpen.set(next);
+    if (next && this.isLoggedIn() && this.orderAccount.orders().length === 0) {
+      void this.loadChatOrders();
+    }
+  }
+
   /** Reload authoritative messages and routing without generating an AI turn. */
   refreshMessages(): void {
-    const id = this.sessionId(), generation = this.generation, identity = this.auth.session();
+    const id = this.sessionId(), generation = this.generation, identityKey = chatIdentityKey(this.auth.session());
     const epoch = this.transcriptEpoch, sequence = ++this.readSequence;
     if (!id) return;
     this.chatError.set('');
     this.chatbot.listMessages(id, this.chatbot.guestId()).pipe(takeUntilDestroyed(this.destroy)).subscribe({
       next: data => {
-        if (generation !== this.generation || identity !== this.auth.session() || id !== this.sessionId() || epoch !== this.transcriptEpoch || sequence <= this.appliedRead) return;
+        if (generation !== this.generation || identityKey !== chatIdentityKey(this.auth.session()) || id !== this.sessionId() || epoch !== this.transcriptEpoch || sequence <= this.appliedRead) return;
         this.appliedRead = sequence;
         this.adoptTranscript(data);
       },
-      error: () => { if (generation === this.generation && identity === this.auth.session()) this.chatError.set('Chưa tải được tin nhắn CSKH.'); },
+      error: () => { if (generation === this.generation && identityKey === chatIdentityKey(this.auth.session())) this.chatError.set('Chưa tải được tin nhắn CSKH.'); },
     });
   }
 
@@ -327,6 +357,10 @@ export class ChatbotPage {
     if (this.pendingUserMessage && status === 'ai' && !rows.some(message => message.metadata?.typing)) {
       rows.push({ message_id: 'typing', sender: 'bot', text: 'AI đang suy nghĩ', created_at: new Date().toISOString(), metadata: { typing: true } });
     }
+    if (rows.some(message => message.metadata?.otp_required) && !this.selectedOrderId()) {
+      this.orderPanelOpen.set(true);
+    }
+    this.lastTranscriptSig = this.transcriptSignature(data);
     this.messages.set(rows.length ? rows : status === 'ai' ? [localGreeting()] : []);
   }
 
@@ -565,15 +599,52 @@ export class ChatbotPage {
     this.blogsById.set(Object.fromEntries(blogs.filter(blog => blog.blog_id).map(blog => [blog.blog_id, blog])));
   }
 
+  /**
+   * Formats a compact readable label for a history session item using its latest preview when safe.
+   */
+  sessionLabel(session: ChatSession): string {
+    const preview = (session.last_message_preview || '').trim();
+    if (preview && !preview.startsWith('[') && !preview.startsWith('Xin chào, mình là **Velura Stylist**')) {
+      return preview.length > 42 ? `${preview.slice(0, 42)}…` : preview;
+    }
+    return session.title || 'Cuộc trò chuyện hỗ trợ';
+  }
+
   private refreshSessions(): void {
-    const identity = this.auth.session();
+    const identityKey = chatIdentityKey(this.auth.session());
     this.chatbot.listSessions(this.chatbot.guestId()).pipe(takeUntilDestroyed(this.destroy)).subscribe({
-      next: (data) => { if (identity === this.auth.session()) this.sessions.set(data.rows || []); },
+      next: (data) => { if (identityKey === chatIdentityKey(this.auth.session())) this.sessions.set(data.rows || []); },
       error: () => undefined,
     });
   }
 
-  private scrollToBottom(): void {
+  private transcriptSignature(data: ChatSendResponse): string {
+    const sessionPart = [
+      data.session?.session_id || '',
+      data.session?.handoff_status || data.handoff?.status || '',
+      data.session?.metadata?.handoff_summary?.problem || '',
+      data.session?.metadata?.summary_confirmation?.confirmed ? '1' : '0',
+      data.session?.metadata?.outcome?.resolution || '',
+      data.session?.metadata?.outcome?.rating ?? data.session?.metadata?.rating ?? '',
+      this.pendingUserMessage ? 'pending' : 'idle',
+    ].join('|');
+    const msgPart = (data.messages || [])
+      .map(m => `${m.message_id}:${m.moderation_status || ''}:${m.metadata?.author_copy ? '1' : '0'}:${m.text.length}:${(m.product_ids || []).join(',')}`)
+      .join(';');
+    const prodPart = (data.products || [])
+      .map(p => `${p.product_id}:${p.price ?? p.sale_price ?? p.base_price ?? ''}:${p.variant?.variant_id || ''}:${p.variant?.stock_quantity ?? ''}`)
+      .join(';');
+    return `${sessionPart}||${msgPart}||${prodPart}`;
+  }
+
+  private isNearBottom(): boolean {
+    const el = this.messagesEl()?.nativeElement;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }
+
+  private scrollToBottom(force = false): void {
+    if (!force && !this.isNearBottom()) return;
     queueMicrotask(() => {
       const el = this.messagesEl()?.nativeElement;
       if (el) {

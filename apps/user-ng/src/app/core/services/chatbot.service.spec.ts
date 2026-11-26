@@ -84,4 +84,27 @@ describe('ChatbotService guest tab isolation', () => {
       fetchSpy.mockRestore();
     }
   });
+
+  it('preserves active session when the same signed-in member emits a refreshed session object', async () => {
+    const sessionSig = signal<{ userId: string; role: string } | null>({ userId: 'u1', role: 'member' });
+    TestBed.configureTestingModule({
+      providers: [
+        ChatbotService,
+        { provide: ApiService, useValue: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } },
+        { provide: AuthService, useValue: { session: sessionSig, kickOutLocked: vi.fn(), signOut: vi.fn() } },
+        { provide: Router, useValue: { navigate: vi.fn() } },
+      ],
+    });
+    const chat = TestBed.inject(ChatbotService);
+    chat.saveSessionId('sess-member-1');
+    chat.activeSession.set('sess-member-1');
+    TestBed.flushEffects();
+
+    // Simulate role/profile metadata refresh emitting a new object reference for the same member
+    sessionSig.set({ userId: 'u1', role: 'admin' });
+    TestBed.flushEffects();
+
+    expect(chat.savedSessionId()).toBe('sess-member-1');
+    expect(chat.activeSession()).toBe('sess-member-1');
+  });
 });

@@ -306,7 +306,9 @@ export class ProductGalleryComponent {
             }));
           }
           next.splice(index, index < next.length ? 1 : 0, approval.url);
-          this.imageColors.set(moveImageKey(this.imageColors(), replaced, approval.url, replaced ? this.imageColors()[replaced] : null));
+          this.imageColors.set(
+            moveImageKey(this.imageColors(), replaced, approval.url, replaced ? (this.imageColors()[replaced] || null) : null),
+          );
           this.images.set(next);
           this.approvals.set([...this.approvals().filter((row) => next.includes(row.url)), approval]);
           this.pendingDataUrl.set('');

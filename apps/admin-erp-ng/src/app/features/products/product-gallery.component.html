@@ -175,6 +175,9 @@
           (change)="assignColor(url, $event)"
         >
           <option value="">Ảnh chung</option>
+          @if (colorOf(url) && !variantColors().includes(colorOf(url))) {
+            <option [value]="colorOf(url)">{{ colorOf(url) }} (không còn trong biến thể)</option>
+          }
           @for (color of variantColors(); track color) {
             <option [value]="color">{{ color }}</option>
           }

@@ -69,20 +69,23 @@ export class AuthService {
     this.sessionState.set(next);
   }
 
-  /** Synchronizes the server-authoritative role without replacing local profile fields. */
+  /** Synchronizes the server-authoritative role without replacing local profile fields or emitting unchanged session objects. */
   syncRole(role: string | null | undefined): void {
     if (!role) return;
-    const raw = localStorage.getItem('velura_user');
+    const session = this.sessionState();
+    if (session && session.role === role) return;
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('velura_user') : null;
     if (raw) {
       try {
         const user = JSON.parse(raw) as Record<string, unknown>;
-        user['role'] = role;
-        localStorage.setItem('velura_user', JSON.stringify(user));
+        if (user['role'] !== role) {
+          user['role'] = role;
+          localStorage.setItem('velura_user', JSON.stringify(user));
+        }
       } catch {
         // Keep the in-memory session authoritative when stale storage is malformed.
       }
     }
-    const session = this.sessionState();
     if (session) this.sessionState.set({ ...session, role });
   }
 

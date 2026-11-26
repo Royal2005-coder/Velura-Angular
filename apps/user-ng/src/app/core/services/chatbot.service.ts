@@ -104,6 +104,15 @@ const SESSION_ID_KEY = 'velura_chat_session_id';
 const SESSION_OWNER_KEY = 'velura_chat_session_owner';
 
 /**
+ * Stable logical owner key for chat identity checks so background role/profile
+ * refreshes on the same signed-in member never reset an active conversation.
+ */
+export function chatIdentityKey(session: { userId?: string | null; email?: string | null } | null | undefined): string {
+  if (!session) return 'guest';
+  return `member:${session.userId || session.email || 'auth'}`;
+}
+
+/**
  * Chat model. Talks to the original `/api/v1/chat` contract used by port 3002.
  */
 @Injectable({ providedIn: 'root' })
@@ -131,11 +140,11 @@ export class ChatbotService {
       localStorage.removeItem(SESSION_ID_KEY);
       localStorage.removeItem(SESSION_OWNER_KEY);
     }
-    let identity = this.auth.session();
+    let identityKey = chatIdentityKey(this.auth.session());
     effect(() => {
-      const session = this.auth.session();
-      if (session === identity) return;
-      identity = session;
+      const nextKey = chatIdentityKey(this.auth.session());
+      if (nextKey === identityKey) return;
+      identityKey = nextKey;
       untracked(() => { this.activeHandoff.set('ai'); this.activeSession.set(''); this.clearSessionId(); });
     });
   }
@@ -154,7 +163,7 @@ export class ChatbotService {
   }): Observable<ChatSendResponse> {
     return new Observable<ChatSendResponse>(subscriber => {
       const controller = new AbortController();
-      const identity = this.auth.session();
+      const identityKey = chatIdentityKey(this.auth.session());
       const token =
         (typeof localStorage !== 'undefined' ? localStorage.getItem('velura_token') : null) ||
         (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('velura_token') : null);
@@ -168,7 +177,7 @@ export class ChatbotService {
         const response = await fetch(`${environment.apiUrl || window.location.origin}/api/v1/chat/messages`, {
           method: 'POST', headers, body: JSON.stringify(payload), signal: controller.signal,
         });
-        if (identity !== this.auth.session()) throw new Error('Chat identity changed');
+        if (identityKey !== chatIdentityKey(this.auth.session())) throw new Error('Chat identity changed');
         if (!response.ok) {
           let payloadBody: Record<string, unknown> | null = null;
           try {
@@ -197,7 +206,7 @@ export class ChatbotService {
         }
         if (!response.headers.get('content-type')?.includes('text/event-stream')) {
           const data = await response.json() as ChatSendResponse;
-          if (identity === this.auth.session()) subscriber.next(data);
+          if (identityKey === chatIdentityKey(this.auth.session())) subscriber.next(data);
           subscriber.complete();
           return;
         }
@@ -220,7 +229,7 @@ export class ChatbotService {
               if (event === 'error') throw new Error('Chat stream failed');
               if (event !== 'response') continue;
               const data = JSON.parse(lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n')) as ChatSendResponse;
-              if (identity !== this.auth.session()) throw new Error('Chat identity changed');
+              if (identityKey !== chatIdentityKey(this.auth.session())) throw new Error('Chat identity changed');
               if (received) throw new Error('Duplicate chat response');
               received = true;
               subscriber.next(data);

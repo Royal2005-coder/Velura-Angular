@@ -19,6 +19,7 @@ import {
   MIN_CHANGE_REASON_LENGTH,
   CSV_MAX_ROWS,
   CSV_REQUIRED_COLUMNS,
+  isArchivedLegacyTestProduct,
   type ProductAuditActionType
 } from "./product-constants.js";
 import type { ProductRepository } from "./product-repository.js";
@@ -1165,19 +1166,21 @@ async function listLowStockVariants(repository: ProductRepository, accessToken: 
     ? await repository.findProductsByIds(productIds, accessToken)
     : { rows: [] as JsonObject[] };
   const byId = new Map(products.rows.map((product) => [asString(product.product_id), product] as const));
-  return variants.map((row) => {
-    const product = byId.get(asString(row.product_id));
-    const stock = Number(row.stock_quantity || 0);
-    const threshold = Number(row.low_stock_threshold || 0);
-    return {
-      ...row,
-      product_name: asString(product?.name) || null,
-      product_sku: asString(product?.sku) || null,
-      product_status: asString(product?.status) || null,
-      shortage: Math.max(0, threshold - stock),
-      out_of_stock: stock <= 0
-    };
-  });
+  return variants
+    .filter((row) => !isArchivedLegacyTestProduct(byId.get(asString(row.product_id))))
+    .map((row) => {
+      const product = byId.get(asString(row.product_id));
+      const stock = Number(row.stock_quantity || 0);
+      const threshold = Number(row.low_stock_threshold || 0);
+      return {
+        ...row,
+        product_name: asString(product?.name) || null,
+        product_sku: asString(product?.sku) || null,
+        product_status: asString(product?.status) || null,
+        shortage: Math.max(0, threshold - stock),
+        out_of_stock: stock <= 0
+      };
+    });
 }
 
 function asRows(payload: unknown): unknown[] {

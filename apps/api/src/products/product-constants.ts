@@ -5,6 +5,8 @@
  * status/role enums, CSV template definition and SKU validation.
  */
 
+import { asString, type JsonObject } from "../types.js";
+
 /** Safe column projection for product listings – no internal/sensitive fields. */
 export const PRODUCT_SELECT = [
   "product_id",
@@ -143,3 +145,25 @@ export type ProductAuditActionType = (typeof PRODUCT_AUDIT_ACTION_TYPES)[number]
 
 /** Minimum characters of the operator reason for status and stock changes; mirrors the database RPC checks. */
 export const MIN_CHANGE_REASON_LENGTH = 10;
+
+/**
+ * PostgREST `not.and` predicate excluding archived (`status=hidden`) legacy UAT test products
+ * and system `TEMP-PROD-EXCH-*` exchange placeholders kept only for historical `order_item` FKs.
+ */
+export const ARCHIVED_LEGACY_TEST_PRODUCT_FILTER =
+  '(status.eq.hidden,or(name.ilike.UAT-*,name.ilike."UAT *",name.ilike."* UAT*",sku.ilike.VLR-UAT*,sku.ilike.TEMP-PROD-EXCH-*))';
+
+/**
+ * Returns true when a hidden catalog product is a legacy UAT/test record or `TEMP-PROD-EXCH-*`
+ * exchange placeholder retained in PostgreSQL solely for historical order integrity.
+ */
+export function isArchivedLegacyTestProduct(product: JsonObject | null | undefined): boolean {
+  if (!product || asString(product.status) !== "hidden") return false;
+  const name = asString(product.name).trim();
+  const sku = asString(product.sku).trim().toUpperCase();
+  return (
+    /(^|\s)uat([-_\s]|$)/i.test(name) ||
+    sku.startsWith("VLR-UAT") ||
+    sku.startsWith("TEMP-PROD-EXCH-")
+  );
+}
